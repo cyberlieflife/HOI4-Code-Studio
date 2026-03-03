@@ -35,6 +35,11 @@ import { setIdeaRoots, useIdeaRegistry, ensureIdeaRegistry } from '../composable
 import { logger } from '../utils/logger'
 import { readFileContent } from '../api/tauri'
 import { useDependencyManager } from '../composables/useDependencyManager'
+
+// 新提取的模块
+import { basename, escapeRegExp, isImageFile, isPathUnder, convertRustFileNode } from '../utils/fileUtils'
+import { useConfirmDialog } from '../composables/useConfirmDialog'
+import { useContextMenu } from '../composables/useContextMenu'
 import { loadFontConfigFromSettings } from '../composables/useEditorFont'
 import { usePluginManager } from '../composables/usePluginManager'
 import PluginIframeHost from '../components/plugins/PluginIframeHost.vue'
@@ -59,15 +64,19 @@ const isLaunchingGame = ref(false)
 const autoSave = ref(true)
 const disableErrorHandling = ref(false)
 
-// 右键菜单状态
-const contextMenuVisible = ref(false)
-const contextMenuX = ref(0)
-const contextMenuY = ref(0)
-const contextMenuType = ref<'file' | 'tree' | 'pane'>('file')
-const contextMenuPaneId = ref('')
-const contextMenuFileIndex = ref(-1)
-const treeContextMenuNode = ref<FileNode | null>(null)
-const lastContextMenuTime = ref(0)
+// 右键菜单状态（使用 composable）
+const {
+  contextMenuVisible,
+  contextMenuX,
+  contextMenuY,
+  contextMenuType,
+  contextMenuPaneId,
+  contextMenuFileIndex,
+  treeContextMenuNode,
+  showFileTabContextMenu,
+  showTreeContextMenu,
+  hideContextMenu
+} = useContextMenu()
 
 // 创建对话框状态
 const createDialogVisible = ref(false)
@@ -75,36 +84,16 @@ const createDialogType = ref<'file' | 'folder'>('file')
 const createDialogMode = ref<'create' | 'rename'>('create')
 const createDialogInitialValue = ref('')
 
-// 确认对话框状态
-const confirmDialogVisible = ref(false)
-const confirmDialogTitle = ref('')
-const confirmDialogMessage = ref('')
-const confirmDialogType = ref<'warning' | 'danger' | 'info'>('warning')
-let confirmDialogResolve: ((value: boolean) => void) | null = null
-
-/**
- * 显示确认对话框
- */
-function showConfirmDialog(message: string, title = '⚠️ 确认操作', type: 'warning' | 'danger' | 'info' = 'warning'): Promise<boolean> {
-  return new Promise((resolve) => {
-    confirmDialogMessage.value = message
-    confirmDialogTitle.value = title
-    confirmDialogType.value = type
-    confirmDialogVisible.value = true
-    confirmDialogResolve = resolve
-  })
-}
-
-/**
- * 处理确认对话框确认
- */
-function handleConfirmDialogConfirm() {
-  confirmDialogVisible.value = false
-  if (confirmDialogResolve) {
-    confirmDialogResolve(true)
-    confirmDialogResolve = null
-  }
-}
+// 确认对话框状态（使用 composable）
+const {
+  confirmDialogVisible,
+  confirmDialogTitle,
+  confirmDialogMessage,
+  confirmDialogType,
+  showConfirmDialog,
+  handleConfirmDialogConfirm,
+  handleConfirmDialogCancel
+} = useConfirmDialog()
 
 async function handleJumpToFocusFromPreview(sourcePaneId: string, sourceFilePath: string, _focusId: string, line: number) {
   if (!editorGroupRef.value) return
@@ -168,10 +157,6 @@ async function handleJumpToGfxFromPreview(sourcePaneId: string, sourceFilePath: 
       paneRef.jumpToLine(line)
     }
   }, 80)
-}
-
-function escapeRegExp(input: string): string {
-  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 async function handlePerformReplace(replaceText: string) {
@@ -250,17 +235,6 @@ async function handlePerformReplace(replaceText: string) {
 
   await handlePerformSearch()
   alert(`替换完成：共替换 ${totalReplacements} 处。`)
-}
-
-/**
- * 处理确认对话框取消
- */
-function handleConfirmDialogCancel() {
-  confirmDialogVisible.value = false
-  if (confirmDialogResolve) {
-    confirmDialogResolve(false)
-    confirmDialogResolve = null
-  }
 }
 
 // 依赖项管理状态
@@ -435,17 +409,6 @@ async function loadDependencyFileTree(dependencyId: string) {
 }
 
 // 计算行数（已移至EditorPane）
-
-// 转换文件节点
-function convertRustFileNode(node: any): FileNode {
-  return {
-    name: node.name,
-    path: node.path,
-    isDirectory: node.is_directory,
-    children: node.children?.map(convertRustFileNode),
-    expanded: node.expanded || false
-  }
-}
 
 // 加载项目信息
 async function loadProjectInfo() {
@@ -659,16 +622,6 @@ async function toggleGameFolder(node: FileNode) {
   }
 }
 
-// 检查是否为图片文件
-function isImageFile(filePath: string): boolean {
-  const ext = filePath.split('.').pop()?.toLowerCase()
-  return ['png', 'jpg', 'jpeg', 'tga', 'bmp', 'gif', 'webp' ,'dds'].includes(ext || '')
-}
-
-function basename(p: string): string {
-  return p.replace(/\\/g, '/').split('/').pop() || p
-}
-
 // 打开文件处理
 async function handleOpenFile(node: FileNode, paneId?: string, jumpInfo?: any) {
   if (node.isDirectory) return
@@ -746,46 +699,13 @@ async function handleOpenFile(node: FileNode, paneId?: string, jumpInfo?: any) {
   }
 }
 
-// 右键菜单
-function showFileTabContextMenu(event: MouseEvent, paneId: string, index: number) {
-  contextMenuPaneId.value = paneId
-  contextMenuFileIndex.value = index
-  contextMenuX.value = event.clientX
-  contextMenuY.value = event.clientY
-  contextMenuType.value = 'pane'
-  contextMenuVisible.value = true
-}
-
-function showTreeContextMenu(event: MouseEvent, node: FileNode | null = null) {
-  // 如果是背景点击（node=null），且距离上次有效点击时间很近，则忽略（视为冒泡）
-  const now = Date.now()
-  if (node === null && now - lastContextMenuTime.value < 100) {
-    return
-  }
-  
+// 右键菜单包装函数（处理 selectedNode 高亮）
+function handleShowTreeContextMenu(event: MouseEvent, node: FileNode | null = null) {
+  showTreeContextMenu(event, node)
+  // 强制高亮选中的节点
   if (node) {
-    lastContextMenuTime.value = now
-    treeContextMenuNode.value = node
-    selectedNode.value = node // 强制高亮
-  } else {
-    treeContextMenuNode.value = null
+    selectedNode.value = node
   }
-  
-  contextMenuX.value = event.clientX
-  contextMenuY.value = event.clientY
-  contextMenuType.value = 'tree'
-  contextMenuVisible.value = true
-}
-
-function hideContextMenu() {
-  contextMenuVisible.value = false
-}
-
-function isPathUnder(target: string, base: string): boolean {
-  const normalize = (p: string) => p.replace(/\\/g, '/').toLowerCase().replace(/\/+$/g, '')
-  const t = normalize(target)
-  const b = normalize(base)
-  return t === b || t.startsWith(b + '/')
 }
 
 async function closeOpenedFilesUnderPath(basePath: string) {
@@ -2148,7 +2068,7 @@ onUnmounted(() => {
         />
         
         <!-- 文件树内容 -->
-        <div class="flex-1 overflow-y-auto p-2" @contextmenu.prevent="showTreeContextMenu($event, null)">
+        <div class="flex-1 overflow-y-auto p-2" @contextmenu.prevent="handleShowTreeContextMenu($event, null)">
           <h3 class="text-hoi4-text font-bold mb-2 text-sm">
             {{ leftPanelActiveTab === 'project' ? '项目文件' : leftPanelActiveTab === 'dependencies' ? '依赖项文件' : '插件' }}
           </h3>
@@ -2167,7 +2087,7 @@ onUnmounted(() => {
                   :selected-path="selectedNode?.path"
                   @toggle="toggleFolder"
                   @open-file="handleOpenFile"
-                  @contextmenu="(e, n) => showTreeContextMenu(e, n)"
+                  @contextmenu="(e, n) => handleShowTreeContextMenu(e, n)"
                 />
               </div>
             </div>
@@ -2189,7 +2109,7 @@ onUnmounted(() => {
                   :selected-path="selectedNode?.path"
                   @toggle="toggleFolder"
                   @open-file="handleOpenFile"
-                  @contextmenu="(e, n) => showTreeContextMenu(e, n)"
+                  @contextmenu="(e, n) => handleShowTreeContextMenu(e, n)"
                 />
               </div>
             </div>
