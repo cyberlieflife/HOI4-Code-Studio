@@ -34,14 +34,15 @@ import { setIdeaRoots, useIdeaRegistry, ensureIdeaRegistry } from '../composable
 import { logger } from '../utils/logger'
 import { readFileContent } from '../api/tauri'
 import { useDependencyManager } from '../composables/useDependencyManager'
+import { useDependencyTreeCache } from '../composables/useDependencyTreeCache'
+import { useProjectBootstrap } from '../composables/useProjectBootstrap'
+import { useEditorSettingsSync } from '../composables/useEditorSettingsSync'
+import { useProjectFileTreeLoader } from '../composables/useProjectFileTreeLoader'
+import { useAutoRefreshInterval } from '../composables/useAutoRefreshInterval'
 
 // 新提取的模块
 import { escapeRegExp, isImageFile, isPathUnder, convertRustFileNode } from '../utils/fileUtils'
-import {
-  collectExpandedPaths,
-  mergeExpandedChildren,
-  restoreExpandedState
-} from '../utils/fileTreeState'
+import { collectExpandedPaths, mergeExpandedChildren, restoreExpandedState } from '../utils/fileTreeState'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
 import { useContextMenu } from '../composables/useContextMenu'
 import { loadFontConfigFromSettings } from '../composables/useEditorFont'
@@ -61,17 +62,9 @@ const route = useRoute()
 
 // 基础状态
 const projectPath = ref('')
-const projectInfo = ref<any>(null)
-const loading = ref(true)
-const fileTree = ref<FileNode[]>([])
 const selectedNode = ref<FileNode | null>(null)
-const gameDirectory = ref('')
-const gameFileTree = ref<FileNode[]>([])
-const isLoadingGameTree = ref(false)
 const txtErrors = ref<{line: number, msg: string, type: string}[]>([])
 const isLaunchingGame = ref(false)
-const autoSave = ref(true)
-const disableErrorHandling = ref(false)
 
 const {
   rightPanelExpanded,
@@ -123,6 +116,13 @@ const {
   handleConfirmDialogConfirm,
   handleConfirmDialogCancel
 } = useConfirmDialog()
+
+function syncRegistryRoots(options: { projectPath: string; gameDirectory?: string; dependencyPaths: string[] }) {
+  setTagRoots(options.projectPath, options.gameDirectory, options.dependencyPaths)
+  setIdeaRoots(options.projectPath, options.gameDirectory, options.dependencyPaths)
+}
+
+const { projectInfo, loadProjectInfo } = useProjectBootstrap(projectPath, showConfirmDialog)
 
 // 预览跳转函数（使用 usePreviewNavigation 模块）
 async function handleJumpToFocusFromPreview(sourcePaneId: string, sourceFilePath: string, focusId: string, line: number) {
@@ -212,17 +212,6 @@ async function handlePerformReplace(replaceText: string) {
 }
 
 // 依赖项管理状态
-const dependencyFileTrees = ref<Map<string, FileNode[]>>(new Map())
-
-const hasActiveDependencyTree = computed(() => {
-  return !!activeDependencyId.value && dependencyFileTrees.value.has(activeDependencyId.value)
-})
-
-const activeDependencyTree = computed(() => {
-  if (!activeDependencyId.value) return []
-  return dependencyFileTrees.value.get(activeDependencyId.value) || []
-})
-
 // Refs
 const editorGroupRef = ref<InstanceType<typeof EditorGroup> | null>(null)
 
@@ -268,6 +257,7 @@ const {
 const packageDialogRef = ref<InstanceType<typeof PackageDialog> | null>(null)
 
 // 目录树自动刷新
+
 const fileTreeAutoRefreshInterval = ref<number | null>(null)
 const fileTreeAutoRefreshEnabled = ref(true)
 
@@ -298,9 +288,59 @@ const {
   loadDependencies: loadDependenciesList
 } = dependencyManager
 
+const {
+  gameDirectory,
+  gameFileTree,
+  isLoadingGameTree,
+  autoSave,
+  disableErrorHandling,
+  loadInitialSettings,
+  loadGameDirectory,
+  loadGameFileTree,
+  toggleAutoSave
+} = useEditorSettingsSync({
+  projectPath,
+  dependencies,
+  refreshTags,
+  loadFontConfigFromSettings,
+  syncRoots: syncRegistryRoots
+})
+
 const enabledDependencyRoots = computed(() =>
   (dependencies.value || []).filter(d => d.enabled).map(d => d.path)
 )
+
+const {
+  loading,
+  fileTree,
+  loadFileTree
+} = useProjectFileTreeLoader({
+  projectPath,
+  gameDirectory,
+  getEnabledDependencyPaths: () => enabledDependencyRoots.value,
+  syncRoots: syncRegistryRoots
+})
+
+const {
+  dependencyFileTrees,
+  hasDependencyTree,
+  getDependencyTree,
+  loadDependencyFileTree,
+  invalidateDependencyFileTree
+} = useDependencyTreeCache(dependencies)
+
+const hasActiveDependencyTree = computed(() => hasDependencyTree(activeDependencyId.value))
+
+const activeDependencyTree = computed(() => getDependencyTree(activeDependencyId.value))
+
+const {
+  start: startFileTreeAutoRefresh,
+  stop: stopFileTreeAutoRefresh
+} = useAutoRefreshInterval(() => {
+  if (projectPath.value) {
+    return loadFileTree()
+  }
+}, 2000)
 
 async function handleRefreshTags() {
   await refreshTags()
@@ -338,9 +378,7 @@ async function handleRemoveDependency(id: string) {
     if (activeDependencyId.value === id) {
       handleSwitchToProject()
     }
-    const next = new Map(dependencyFileTrees.value)
-    next.delete(id)
-    dependencyFileTrees.value = next
+    invalidateDependencyFileTree(id)
   } else {
     alert(result.message)
   }
@@ -350,7 +388,7 @@ async function handleToggleDependency(id: string) {
   await toggleDependency(id)
 }
 
-async function loadDependencyFileTree(dependencyId: string) {
+async function legacyLoadDependencyFileTree(dependencyId: string) {
   const dependency = dependencies.value.find(dep => dep.id === dependencyId)
   if (!dependency) return
   
@@ -372,14 +410,14 @@ async function loadDependencyFileTree(dependencyId: string) {
 // 计算行数（已移至EditorPane）
 
 // 加载项目信息
-async function loadProjectInfo() {
+async function legacyLoadProjectInfo() {
   if (!projectPath.value) return
   try {
     const projectJsonPath = `${projectPath.value}/project.json`
     const { readJsonFile } = await import('../api/tauri')
     const result = await readJsonFile(projectJsonPath)
     if (result.success && result.data) {
-      projectInfo.value = result.data
+      projectInfo.value = result.data as any
       return
     }
     const shouldInitialize = await showConfirmDialog(
@@ -454,7 +492,7 @@ async function loadProjectInfo() {
 } */
 
 // 加载文件树
-async function loadFileTree() {
+async function legacyLoadFileTree() {
   if (!projectPath.value) return
   
   // 保存当前展开状态
@@ -483,7 +521,7 @@ async function loadFileTree() {
 }
 
 // 加载游戏目录
-async function loadGameDirectory() {
+async function legacyLoadGameDirectory() {
   try {
     const result = await loadSettings()
     if (result.success && result.data && typeof result.data === 'object' && 'gameDirectory' in result.data) {
@@ -509,7 +547,7 @@ async function loadGameDirectory() {
 }
 
 // 加载游戏文件树
-async function loadGameFileTree() {
+async function legacyLoadGameFileTree() {
   if (!gameDirectory.value) return
   isLoadingGameTree.value = true
   try {
@@ -807,7 +845,7 @@ async function handleContextMenuAction(action: string, payload?: any) {
         await closeOpenedFilesUnderPath(node.path)
 
         if (leftPanelActiveTab.value === 'dependencies' && activeDependencyId.value) {
-          dependencyFileTrees.value.delete(activeDependencyId.value)
+          invalidateDependencyFileTree(activeDependencyId.value)
           await loadDependencyFileTree(activeDependencyId.value)
         } else {
           await loadFileTree()
@@ -1647,6 +1685,11 @@ function legacyHandlePreviousError() {
 
 // 切换自动保存
 void [
+  legacyLoadDependencyFileTree,
+  legacyLoadProjectInfo,
+  legacyLoadFileTree,
+  legacyLoadGameDirectory,
+  legacyLoadGameFileTree,
   legacyHandlePreviewEvent,
   legacyHandlePreviewGfx,
   legacyHandlePreviewMio,
@@ -1657,7 +1700,10 @@ void [
   legacyHandleContentChange,
   legacyHandleJumpToSearchResult,
   legacyHandleNextError,
-  legacyHandlePreviousError
+  legacyHandlePreviousError,
+  legacyToggleAutoSave,
+  legacyStartFileTreeAutoRefresh,
+  legacyStopFileTreeAutoRefresh
 ]
 
 function handleContentChange(paneId: string, content: string) {
@@ -1672,12 +1718,12 @@ function handlePreviousError() {
   jumpToPreviousError()
 }
 
-async function toggleAutoSave() {
+async function legacyToggleAutoSave() {
   autoSave.value = !autoSave.value
 }
 
 // 监听自动保存开关变化，立即保存设置
-watch(autoSave, async (newValue) => {
+watch(() => false, async (newValue) => {
   try {
     const result = await loadSettings()
     if (result.success && result.data) {
@@ -1714,7 +1760,7 @@ useKeyboardShortcuts({
 })
 
 // 开始目录树自动刷新
-function startFileTreeAutoRefresh() {
+function legacyStartFileTreeAutoRefresh() {
   stopFileTreeAutoRefresh() // 先清除现有的定时器
   if (fileTreeAutoRefreshEnabled.value) {
     fileTreeAutoRefreshInterval.value = window.setInterval(() => {
@@ -1726,7 +1772,7 @@ function startFileTreeAutoRefresh() {
 }
 
 // 停止目录树自动刷新
-function stopFileTreeAutoRefresh() {
+function legacyStopFileTreeAutoRefresh() {
   if (fileTreeAutoRefreshInterval.value !== null) {
     clearInterval(fileTreeAutoRefreshInterval.value)
     fileTreeAutoRefreshInterval.value = null
@@ -1742,7 +1788,8 @@ onMounted(async () => {
   await loadIconSetFromSettings()
   
   // 加载设置
-  const settingsResult = await loadSettings()
+  await loadInitialSettings()
+  const settingsResult = { success: false, data: null as any }
   if (settingsResult.success && settingsResult.data) {
     const data = settingsResult.data as any
     autoSave.value = data.autoSave !== false
@@ -1755,9 +1802,9 @@ onMounted(async () => {
   if (projectPath.value) {
     await refreshPlugins()
     dependencyManager.setProjectPath(projectPath.value)
-    loadProjectInfo()
-    loadFileTree()
-    loadGameDirectory()
+    await loadProjectInfo()
+    await loadFileTree()
+    await loadGameDirectory()
     // 加载依赖项列表
     await loadDependenciesList()
     // 首次加载 Tags 和 Ideas
