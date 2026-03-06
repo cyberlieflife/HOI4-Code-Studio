@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { loadSettings, saveSettings, buildDirectoryTreeFast, createFile, createFolder, writeFileContent, writeJsonFile, launchGame, renamePath, deletePath, openFolder } from '../api/tauri'
+import { buildDirectoryTreeFast, createFile, createFolder, writeFileContent, launchGame, renamePath, deletePath, openFolder } from '../api/tauri'
 import 'highlight.js/styles/github-dark.css'
 import 'highlight.js/lib/languages/json'
 import 'highlight.js/lib/languages/yaml'
@@ -22,7 +22,7 @@ import PackageDialog from '../components/editor/PackageDialog.vue'
 import EditorWorkspaceShell from '../components/editor/EditorWorkspaceShell.vue'
 
 // Composables 导入
-import { type FileNode, type OpenFile } from '../composables/useFileManager'
+import { type FileNode } from '../composables/useFileManager'
 import { useSearch } from '../composables/useSearch'
 import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
 import { usePanelResize } from '../composables/usePanelResize'
@@ -30,7 +30,7 @@ import { usePanelResize } from '../composables/usePanelResize'
 import { setTagRoots, useTagRegistry } from '../composables/useTagRegistry'
 import { useTheme } from '../composables/useTheme'
 import { useFileTreeIcons } from '../composables/useFileTreeIcons'
-import { setIdeaRoots, useIdeaRegistry, ensureIdeaRegistry } from '../composables/useIdeaRegistry'
+import { setIdeaRoots, useIdeaRegistry } from '../composables/useIdeaRegistry'
 import { logger } from '../utils/logger'
 import { readFileContent } from '../api/tauri'
 import { useDependencyManager } from '../composables/useDependencyManager'
@@ -42,7 +42,6 @@ import { useAutoRefreshInterval } from '../composables/useAutoRefreshInterval'
 
 // 新提取的模块
 import { escapeRegExp, isImageFile, isPathUnder, convertRustFileNode } from '../utils/fileUtils'
-import { collectExpandedPaths, mergeExpandedChildren, restoreExpandedState } from '../utils/fileTreeState'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
 import { useContextMenu } from '../composables/useContextMenu'
 import { loadFontConfigFromSettings } from '../composables/useEditorFont'
@@ -258,9 +257,6 @@ const packageDialogRef = ref<InstanceType<typeof PackageDialog> | null>(null)
 
 // 目录树自动刷新
 
-const fileTreeAutoRefreshInterval = ref<number | null>(null)
-const fileTreeAutoRefreshEnabled = ref(true)
-
 const { isLoading: tagLoading, refresh: refreshTags, tags: tagList } = useTagRegistry()
 const { isLoading: ideaLoading, refresh: refreshIdeas, ideas: ideaList } = useIdeaRegistry()
 
@@ -296,7 +292,6 @@ const {
   disableErrorHandling,
   loadInitialSettings,
   loadGameDirectory,
-  loadGameFileTree,
   toggleAutoSave
 } = useEditorSettingsSync({
   projectPath,
@@ -322,7 +317,6 @@ const {
 })
 
 const {
-  dependencyFileTrees,
   hasDependencyTree,
   getDependencyTree,
   loadDependencyFileTree,
@@ -388,7 +382,8 @@ async function handleToggleDependency(id: string) {
   await toggleDependency(id)
 }
 
-async function legacyLoadDependencyFileTree(dependencyId: string) {
+/* Legacy block removed after composable extraction.
+async function __delete_legacyLoadDependencyFileTree__(dependencyId: string) {
   const dependency = dependencies.value.find(dep => dep.id === dependencyId)
   if (!dependency) return
   
@@ -492,7 +487,7 @@ async function legacyLoadProjectInfo() {
 } */
 
 // 加载文件树
-async function legacyLoadFileTree() {
+/* async function legacyLoadFileTree() {
   if (!projectPath.value) return
   
   // 保存当前展开状态
@@ -518,10 +513,10 @@ async function legacyLoadFileTree() {
   } finally {
     loading.value = false
   }
-}
+} */
 
 // 加载游戏目录
-async function legacyLoadGameDirectory() {
+/* async function legacyLoadGameDirectory() {
   try {
     const result = await loadSettings()
     if (result.success && result.data && typeof result.data === 'object' && 'gameDirectory' in result.data) {
@@ -544,10 +539,10 @@ async function legacyLoadGameDirectory() {
   } catch (error) {
     logger.error('加载游戏目录设置失败:', error)
   }
-}
+} */
 
 // 加载游戏文件树
-async function legacyLoadGameFileTree() {
+/* async function legacyLoadGameFileTree() {
   if (!gameDirectory.value) return
   isLoadingGameTree.value = true
   try {
@@ -560,7 +555,7 @@ async function legacyLoadGameFileTree() {
   } finally {
     isLoadingGameTree.value = false
   }
-}
+} */
 
 // 切换文件夹
 async function toggleFolder(node: FileNode) {
@@ -1001,6 +996,7 @@ async function openModifierSheet() {
 }
 
 // 处理预览事件
+/* Legacy preview/search/error block removed after composable extraction.
 async function legacyHandlePreviewEvent(paneId: string) {
   if (!editorGroupRef.value) return
   
@@ -1192,12 +1188,13 @@ async function legacyHandlePreviewMio(paneId: string) {
 }
 
 // 预览跳转函数（使用 usePreviewNavigation 模块）
+*/
 async function handleJumpToMioFromPreview(sourcePaneId: string, sourceFilePath: string, traitId: string, line: number) {
   await jumpFromMioPreview(editorGroupRef.value, sourcePaneId, sourceFilePath, traitId, line, handleOpenFile)
 }
 
 // 处理预览国策树
-async function legacyHandlePreviewFocus(paneId: string) {
+/* async function legacyHandlePreviewFocus(paneId: string) {
   if (!editorGroupRef.value) return
   
   const sourcePane = editorGroupRef.value.panes.find(p => p.id === paneId)
@@ -1389,6 +1386,7 @@ async function legacyHandlePreviewGui(paneId: string) {
 }
 
 // 处理编辑器右键菜单操作
+*/
 async function handleEditorContextMenuAction(action: string, paneId: string) {
   if (!editorGroupRef.value) return
   
@@ -1510,7 +1508,7 @@ async function handleLaunchGame() {
 }
 
 // 跳转到错误行
-function legacyJumpToError(error: {line: number, msg: string, type: string}) {
+/* function legacyJumpToError(error: {line: number, msg: string, type: string}) {
   console.log('[Editor] jumpToError called with:', error)
   
   if (!editorGroupRef.value) {
@@ -1521,7 +1519,7 @@ function legacyJumpToError(error: {line: number, msg: string, type: string}) {
   console.log('[Editor] Calling jumpToErrorLine with line:', error.line)
   // 调用 EditorGroup 的 jumpToErrorLine 方法
   editorGroupRef.value.jumpToErrorLine(error.line)
-}
+} */
 
 // 处理错误变化
 function handleErrorsChange(_paneId: string, errors: Array<{line: number, msg: string, type: string}>) {
@@ -1530,7 +1528,7 @@ function handleErrorsChange(_paneId: string, errors: Array<{line: number, msg: s
 }
 
 // 处理内容变化 - 同步预览文件内容
-function legacyHandleContentChange(paneId: string, content: string) {
+/* function legacyHandleContentChange(paneId: string, content: string) {
   if (!editorGroupRef.value) return
   
   // 查找当前活动的窗格
@@ -1558,7 +1556,7 @@ function legacyHandleContentChange(paneId: string, content: string) {
     })
   })
   console.log(`[Editor] 内容变化处理完成，更新了 ${previewFilesUpdated} 个预览文件`)
-}
+} */
 
 // 处理搜索
 async function handlePerformSearch() {
@@ -1593,7 +1591,7 @@ async function handlePerformSearch() {
   }
 }
 
-async function legacyHandleJumpToSearchResult(result: any) {
+/* async function legacyHandleJumpToSearchResult(result: any) {
   const targetPath = result?.file?.path
   if (!targetPath) return
 
@@ -1633,10 +1631,10 @@ async function legacyHandleJumpToSearchResult(result: any) {
   }, 1000) 
   
 
-}
+} */
 
 // 跳转到下一个错误
-function legacyHandleNextError() {
+/* function legacyHandleNextError() {
   if (!editorGroupRef.value) return
   const activePaneId = editorGroupRef.value.activePaneId
   const activePane = editorGroupRef.value.panes.find(p => p.id === activePaneId)
@@ -1656,10 +1654,10 @@ function legacyHandleNextError() {
     // 循环到第一个
     jumpToError(sortedErrors[0])
   }
-}
+} */
 
 // 跳转到上一个错误
-function legacyHandlePreviousError() {
+/* function legacyHandlePreviousError() {
   if (!editorGroupRef.value) return
   const activePaneId = editorGroupRef.value.activePaneId
   const activePane = editorGroupRef.value.panes.find(p => p.id === activePaneId)
@@ -1681,30 +1679,9 @@ function legacyHandlePreviousError() {
     // 循环到最后一个
     jumpToError(sortedErrors[sortedErrors.length - 1])
   }
-}
+} */
 
 // 切换自动保存
-void [
-  legacyLoadDependencyFileTree,
-  legacyLoadProjectInfo,
-  legacyLoadFileTree,
-  legacyLoadGameDirectory,
-  legacyLoadGameFileTree,
-  legacyHandlePreviewEvent,
-  legacyHandlePreviewGfx,
-  legacyHandlePreviewMio,
-  legacyHandlePreviewFocus,
-  legacyHandlePreviewMap,
-  legacyHandlePreviewGui,
-  legacyJumpToError,
-  legacyHandleContentChange,
-  legacyHandleJumpToSearchResult,
-  legacyHandleNextError,
-  legacyHandlePreviousError,
-  legacyToggleAutoSave,
-  legacyStartFileTreeAutoRefresh,
-  legacyStopFileTreeAutoRefresh
-]
 
 function handleContentChange(paneId: string, content: string) {
   syncPreviewContent(paneId, content)
@@ -1718,7 +1695,7 @@ function handlePreviousError() {
   jumpToPreviousError()
 }
 
-async function legacyToggleAutoSave() {
+/* async function __delete_legacyToggleAutoSave__() {
   autoSave.value = !autoSave.value
 }
 
@@ -1736,7 +1713,7 @@ watch(() => false, async (newValue) => {
   } catch (error) {
     logger.error('保存自动保存设置失败:', error)
   }
-})
+}) */
 
 // 键盘快捷键
 useKeyboardShortcuts({
@@ -1760,7 +1737,7 @@ useKeyboardShortcuts({
 })
 
 // 开始目录树自动刷新
-function legacyStartFileTreeAutoRefresh() {
+/* function __delete_legacyStartFileTreeAutoRefresh__() {
   stopFileTreeAutoRefresh() // 先清除现有的定时器
   if (fileTreeAutoRefreshEnabled.value) {
     fileTreeAutoRefreshInterval.value = window.setInterval(() => {
@@ -1769,15 +1746,15 @@ function legacyStartFileTreeAutoRefresh() {
       }
     }, 2000) // 2秒刷新一次
   }
-}
+} */
 
 // 停止目录树自动刷新
-function legacyStopFileTreeAutoRefresh() {
+/* function __delete_legacyStopFileTreeAutoRefresh__() {
   if (fileTreeAutoRefreshInterval.value !== null) {
     clearInterval(fileTreeAutoRefreshInterval.value)
     fileTreeAutoRefreshInterval.value = null
   }
-}
+} */
 
 // 生命周期
 onMounted(async () => {
@@ -1789,6 +1766,7 @@ onMounted(async () => {
   
   // 加载设置
   await loadInitialSettings()
+  /* legacy settings block removed
   const settingsResult = { success: false, data: null as any }
   if (settingsResult.success && settingsResult.data) {
     const data = settingsResult.data as any
@@ -1796,7 +1774,7 @@ onMounted(async () => {
     disableErrorHandling.value = data.disableErrorHandling || false
     // 加载编辑器字体设置
     loadFontConfigFromSettings(data)
-  }
+  } */
   
   projectPath.value = route.query.path as string || ''
   if (projectPath.value) {
