@@ -4,7 +4,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createCWToolsLinter } from '@/utils/cwtoolsLinter'
-import type { CWToolsDiagnostic } from '@/utils/cwtoolsValidator'
 
 // Mock Tauri invoke
 vi.mock('@tauri-apps/api/core', () => ({
