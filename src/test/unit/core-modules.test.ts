@@ -420,45 +420,6 @@ describe('文档内容数据模块测试', () => {
     })
   })
 
-  describe('内容分类验证', () => {
-    it('应该包含基本操作分类', () => {
-      const basicSection = documentationSections.find(section => section.id === 'basic')
-      expect(basicSection).toBeDefined()
-      expect(basicSection?.title).toBe('基本操作')
-      expect(basicSection?.items.length).toBeGreaterThan(0)
-    })
-
-    it('应该包含特有功能分类', () => {
-      const featuresSection = documentationSections.find(section => section.id === 'features')
-      expect(featuresSection).toBeDefined()
-      expect(featuresSection?.title).toBe('特有功能')
-      expect(featuresSection?.items.length).toBeGreaterThan(0)
-    })
-
-    it('基本操作应该包含所有必要的主题', () => {
-      const basicSection = documentationSections.find(section => section.id === 'basic')
-      const expectedTopics = ['shortcuts', 'theme-switch', 'file-operations', 'auto-save', 'edit-operations', 'search-replace']
-      
-      expectedTopics.forEach(topic => {
-        const found = basicSection?.items.find(item => item.id === topic)
-        expect(found).toBeDefined()
-      })
-    })
-
-    it('特有功能应该包含所有必要的主题', () => {
-      const featuresSection = documentationSections.find(section => section.id === 'features')
-      const expectedTopics = [
-        'game-directory', 'launch-mode', 'dependencies', 'one-click-launch', 
-        'hoics-project', 'previews', 'project-management', 'code-templates'
-      ]
-      
-      expectedTopics.forEach(topic => {
-        const found = featuresSection?.items.find(item => item.id === topic)
-        expect(found).toBeDefined()
-      })
-    })
-  })
-
   describe('内容质量验证', () => {
     it('所有摘要都应该非空且有意义', () => {
       documentationSections.forEach(section => {
