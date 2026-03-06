@@ -120,6 +120,10 @@ async function handleReportIssue() {
   await openUrl('https://github.com/cyberlieflife/HOI4-Code-Studio/issues')
 }
 
+async function handleDiscussions() {
+  await openUrl('https://github.com/cyberlieflife/HOI4-Code-Studio/discussions')
+}
+
 // 打开更新日志面板
 function handleChangelog() {
   showChangelogPanel.value = true
@@ -457,6 +461,19 @@ onMounted(() => {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                   </svg>
                   <span class="text-sm font-semibold">设置</span>
+                </div>
+              </button>
+
+              <button
+                @click="handleDiscussions"
+                class="home-btn home-ghost w-full tile-button"
+                title="前往 GitHub 讨论区"
+              >
+                <div class="flex flex-col items-center justify-center gap-2">
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5m7-2c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4-.92L4 19l1.395-3.488C4.512 14.474 4 13.279 4 12c0-3.866 3.582-7 8-7s8 3.134 8 7z"></path>
+                  </svg>
+                  <span class="text-sm font-semibold">前往讨论</span>
                 </div>
               </button>
             </div>
