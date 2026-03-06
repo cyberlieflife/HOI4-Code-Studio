@@ -1,4 +1,4 @@
-export interface DocItem {
+﻿export interface DocItem {
   id: string
   title: string
   summary: string
@@ -13,84 +13,105 @@ export interface DocSection {
 
 export const documentationSections: DocSection[] = [
   {
-    id: 'basic',
-    title: '基本操作',
+    id: 'getting-started',
+    title: '快速开始',
     items: [
       {
-        id: 'shortcuts',
-        title: '快捷键',
-        summary: '通过键盘快捷键可以更快地完成保存、搜索和错误定位等常用操作。',
+        id: 'start-workflow',
+        title: '项目创建与打开',
+        summary: '从首页创建新项目或打开已有目录，必要时可将普通目录初始化为 HOICS 项目。',
         details: [
-          '在编辑器中按 Ctrl+S 会保存当前正在编辑的文件。',
-          'Ctrl+Z 撤销上一步编辑操作，Ctrl+Shift+Z 或 Ctrl+Y 用于重做。',
-          'Ctrl+F 打开全局搜索面板，用于在当前项目或游戏目录中查找文本。',
-          'Ctrl+E 跳转到下一个错误，Ctrl+R 跳转到上一个错误，方便在错误列表之间快速巡查。',
-          'Ctrl+Shift+T 打开主题切换面板，可以快速切换界面和编辑器的配色主题。',
-          '在编辑区域中，可以使用 Ctrl+C / Ctrl+X / Ctrl+V 进行复制、剪切和粘贴。',
-          '在搜索结果列表中，可以用方向键选择条目，回车跳转到对应位置，Esc 关闭搜索面板。'
+          '在首页可使用“创建新项目”或“打开项目”。',
+          '打开目录后，若缺少项目元数据，应用会提示是否初始化为 HOI4 Code Studio 项目。',
+          '最近项目列表会记录路径、最后打开时间、文件数量和体积信息，便于快速回到工作现场。',
+          '建议首次使用时先在“设置”中配置 HOI4 游戏目录，以启用原版资源浏览和索引能力。'
         ]
       },
       {
-        id: 'theme-switch',
-        title: '主题切换',
-        summary: '支持多种界面主题，可以根据个人喜好自定义编辑器的配色方案。',
+        id: 'editor-layout',
+        title: '编辑器布局与导航',
+        summary: '编辑器由左侧资源面板、中间工作区、右侧信息面板组成，支持多窗格并行编辑。',
         details: [
-          '在设置页面的"应用设置"区域，可以看到"界面主题"选项，点击不同的主题卡片即可切换。',
-          '在编辑器中按 Ctrl+Shift+T 可以打开主题切换面板，快速在各个主题之间切换。',
-          '内置 7 种主题：One Dark、One Light、VS Code Dark、GitHub Dark、Catppuccin Mocha、Dracula、Monokai。',
-          '切换主题后会立即生效，同时自动保存到设置中，下次启动时会恢复上次选择的主题。',
-          '主题切换会同时更新界面颜色和代码编辑器的语法高亮配色。'
+          '左侧可切换项目文件、依赖文件和插件面板。',
+          '中间工作区支持标签页和分栏编辑，可将文件移动到不同窗格查看。',
+          '右侧面板包含项目信息、游戏目录、错误列表、搜索、AI 与插件页面。',
+          '工具栏提供返回、启动游戏、依赖管理、打包、自动保存开关等常用操作。'
+        ]
+      },
+      {
+        id: 'shortcuts',
+        title: '常用快捷键',
+        summary: '应用支持常见编辑快捷键和错误跳转快捷键。',
+        details: [
+          'Ctrl+S：保存当前文件。',
+          'Ctrl+F：打开搜索面板。',
+          'Ctrl+E：跳到下一个错误。',
+          'Ctrl+R：跳到上一个错误。',
+          'Ctrl+Shift+T：切换主题面板。',
+          '除以上快捷键外，复制、剪切、粘贴等基础操作遵循系统习惯。'
         ]
       },
       {
         id: 'file-operations',
-        title: '文件操作',
-        summary: '项目文件和游戏文件分别通过左侧树形视图管理，支持多文件打开、保存和关闭。',
+        title: '文件与目录操作',
+        summary: '支持创建、重命名、删除、复制路径和在系统资源管理器中打开。',
         details: [
-          '在首页通过“创建新项目”“打开项目”或“最近项目”进入编辑器后，左侧会展示当前 Mod 的项目文件树。',
-          '在项目文件树中点击文件即可在中间区域打开，支持同时打开多个文件并在不同文件之间快速切换。',
-          '右键文件标签可以使用“关闭全部”“关闭其他”等操作，快速整理当前已打开的文件。',
-          '在文件树上右键可以新建文件或文件夹、重命名、复制路径，或在系统资源管理器中打开所在位置。',
-          '关闭文件时，如果存在未保存的修改，系统会询问是否放弃更改，避免误操作丢失内容。',
-          '游戏目录面板中的文件以只读方式打开，只用于浏览原版内容，不会覆盖游戏本体文件。'
+          '在文件树节点或标签页上使用右键菜单进行文件操作。',
+          '关闭文件前若存在未保存内容，会进行确认，避免误丢数据。',
+          '从“游戏目录”面板打开的文件默认只读，用于参考原版实现。',
+          '自动保存开启后，停止输入后会自动写盘，无需频繁手动保存。'
         ]
-      },
-      {
-        id: 'auto-save',
-        title: '自动保存',
-        summary: '自动保存功能可以在编辑文件时自动保存更改，无需手动按 Ctrl+S。',
-        details: [
-          '在设置页面的"应用设置"区域，可以勾选"启用自动保存"复选框来启用或禁用此功能。',
-          '在编辑器工具栏中也提供了自动保存切换按钮，按钮显示为绿色时表示已启用，灰色时表示已禁用。',
-          '启用自动保存后，编辑文件时会在停止输入0.1秒后自动保存文件内容。',
-          '自动保存使用防抖机制，连续输入时不会频繁保存，只在停止输入后才触发保存操作。',
-          '文件修改后标签页上会显示红点标记，自动保存成功后红点会消失。',
-          '自动保存设置会立即保存到配置文件中，重启应用后会保留上次的设置状态。',
-          '游戏目录中的文件是只读的，不会被自动保存功能修改。'
-        ]
-      },
-      {
-        id: 'edit-operations',
-        title: '编辑操作',
-        summary: '编辑区基于现代代码编辑器，提供常见的文本编辑、右键菜单和多窗格查看能力。',
-        details: [
-          '编辑区支持常规的输入、选中、复制、剪切和粘贴操作，并可以配合键盘快捷键使用。',
-          '在编辑区右键会弹出自定义菜单，可以执行复制、剪切、粘贴等操作，而不是浏览器默认菜单。',
-          '当当前文件属于特定类型时，右键菜单中会出现"插入模板"子菜单，可以一键插入预设的脚本骨架，之后再根据需求修改内容。',
-          '每个编辑窗格都可以通过右键菜单选择"向右分割"，在同一窗口中并排查看多个文件或预览视图。',
-          '分割后的窗格可以通过"移动到"子菜单，将当前文件移动到其他窗格，便于组合不同的视图布局。'
-        ]
-      },
+      }
+    ]
+  },
+  {
+    id: 'editing-and-preview',
+    title: '编辑与预览',
+    items: [
       {
         id: 'search-replace',
-        title: '搜索替换',
-        summary: '内置搜索面板支持在项目或游戏目录中快速查找文本。',
+        title: '搜索与替换',
+        summary: '支持项目、游戏目录、依赖目录范围搜索，可选正则和大小写匹配。',
         details: [
-          '在编辑器中按 Ctrl+F 即可打开全局搜索面板。',
-          '搜索面板支持按关键字搜索，并可以切换是否区分大小写、是否使用正则表达式。',
-          '可以在“项目文件”和“游戏目录”之间切换搜索范围，既能查 Mod，又能查原版脚本。',
-          '搜索结果会按文件列出，显示匹配所在行号和部分上下文，点击或回车会跳转到编辑器中的对应位置。',
-          '当前版本仅提供查找功能，不包含自动批量替换；如需替换内容，建议配合搜索逐个跳转后手动修改。'
+          '右侧“搜索”面板可切换搜索范围：project、game、dependencies。',
+          '可开启 case sensitive 与 regex 选项进行精确匹配。',
+          '点击结果后会自动打开目标文件并定位到匹配位置。',
+          '替换操作会直接修改文件内容，执行前会弹出确认提示。'
+        ]
+      },
+      {
+        id: 'error-checking',
+        title: '错误检查与定位',
+        summary: '编辑器会收集脚本错误并在右侧错误列表中展示，支持快速跳转。',
+        details: [
+          '错误列表会展示行号、错误类型和信息。',
+          '点击错误项可直接跳转到对应代码位置。',
+          '可通过快捷键在错误之间前后跳转。',
+          '设置中可关闭错误处理（不推荐，关闭后将失去实时提示）。'
+        ]
+      },
+      {
+        id: 'preview-tools',
+        title: '内置预览工具',
+        summary: '根据文件类型提供事件图、国策树、地图、GUI、MIO、GFX 等预览视图。',
+        details: [
+          '事件脚本支持事件关系图预览与节点跳转。',
+          '国策脚本支持国策树预览与可视化编辑，并可回跳源文件行。',
+          'map/default.map 可打开地图预览，并结合省份/州数据渲染。',
+          '.gui 与 .gfx 文件支持资源解析和结构预览。',
+          'MIO 文件支持 trait 关系预览与定位。',
+          '图片资源（含 DDS/TGA）可直接在预览器中查看。'
+        ]
+      },
+      {
+        id: 'dependency-system',
+        title: '依赖项、Tag 与 Idea 索引',
+        summary: '可为项目配置依赖 Mod，并将其纳入标签与 Idea 的索引范围。',
+        details: [
+          '依赖管理支持添加、启用/禁用、移除与索引。',
+          'Tag 与 Idea 数据会从项目、游戏目录、启用的依赖中联合加载。',
+          '工具栏可打开加载监控面板，查看索引数量与刷新状态。',
+          '正确配置依赖可显著提升补全、校验和阅读效率。'
         ]
       }
     ]
@@ -101,482 +122,100 @@ export const documentationSections: DocSection[] = [
     items: [
       {
         id: 'plugin-overview',
-        title: '插件系统概览',
-        summary: 'HOI4 Code Studio 提供类似 VSCode 的插件系统，插件可以贡献左/右侧边栏面板以及标题栏工具按钮，并通过受控的白名单调用后端命令。',
+        title: '插件模型概览',
+        summary: '插件通过 About.hoics 声明元数据、扩展点和权限，UI 运行在 iframe。',
         details: [
-          '插件包可以是“文件夹”或“.zip 压缩包”。',
-          '插件包根目录必须包含 About.hoics 描述文件（当前版本为 JSON）。',
-          '插件 UI 通过 iframe 在应用内加载，插件与宿主通过 postMessage 通信。',
-          '插件如需调用后端能力，需要在 About.hoics.permissions.commands 中声明允许调用的 Tauri command（白名单）。',
-          '插件的 UI 目前推荐使用 HTML/TS/Vue 自行构建，并输出为静态文件（例如 index.html + js/css）。',
-          '安装插件：设置 → 扩展 → 插件 → 安装插件(文件夹/zip)。'
+          '插件包可来自文件夹或 zip。',
+          '根目录必须包含 About.hoics（JSON 格式）。',
+          '插件可贡献左侧面板、右侧面板和顶部工具栏按钮。',
+          '插件与宿主通过 postMessage 通信，后端调用由宿主代理执行。'
         ]
       },
       {
-        id: 'plugin-about-format',
-        title: 'About.hoics（JSON 格式）',
-        summary: 'About.hoics 用于声明插件元信息、扩展点贡献与权限。必须位于插件根目录，且必须是可解析的 JSON。',
+        id: 'plugin-about',
+        title: 'About.hoics 最小示例',
+        summary: '以下示例展示了插件基础字段、扩展点和命令白名单。',
         details: [
-          '文件名固定为 About.hoics（区分大小写取决于文件系统，建议保持完全一致）。',
-          '必须字段：id、name、version。',
-          '可选字段：description、author、main、contributes、permissions。',
-          '建议 id 采用反向域名风格：例如 com.yourname.hoics.myplugin。',
-          '示例：',
           '```json',
           '{',
           '  "id": "com.example.hello",',
           '  "name": "Hello Plugin",',
-          '  "version": "0.0.1",',
-          '  "description": "一个示例插件，贡献侧栏面板与标题栏按钮",',
-          '  "author": "you",',
+          '  "version": "0.1.0",',
           '  "main": "index.html",',
-          '  "permissions": {',
-          '    "commands": [',
-          '      "load_settings",',
-          '      "save_settings"',
-          '    ]',
-          '  },',
+          '  "permissions": { "commands": ["load_settings", "save_settings"] },',
           '  "contributes": {',
-          '    "left_sidebar": [',
-          '      { "id": "hello-left", "title": "Hello" }',
-          '    ],',
-          '    "right_sidebar": [',
-          '      { "id": "hello-right", "title": "HelloR" }',
-          '    ],',
-          '    "toolbar": [',
-          '      {',
-          '        "id": "open-hello",',
-          '        "title": "Open Hello",',
-          '        "open": { "side": "right", "panel": "hello-right" }',
-          '      }',
-          '    ]',
+          '    "left_sidebar": [{ "id": "hello-left", "title": "Hello" }],',
+          '    "right_sidebar": [],',
+          '    "toolbar": [{ "id": "open-hello", "title": "Open Hello", "open": { "side": "left", "panel": "hello-left" } }]',
           '  }',
           '}',
           '```'
         ]
       },
       {
-        id: 'plugin-structure',
-        title: '插件目录结构建议',
-        summary: '插件本质是一个包含静态资源的目录（或 zip），宿主会从 About.hoics.main 指定的入口页面加载 iframe。',
+        id: 'plugin-permission',
+        title: '命令白名单与安全边界',
+        summary: '插件不能任意调用后端命令，必须在 permissions.commands 中显式声明。',
         details: [
-          '推荐结构：',
-          '```text',
-          'MyPlugin/',
-          '  About.hoics',
-          '  index.html',
-          '  assets/',
-          '    main.js',
-          '    style.css',
-          '    icon.png',
-          '```',
-          '入口文件：About.hoics.main（默认建议指向 index.html）。',
-          '入口文件路径是相对插件根目录的相对路径，不要写绝对路径。',
-          '建议将所有静态资源（js/css/png）放在 assets/ 下，避免根目录混乱。'
+          '插件请求调用命令时，宿主会先校验白名单。',
+          '未声明命令会被拒绝并返回错误。',
+          '建议只开放必要命令，避免暴露高风险写入能力。',
+          '安装前可使用 validate_plugin_package 进行包体校验。'
         ]
       },
       {
-        id: 'plugin-contributes',
-        title: 'contributes：扩展点贡献',
-        summary: '插件可以贡献左侧栏/右侧栏面板以及标题栏工具按钮。面板以 iframe 形式展示入口页面。',
+        id: 'plugin-message',
+        title: '通信协议摘要',
+        summary: '插件和宿主使用三类消息完成握手、请求和响应。',
         details: [
-          'contributes.left_sidebar: 左侧栏面板列表，每项包含 id/title。',
-          'contributes.right_sidebar: 右侧栏面板列表，每项包含 id/title。',
-          'contributes.toolbar: 标题栏按钮列表，每项包含 id/title，可选 open。',
-          'toolbar.open.side: "left" 或 "right"，表示点击按钮打开哪个侧栏的插件面板。',
-          'toolbar.open.panel: 对应侧栏贡献的 panel id（即 left_sidebar/right_sidebar 中的 id）。',
-          '注意：panel id 在同一插件内必须唯一；不同插件之间允许同名，宿主会用 pluginId 做隔离。'
-        ]
-      },
-      {
-        id: 'plugin-permissions',
-        title: 'permissions.commands：后端命令白名单',
-        summary: '插件默认不允许随意调用后端命令。只有在 About.hoics 中显式声明的 command 才会被宿主转发执行。',
-        details: [
-          'permissions.commands 是字符串数组，每个元素是一个 Tauri command 名称。',
-          '例如允许读取/保存设置：load_settings、save_settings。',
-          '宿主在收到 hoics.invoke 请求后会检查 command 是否在该白名单中：不在则拒绝并返回错误。',
-          '安全建议：尽量只开放插件确实需要的命令，避免把文件系统写入、删除等高危命令加入白名单。'
-        ]
-      },
-      {
-        id: 'plugin-messaging',
-        title: '插件与宿主通信协议（postMessage）',
-        summary: '插件运行在 iframe 内，通过 window.postMessage 与宿主通信。宿主会在 iframe load 后发送握手消息，插件可通过 hoics.invoke 请求宿主执行 Tauri command。',
-        details: [
-          '1) 宿主 -> 插件：hoics.host.ready',
-          '插件 iframe 加载完成后，宿主会发送：',
-          '```js',
-          '{',
-          '  type: "hoics.host.ready",',
-          '  pluginId, pluginName, side, panelId, panelTitle,',
-          '  allowedCommands: []',
-          '}',
-          '```',
-          '2) 插件 -> 宿主：hoics.invoke',
-          '插件请求宿主调用后端命令：',
-          '```js',
-          '{',
-          '  type: "hoics.invoke",',
-          '  id: "req-1",',
-          '  command: "load_settings",',
-          '  payload: { }',
-          '}',
-          '```',
-          '3) 宿主 -> 插件：hoics.invoke.result',
-          '宿主返回调用结果：',
-          '```js',
-          '{',
-          '  type: "hoics.invoke.result",',
-          '  id: "req-1",',
-          '  ok: true,',
-          '  data: <invoke result>',
-          '}',
-          '```',
-          '失败时：',
-          '```js',
-          '{ type: "hoics.invoke.result", id: "req-1", ok: false, error: "..." }',
-          '```',
-          '重要：id 用于关联请求与响应，插件应确保每次请求 id 唯一。',
-          '注意：当前宿主对 postMessage 的 origin 限制较宽（为了本地 file/webview 加载兼容），插件应避免把敏感数据输出到日志或对外发送。'
-        ]
-      },
-      {
-        id: 'plugin-install',
-        title: '安装、卸载与更新',
-        summary: '插件由宿主统一安装到用户配置目录。你无需手动复制到应用目录，但开发调试时可以用文件夹直接安装。',
-        details: [
-          '安装位置：config_dir/HOI4_GUI_Editor/plugins/<pluginId>。',
-          '安装方式：设置 → 扩展 → 插件 → 安装插件(文件夹/zip)。',
-          '卸载方式：设置 → 扩展 → 插件 → 已安装插件列表 → 卸载。',
-          '更新方式：通常建议先卸载旧版本，再安装新版本（或用相同 id 安装覆盖）。',
-          '如果你用 zip 安装：确保 zip 内的根目录就是插件根（根内直接包含 About.hoics），不要多包一层目录。'
-        ]
-      },
-      {
-        id: 'plugin-api',
-        title: '插件 UI 接口（JS/TS）',
-        summary: '插件 UI 可直接调用的低代码接口与常用辅助函数。',
-        details: [
-          'JS/TS 低代码接口总览：',
-          '- `buildPluginInstallHooks(hooks)`：构建带默认值的 install hooks。',
-          '- `applyPluginInstallHooks(hooks)`：合并并写入 settings.json。',
-          '- `applyPluginInstallHooksOnce(pluginId, hooks)`：仅执行一次 install hooks。',
-          '- `hasPluginInstalled(pluginId)`：检查安装标记。',
-          '- `markPluginInstalled(pluginId, installed?)`：写入/清除安装标记。',
-          '这些接口位于 `src/api/tauri.ts`，可在插件 UI 中直接 import 使用。',
-          '示例：buildPluginInstallHooks',
-          '```ts',
-          'import { buildPluginInstallHooks } from "@/api/tauri"',
-          'const install = buildPluginInstallHooks({',
-          '  snippets: [',
-          '    { id: "idea-template", title: "Idea 模板", content: "ideas = {\\n\\tcountry = {\\n\\t\\tidea_name = {\\n\\t\\t}\\n\\t}\\n}" }',
-          '  ]',
-          '})',
-          '```',
-          '示例：applyPluginInstallHooks',
-          '```ts',
-          'import { applyPluginInstallHooks } from "@/api/tauri"',
-          'await applyPluginInstallHooks({',
-          '  iconSets: [',
-          '    { id: "simple", name: "Simple Icons", type: "emoji", icons: { folder: { closed: "📁", open: "📂" }, files: { default: "📄" } } }',
-          '  ]',
-          '})',
-          '```',
-          '示例：applyPluginInstallHooksOnce',
-          '```ts',
-          'import { applyPluginInstallHooksOnce } from "@/api/tauri"',
-          'await applyPluginInstallHooksOnce("my-plugin", {',
-          '  editorSettings: { tabSize: 4 }',
-          '})',
-          '```',
-          '示例：hasPluginInstalled / markPluginInstalled',
-          '```ts',
-          'import { hasPluginInstalled, markPluginInstalled } from "@/api/tauri"',
-          'const installed = await hasPluginInstalled("my-plugin")',
-          'if (!installed) {',
-          '  await markPluginInstalled("my-plugin", true)',
-          '}',
-          '```'
-        ]
-      },
-      {
-        id: 'plugin-install-hooks',
-        title: '安装即执行（install hooks）',
-        summary: '插件可在安装时执行一次性动作，例如写入自定义主题（无需打开插件面板）。',
-        details: [
-          '在 About.hoics 中使用 install.themes 声明主题数组，宿主会在安装插件时写入 themes.json。',
-          'install.settings：提供一个 JSON 对象补丁，宿主会将其与 settings.json 合并（对象字段递归合并）。',
-          'install.shortcuts：提供快捷键列表，宿主会合并到 settings.json 的 shortcuts 数组中（相同 id 覆盖）。',
-          'install.snippets：提供模板片段列表，宿主会合并到 settings.json 的 snippets 数组中（相同 id 覆盖）。',
-          'install.iconSets：提供文件树图标集列表，宿主会合并到 settings.json 的 iconSets 数组中（相同 id 覆盖）。',
-          'install.editorSettings：提供编辑器设置补丁，宿主会合并到 settings.json 的 editorSettings 对象中。',
-          '示例：',
-          '```json',
-          '{',
-          '  "install": {',
-          '    "themes": [',
-          '      { "id": "my-theme", "name": "My Theme", "colors": { "bg": "#111111", "bgSecondary": "#1a1a1a", "fg": "#e0e0e0", "comment": "#8b8b8b", "border": "#333333", "selection": "#2a2a2a", "accent": "#4ac1a3", "success": "#9ad94a", "warning": "#f0c46b", "error": "#f06b6b", "keyword": "#78c5f5" } }',
-          '    ],',
-          '    "settings": { "autoSave": false, "theme": "my-theme" },',
-          '    "shortcuts": [',
-          '      { "id": "my-shortcut", "keys": ["Ctrl+Shift+M"], "description": "My Action", "action": "my.action" }',
-          '    ],',
-          '    "snippets": [',
-          '      { "id": "idea-template", "title": "Idea 模板", "content": "ideas = {\n\tcountry = {\n\t\tidea_name = {\n\t\t}\n\t}\n}", "pathIncludes": ["common/ideas/"] }',
-          '    ],',
-          '    "iconSets": [',
-          '      { "id": "simple", "name": "Simple Icons", "type": "emoji", "icons": { "folder": { "closed": "📁", "open": "📂" }, "files": { "txt": "📝", "default": "📄" } } }',
-          '    ],',
-          '    "editorSettings": { "tabSize": 4, "indentUnit": "    " }',
-          '  }',
-          '}',
-          '```',
-          'JS/TS 侧可用辅助函数快速构建 install hooks：',
-          '```ts',
-          'import { buildPluginInstallHooks } from "@/api/tauri"',
-          'const install = buildPluginInstallHooks({',
-          '  themes: [',
-          '    { id: "my-theme", name: "My Theme", colors: { bg: "#111111", bgSecondary: "#1a1a1a", fg: "#e0e0e0", comment: "#8b8b8b", border: "#333333", selection: "#2a2a2a", accent: "#4ac1a3", success: "#9ad94a", warning: "#f0c46b", error: "#f06b6b", keyword: "#78c5f5" } }',
-          '  ],',
-          '  shortcuts: [',
-          '    { id: "my-shortcut", keys: ["Ctrl+Shift+M"], description: "My Action", action: "my.action" }',
-          '  ],',
-          '  snippets: [',
-          '    { id: "idea-template", title: "Idea 模板", content: "ideas = {\n\tcountry = {\n\t\tidea_name = {\n\t\t}\n\t}\n}", pathIncludes: ["common/ideas/"] }',
-          '  ],',
-          '  iconSets: [',
-          '    { id: "simple", name: "Simple Icons", type: "emoji", icons: { folder: { closed: "📁", open: "📂" }, files: { txt: "📝", default: "📄" } } }',
-          '  ],',
-          '  editorSettings: { tabSize: 4, indentUnit: "    " }',
-          '})',
-          'const about = {',
-          '  id: "my-plugin",',
-          '  name: "My Plugin",',
-          '  version: "1.0.0",',
-          '  install',
-          '}',
-          '```',
-          '插件 UI 内可直接调用 applyPluginInstallHooks 执行低代码写入：',
-          '```ts',
-          'import { applyPluginInstallHooks } from "@/api/tauri"',
-          'async function installOnce() {',
-          '  const result = await applyPluginInstallHooks({',
-          '    snippets: [',
-          '      { id: "idea-template", title: "Idea 模板", content: "ideas = {\\n\\tcountry = {\\n\\t\\tidea_name = {\\n\\t\\t}\\n\\t}\\n}", pathIncludes: ["common/ideas/"] }',
-          '    ],',
-          '    iconSets: [',
-          '      { id: "simple", name: "Simple Icons", type: "emoji", icons: { folder: { closed: "📁", open: "📂" }, files: { txt: "📝", default: "📄" } } }',
-          '    ],',
-          '    editorSettings: { tabSize: 4 }',
-          '  })',
-          '  if (!result.success) {',
-          '    console.error(result.message)',
-          '  }',
-          '}',
-          '```',
-          '仅安装一次（避免重复写入）示例：',
-          '```ts',
-          'import { applyPluginInstallHooks, loadSettings, saveSettings } from "@/api/tauri"',
-          'async function installOnceWithFlag() {',
-          '  const settingsResult = await loadSettings()',
-          '  if (!settingsResult.success || !settingsResult.data) return',
-          '  const settings = settingsResult.data as Record<string, unknown>',
-          '  const flags = (settings.pluginInstallFlags as Record<string, boolean>) || {}',
-          '  if (flags["my-plugin"] === true) return',
-          '  const result = await applyPluginInstallHooks({',
-          '    snippets: [',
-          '      { id: "idea-template", title: "Idea 模板", content: "ideas = {\\n\\tcountry = {\\n\\t\\tidea_name = {\\n\\t\\t}\\n\\t}\\n}", pathIncludes: ["common/ideas/"] }',
-          '    ]',
-          '  })',
-          '  if (result.success) {',
-          '    flags["my-plugin"] = true',
-          '    settings.pluginInstallFlags = flags',
-          '    await saveSettings(settings)',
-          '  } else {',
-          '    console.error(result.message)',
-          '  }',
-          '}',
-          '```',
-          '可直接使用 helper 封装“仅安装一次”的流程：',
-          '```ts',
-          'import { applyPluginInstallHooksOnce } from "@/api/tauri"',
-          'async function installOnce() {',
-          '  await applyPluginInstallHooksOnce("my-plugin", {',
-          '    snippets: [',
-          '      { id: "idea-template", title: "Idea 模板", content: "ideas = {\\n\\tcountry = {\\n\\t\\tidea_name = {\\n\\t\\t}\\n\\t}\\n}", pathIncludes: ["common/ideas/"] }',
-          '    ]',
-          '  })',
-          '}',
-          '```',
-          'Helper API 说明：',
-          '- `hasPluginInstalled(pluginId: string): Promise<boolean>`：检查是否已执行过安装逻辑。',
-          '- `markPluginInstalled(pluginId: string, installed = true): Promise<JsonResult>`：写入/清除安装标记。',
-          '- `applyPluginInstallHooksOnce(pluginId: string, hooks: PluginInstallHooks): Promise<JsonResult>`：只执行一次 install hooks。',
-          'applyPluginInstallHooks 参数表：',
-          '- `themes?: Theme[]`：安装主题（写入 themes.json）。',
-          '- `settings?: Record<string, unknown>`：设置补丁（合并到 settings.json）。',
-          '- `shortcuts?: PluginShortcut[]`：快捷键列表（合并到 settings.json.shortcuts）。',
-          '- `snippets?: PluginSnippet[]`：模板片段列表（合并到 settings.json.snippets）。',
-          '- `iconSets?: PluginIconSet[]`：图标集列表（合并到 settings.json.iconSets）。',
-          '- `editorSettings?: Record<string, unknown>`：编辑器设置补丁（合并到 settings.json.editorSettings）。',
-          'applyPluginInstallHooks 返回值（JsonResult）：',
-          '- `success: boolean`：是否成功。',
-          '- `message: string`：提示信息或错误描述。',
-          '- `data?: unknown`：成功时的返回数据（此处通常为设置对象）。',
-          'install hooks 属于“低代码能力”，适合批量写入主题、预置配置等一次性数据。'
-        ]
-      },
-      {
-        id: 'plugin-validate',
-        title: '插件包校验（validate_plugin_package）',
-        summary: '安装前可以用校验命令检查 About.hoics 格式、入口文件与 install hooks。',
-        details: [
-          '命令：validate_plugin_package(sourcePath)。',
-          '返回结果包含 ok/errors/warnings、解析后的 about 与 entry_file_path。',
-          '常见错误：缺失 About.hoics、install.settings 非 JSON 对象、入口文件缺失等。'
-        ]
-      },
-      {
-        id: 'plugin-debug',
-        title: '调试建议',
-        summary: '插件以 iframe 运行，调试方式类似调试一个内嵌网页。你可以在插件页面里输出 console 日志，并逐步确认 postMessage 调用是否成功。',
-        details: [
-          '先用“文件夹安装”进行开发调试，改完文件后重新安装一次即可快速迭代。',
-          '在插件页面中使用 console.log 输出关键状态（例如收到 hoics.host.ready，allowedCommands 内容等）。',
-          '调用后端命令时，先从 load_settings/save_settings 这类低风险命令开始验证通路。',
-          '如果 hoics.invoke 返回 ok=false：优先检查 command 是否在 permissions.commands 白名单里。',
-          '如果 iframe 无法加载：优先检查 About.hoics.main 是否指向存在的文件，以及资源路径是否正确。'
-        ]
-      },
-      {
-        id: 'plugin-faq',
-        title: '常见问题（FAQ）',
-        summary: '整理插件开发中最常见的几个坑。',
-        details: [
-          'Q: 安装后看不到面板？',
-          'A: 检查 About.hoics.contributes 是否声明了 left_sidebar/right_sidebar；并确认编辑器左/右侧栏切到“插件”标签页。',
-          'Q: 标题栏按钮点击没反应？',
-          'A: 检查 contributes.toolbar.open.side/panel 是否正确指向已贡献的 panel id。',
-          'Q: 调用后端命令报 Command not allowed？',
-          'A: 将该命令名加入 About.hoics.permissions.commands 白名单后重新安装插件。',
-          'Q: zip 安装失败或提示缺少 About.hoics？',
-          'A: 你的 zip 可能多包了一层目录；确保 About.hoics 在 zip 解压后的根目录。',
-          'Q: main 指向的入口文件可不可以是子目录？',
-          'A: 可以，例如 "ui/index.html"，但要确保路径存在且为相对路径。'
+          '宿主 -> 插件：hoics.host.ready（包含插件上下文和 allowedCommands）。',
+          '插件 -> 宿主：hoics.invoke（请求调用后端 command）。',
+          '宿主 -> 插件：hoics.invoke.result（返回 success/error）。',
+          '请求 id 建议全局唯一，用于正确匹配异步结果。'
         ]
       }
     ]
   },
   {
-    id: 'features',
-    title: '特有功能',
+    id: 'settings-and-release',
+    title: '设置、测试与发布',
     items: [
       {
-        id: 'game-directory',
-        title: '游戏目录设置',
-        summary: '可以将游戏本体目录配置到工具中，用于浏览和检索原版文件。',
+        id: 'settings',
+        title: '设置项说明',
+        summary: '设置页面支持游戏目录、启动方式、主题、图标、字体、AI、地图性能和更新策略。',
         details: [
-          '在“设置”页面中配置 Hearts of Iron IV 的安装目录，验证通过后会作为游戏目录保存。',
-          '右侧“游戏目录”面板会以单独的树形视图展示原版文件，与项目文件树完全分离，互不影响。',
-          '从游戏目录打开的文件默认是只读的，用于查阅原版实现，避免误改动游戏安装内容。',
-          '可以在游戏目录范围内使用搜索功能，快速定位到某个关键词或脚本片段。',
-          '如果未配置或目录失效，游戏目录面板会显示提示信息，提醒前往设置页面修正路径。'
+          '游戏目录：用于浏览原版资源、参与 Tag/Idea 索引。',
+          '游戏启动：支持 Steam 模式与自定义可执行文件模式。',
+          '编辑器：自动保存、字体、错误处理开关。',
+          '界面：主题与文件树图标集。',
+          'AI：API Key、Base URL、模型、渲染与请求选项。',
+          '地图：性能模式与采样率。'
         ]
       },
       {
-        id: 'launch-mode',
-        title: '启动程序选择',
-        summary: '支持在 Steam 启动和直接启动之间切换，以适配不同的游戏安装方式。',
+        id: 'package-and-launch',
+        title: '启动与打包',
+        summary: '编辑器支持一键启动游戏和项目打包，便于快速测试与分发。',
         details: [
-          '在“设置”页面的“游戏启动设置”中，可以选择使用 Steam 版本启动或使用学习版启动。',
-          '选择学习版时，可以在同一位置选择使用哪个可执行程序作为启动入口，例如启动器或游戏本体。',
-          '一键启动功能会根据这里的配置生成合适的启动方式：要么通过平台协议唤起游戏，要么直接运行本地可执行文件。',
+          '工具栏“启动游戏”会读取当前设置并触发对应启动流程。',
+          '“打包项目”会导出可分发压缩包，可选择是否排除依赖内容。',
+          '在发布前建议先执行完整搜索与错误检查，避免将问题打进产物。'
         ]
       },
       {
-        id: 'dependencies',
-        title: '依赖项',
-        summary: '在一个项目中管理其他 Mod 或原版资源作为依赖，为自动补全和联动功能提供数据来源。',
+        id: 'testing',
+        title: '测试命令',
+        summary: '前端和后端测试可分别执行，建议在提交前至少跑一次核心用例。',
         details: [
-          '依赖项列表可通过编辑器工具栏中的“依赖项管理”按钮打开，集中管理当前项目需要引用的其他 Mod。',
-          '可以向列表中添加新的依赖项目、启用或禁用某个依赖，必要时也可以从列表中移除。',
-          '对已添加的依赖可以执行索引操作，从中提取国家理念和国家标签等信息，用于后续的自动补全。',
-          '依赖配置会自动写入项目配置文件，下次打开同一项目时会自动恢复，无需重新手动添加。',
-          '在右侧“项目信息”面板中，也可以查看当前项目已经配置的依赖项概览。'
-        ]
-      },
-      {
-        id: 'one-click-launch',
-        title: '一键启动',
-        summary: '从编辑器内部直接启动游戏并加载当前项目，省去在启动器里反复勾选 Mod 的步骤。',
-        details: [
-          '在编辑器顶部工具栏中提供了一键启动按钮，会根据当前项目和设置页面中的启动方式配置来启动游戏。',
-        ]
-      },
-      {
-        id: 'hoics-project',
-        title: 'HOI4CS 项目',
-        summary: 'HOI4 Code Studio 使用带有额外元数据的项目结构，方便工具识别和管理。',
-        details: [
-          '通过首页的“创建新项目”向导，可以新建一个标准化的 Mod 项目，包括基础目录结构和描述信息。',
-          '创建流程会根据填写的信息生成版本号和可选的替换路径配置，并写入项目描述文件。',
-          '打开已有文件夹时，后端会检查其中是否包含项目标识文件或 Mod 描述文件，以判断该目录是否是可直接加载的项目。',
-          '如果选择的是普通文件夹，工具会提示是否将其初始化为 HOI4 项目，并在确认后自动补全必要的元数据。',
-          '在编辑器右侧“项目信息”面板中，可以查看当前项目的名称、版本、创建时间、替换路径和项目路径等信息。'
-        ]
-      },
-      {
-        id: 'previews',
-        title: '国策/事件/dds/tga 预览与编辑',
-        summary: '内置多种可视化预览工具，支持国策树的可视化编辑、事件链查看以及图片资源预览。',
-        details: [
-          '当当前文件是事件脚本时，可以使用编辑窗格顶部的“预览”按钮，打开事件关系图预览。',
-          '事件关系图会以节点和连线的方式展示事件之间的触发与跳转关系，支持缩放、拖拽和平移视图。',
-          '当当前文件是国策脚本时，可以使用对应的“预览国策树”按钮，打开国策树视图。',
-          '国策树视图支持可视化编辑：可以直接拖拽节点调整位置，右键节点或空白处进行编辑和新建操作。',
-          '支持创建新国策：在空白处右键选择“新建国策”，填写 ID、坐标、花费和前置条件即可自动生成代码。',
-          '支持搜索定位：输入国策 ID 关键词，视图会自动高亮匹配节点并居中显示。',
-          '对于图片资源，包括常见格式以及游戏中使用的 dds/tga 文件，编辑器会在单独的预览界面中以图片形式展示内容。'
-        ]
-      },
-      {
-        id: 'project-management',
-        title: '项目管理',
-        summary: '除了基础编辑功能外，工具还提供项目最近记录、布局偏好和打包导出等管理能力。',
-        details: [
-          '首页的“最近项目”入口会展示历史打开过的项目列表，并支持多种布局方式显示。',
-          '在设置页面中，可以调整最近项目的展示布局，例如多列网格、单列列表或类似瀑布流的布局。',
-          '编辑器顶部工具栏提供“一键打包”入口，可以将当前项目打包为压缩文件，用于发布或分享。',
-          '项目依赖项、配置文件保存位置以及是否自动检查更新等偏好，都可以在设置页面中统一管理。',
-          '项目的详细元数据（如路径、依赖项和替换路径等）可以在右侧“项目信息”面板中查看，便于调试和归档。'
-        ]
-      },
-      {
-        id: 'ai-assistant',
-        title: 'AI 助手',
-        summary: '内置智能助手，提供代码编写、规划和问答支持，帮助更高效地开发 Mod。',
-        details: [
-          '在右侧面板点击 "AI" 标签页即可进入 AI 助手界面。',
-          '支持三种模式：Plan（规划模式）、Code（代码模式）和 Ask（问答模式），可根据需求切换。',
-          'Plan 模式：适合进行任务规划和复杂逻辑拆解，AI 会优先思考步骤。',
-          'Code 模式：专注于代码生成和修改，生成的代码可以直接应用到编辑器中。',
-          'Ask 模式：通用问答，适合咨询 HOI4 机制或脚本语法问题。',
-          '支持配置 OpenAI 兼容的 API Key 和 Base URL，可连接自定义模型服务。',
-          '支持查看 AI 的推理过程（Reasoning Chain），便于理解 AI 的思考逻辑。',
-          '提供历史记录功能，可以回顾和恢复之前的对话会话。'
-        ]
-      },
-      {
-        id: 'code-templates',
-        title: '代码模板',
-        summary: '为常见的 HOI4 配置提供预设模板，可以在合适的文件中一键插入脚本骨架。',
-        details: [
-          '在编辑器内容区域右键，在“插入模板”二级菜单中可以选择不同的模板类型。',
-          '当正在编辑国策相关脚本时，会提供插入国策模板的选项，用于快速建立一个完整的国策结构。',
-          '当正在编辑国家初始历史相关脚本时，会提供插入国家标签初始状态模板的选项。',
-          '当正在编辑权力平衡相关脚本时，会提供插入权力平衡模板的选项，帮助快速搭建左右双方和数值配置。',
-          '模板会在当前光标位置插入示例结构，通常需要根据自己 Mod 的设计修改名称、数值和条件。'
+          '```bash',
+          'npm run test:run',
+          'npm run test:coverage',
+          '```',
+          '```bash',
+          'cd src-tauri',
+          'cargo test',
+          '```'
         ]
       }
     ]
