@@ -1,13 +1,18 @@
-import type { FileNode } from '../composables/useFileManager'
+export interface TreeStateNode {
+  path: string
+  isDirectory: boolean
+  expanded?: boolean
+  children?: TreeStateNode[]
+}
 
-export function collectExpandedPaths(nodes: FileNode[]): Set<string> {
+export function collectExpandedPaths<T extends TreeStateNode>(nodes: T[]): Set<string> {
   const expandedPaths = new Set<string>()
 
-  function traverse(node: FileNode) {
+  function traverse(node: T) {
     if (node.isDirectory && node.expanded) {
       expandedPaths.add(node.path)
       if (node.children) {
-        node.children.forEach(traverse)
+        node.children.forEach((child) => traverse(child as T))
       }
     }
   }
@@ -16,12 +21,12 @@ export function collectExpandedPaths(nodes: FileNode[]): Set<string> {
   return expandedPaths
 }
 
-export function restoreExpandedState(nodes: FileNode[], expandedPaths: Set<string>): void {
-  function traverse(node: FileNode) {
+export function restoreExpandedState<T extends TreeStateNode>(nodes: T[], expandedPaths: Set<string>): void {
+  function traverse(node: T) {
     if (node.isDirectory && expandedPaths.has(node.path)) {
       node.expanded = true
       if (node.children) {
-        node.children.forEach(traverse)
+        node.children.forEach((child) => traverse(child as T))
       }
     }
   }
@@ -29,32 +34,36 @@ export function restoreExpandedState(nodes: FileNode[], expandedPaths: Set<strin
   nodes.forEach(traverse)
 }
 
-export function mergeExpandedChildren(oldNodes: FileNode[], newNodes: FileNode[], expandedPaths: Set<string>): void {
-  const oldByPath = new Map<string, FileNode>()
+export function mergeExpandedChildren<T extends TreeStateNode>(
+  oldNodes: T[],
+  newNodes: T[],
+  expandedPaths: Set<string>
+): void {
+  const oldByPath = new Map<string, T>()
 
-  const indexOld = (nodes: FileNode[]) => {
+  const indexOld = (nodes: T[]) => {
     nodes.forEach((node) => {
       oldByPath.set(node.path, node)
       if (node.children) {
-        indexOld(node.children)
+        indexOld(node.children as T[])
       }
     })
   }
 
   indexOld(oldNodes)
 
-  const merge = (node: FileNode) => {
+  const merge = (node: T) => {
     if (!node.isDirectory) return
 
     if (expandedPaths.has(node.path)) {
       const old = oldByPath.get(node.path)
       if ((!node.children || node.children.length === 0) && old?.children && old.children.length > 0) {
-        node.children = old.children
+        node.children = old.children as T[]
       }
     }
 
     if (node.children) {
-      node.children.forEach(merge)
+      node.children.forEach((child: TreeStateNode) => merge(child as T))
     }
   }
 

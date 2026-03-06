@@ -38,9 +38,9 @@ import { useDependencyManager } from '../composables/useDependencyManager'
 // 新提取的模块
 import { escapeRegExp, isImageFile, isPathUnder, convertRustFileNode } from '../utils/fileUtils'
 import {
-  collectExpandedPaths as collectExpandedPathsFromState,
-  mergeExpandedChildren as mergeExpandedChildrenFromState,
-  restoreExpandedState as restoreExpandedStateFromState
+  collectExpandedPaths,
+  mergeExpandedChildren,
+  restoreExpandedState
 } from '../utils/fileTreeState'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
 import { useContextMenu } from '../composables/useContextMenu'
@@ -408,19 +408,13 @@ async function loadProjectInfo() {
 }
 
 // 收集展开的文件夹路径
-function collectExpandedPaths(nodes: FileNode[]): Set<string> {
-  return collectExpandedPathsFromState(nodes)
-}
+
 
 // 恢复展开状态
-function restoreExpandedState(nodes: FileNode[], expandedPaths: Set<string>): void {
-  restoreExpandedStateFromState(nodes, expandedPaths)
-}
+
 
 // 合并旧树的 children（用于自动刷新时保持深层展开的子树）
-function mergeExpandedChildren(oldNodes: FileNode[], newNodes: FileNode[], expandedPaths: Set<string>): void {
-  return mergeExpandedChildrenFromState(oldNodes, newNodes, expandedPaths)
-  const oldByPath = new Map<string, FileNode>()
+/* const oldByPath = new Map<string, FileNode>()
   const indexOld = (nodes: FileNode[]) => {
     nodes.forEach(n => {
       oldByPath.set(n.path, n)
@@ -447,7 +441,7 @@ function mergeExpandedChildren(oldNodes: FileNode[], newNodes: FileNode[], expan
   }
 
   newNodes.forEach(merge)
-}
+} */
 
 // 加载文件树
 async function loadFileTree() {
