@@ -19,6 +19,7 @@ import LeftPanelTabs from '../components/editor/LeftPanelTabs.vue'
 import DependencyManager from '../components/editor/DependencyManager.vue'
 import LoadingMonitor from '../components/editor/LoadingMonitor.vue'
 import PackageDialog from '../components/editor/PackageDialog.vue'
+import EditorWorkspaceShell from '../components/editor/EditorWorkspaceShell.vue'
 
 // Composables 导入
 import { type FileNode, type OpenFile } from '../composables/useFileManager'
@@ -26,8 +27,6 @@ import { useSearch } from '../composables/useSearch'
 import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
 import { usePanelResize } from '../composables/usePanelResize'
 
-import ThemePanel from '../components/ThemePanel.vue'
-import IconPanel from '../components/IconPanel.vue'
 import { setTagRoots, useTagRegistry } from '../composables/useTagRegistry'
 import { useTheme } from '../composables/useTheme'
 import { useFileTreeIcons } from '../composables/useFileTreeIcons'
@@ -50,6 +49,7 @@ import { usePluginManager } from '../composables/usePluginManager'
 import { handleInsertTemplate, type EditorMethods } from '../composables/useEditorTemplates'
 import { jumpFromFocusPreview, jumpFromGfxPreview, jumpFromMioPreview } from '../composables/usePreviewNavigation'
 import PluginIframeHost from '../components/plugins/PluginIframeHost.vue'
+import { useEditorUiState } from '../composables/useEditorUiState'
 
 // Highlight.js 语言定义已移至 useSyntaxHighlight.ts 中
 
@@ -65,11 +65,34 @@ const selectedNode = ref<FileNode | null>(null)
 const gameDirectory = ref('')
 const gameFileTree = ref<FileNode[]>([])
 const isLoadingGameTree = ref(false)
-const rightPanelExpanded = ref(true)
 const txtErrors = ref<{line: number, msg: string, type: string}[]>([])
 const isLaunchingGame = ref(false)
 const autoSave = ref(true)
 const disableErrorHandling = ref(false)
+
+const {
+  rightPanelExpanded,
+  createDialogVisible,
+  createDialogType,
+  createDialogMode,
+  createDialogInitialValue,
+  leftPanelActiveTab,
+  activeDependencyId,
+  dependencyManagerVisible,
+  activeLeftPluginPanelUid,
+  loadingMonitorVisible,
+  packageDialogVisible,
+  rightPanelActiveTab,
+  activeRightPluginPanelUid,
+  handleSwitchToProject,
+  handleSwitchToPlugins,
+  handleManageDependencies,
+  openDependenciesFromToolbar,
+  toggleLoadingMonitor,
+  openPackageDialog,
+  toggleRightPanel,
+  handlePluginToolbarClick
+} = useEditorUiState()
 
 // 右键菜单状态（使用 composable）
 const {
@@ -86,10 +109,6 @@ const {
 } = useContextMenu()
 
 // 创建对话框状态
-const createDialogVisible = ref(false)
-const createDialogType = ref<'file' | 'folder'>('file')
-const createDialogMode = ref<'create' | 'rename'>('create')
-const createDialogInitialValue = ref('')
 
 // 确认对话框状态（使用 composable）
 const {
@@ -190,12 +209,7 @@ async function handlePerformReplace(replaceText: string) {
 }
 
 // 依赖项管理状态
-const leftPanelActiveTab = ref<'project' | 'dependencies' | 'plugins'>('project')
-const activeDependencyId = ref<string | undefined>(undefined)
-const dependencyManagerVisible = ref(false)
 const dependencyFileTrees = ref<Map<string, FileNode[]>>(new Map())
-
-const activeLeftPluginPanelUid = ref('')
 
 const hasActiveDependencyTree = computed(() => {
   return !!activeDependencyId.value && dependencyFileTrees.value.has(activeDependencyId.value)
@@ -241,8 +255,6 @@ const {
 } = useSearch()
 
 
-const loadingMonitorVisible = ref(false)
-const packageDialogVisible = ref(false)
 const packageDialogRef = ref<InstanceType<typeof PackageDialog> | null>(null)
 
 // 目录树自动刷新
@@ -289,27 +301,14 @@ async function handleRefreshIdeas() {
 }
 
 // 依赖项管理函数
-function handleSwitchToProject() {
-  leftPanelActiveTab.value = 'project'
-  activeDependencyId.value = undefined
-}
-
 function handleSwitchToDependency(id: string) {
-  leftPanelActiveTab.value = 'dependencies'
   activeDependencyId.value = id
+  leftPanelActiveTab.value = 'dependencies'
   loadDependencyFileTree(id)
 }
 
-function handleSwitchToPlugins() {
-  leftPanelActiveTab.value = 'plugins'
-  activeDependencyId.value = undefined
-  if (!activeLeftPluginPanelUid.value && pluginLeftPanels.value.length > 0) {
-    activeLeftPluginPanelUid.value = pluginLeftPanels.value[0].uid
-  }
-}
-
-function handleManageDependencies() {
-  dependencyManagerVisible.value = true
+function handleSwitchToPluginsTab() {
+  handleSwitchToPlugins(pluginLeftPanels.value[0]?.uid)
 }
 
 async function handleAddDependency(path: string) {
@@ -896,20 +895,6 @@ async function goBack() {
 }
 
 // 打开依赖项管理对话框（从工具栏）
-function openDependenciesFromToolbar() {
-  dependencyManagerVisible.value = true
-}
-
-// 切换加载监控面板
-function toggleLoadingMonitor() {
-  loadingMonitorVisible.value = !loadingMonitorVisible.value
-}
-
-// 打开打包对话框
-function openPackageDialog() {
-  packageDialogVisible.value = true
-}
-
 /**
  * 打开 Modifier 速查表小窗口
  */
@@ -1431,14 +1416,6 @@ async function handlePackageProject(fileName: string) {
 }
 
 // 右侧面板活动标签页
-const rightPanelActiveTab = ref<'info' | 'game' | 'errors' | 'search' | 'ai' | 'plugins'>('info')
-const activeRightPluginPanelUid = ref('')
-
-// 切换右侧面板
-function toggleRightPanel() {
-  rightPanelExpanded.value = !rightPanelExpanded.value
-}
-
 // 启动游戏
 async function handleLaunchGame() {
   if (isLaunchingGame.value) return
@@ -1680,20 +1657,6 @@ useKeyboardShortcuts({
   toggleIconPanel: toggleIconPanel
 })
 
-function handlePluginToolbarClick(_uid: string, open?: { side: 'left' | 'right'; panelUid: string }) {
-  if (!open) return
-
-  if (open.side === 'left') {
-    handleSwitchToPlugins()
-    activeLeftPluginPanelUid.value = open.panelUid
-    return
-  }
-
-  rightPanelExpanded.value = true
-  rightPanelActiveTab.value = 'plugins'
-  activeRightPluginPanelUid.value = open.panelUid
-}
-
 // 开始目录树自动刷新
 function startFileTreeAutoRefresh() {
   stopFileTreeAutoRefresh() // 先清除现有的定时器
@@ -1760,7 +1723,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-screen w-screen flex flex-col bg-hoi4-dark overflow-hidden">
+  <EditorWorkspaceShell>
     <!-- 顶部工具栏 -->
     <EditorToolbar
       :project-name="projectInfo?.name"
@@ -1795,7 +1758,7 @@ onUnmounted(() => {
           :dependencies="dependencies"
           @switch-to-project="handleSwitchToProject"
           @switch-to-dependency="handleSwitchToDependency"
-          @switch-to-plugins="handleSwitchToPlugins"
+          @switch-to-plugins="handleSwitchToPluginsTab"
           @manage-dependencies="handleManageDependencies"
         />
         
@@ -2015,11 +1978,9 @@ onUnmounted(() => {
     />
 
     <!-- 主题切换面板 -->
-    <ThemePanel />
     
     <!-- 图标选择面板 -->
-    <IconPanel />
-  </div>
+  </EditorWorkspaceShell>
 </template>
 
 <style scoped>
