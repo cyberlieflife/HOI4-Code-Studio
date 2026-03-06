@@ -48,6 +48,9 @@ import { loadFontConfigFromSettings } from '../composables/useEditorFont'
 import { usePluginManager } from '../composables/usePluginManager'
 import { handleInsertTemplate, type EditorMethods } from '../composables/useEditorTemplates'
 import { jumpFromFocusPreview, jumpFromGfxPreview, jumpFromMioPreview } from '../composables/usePreviewNavigation'
+import { usePreviewPaneManager } from '../composables/usePreviewPaneManager'
+import { useSearchNavigation } from '../composables/useSearchNavigation'
+import { useEditorErrorNavigation } from '../composables/useEditorErrorNavigation'
 import PluginIframeHost from '../components/plugins/PluginIframeHost.vue'
 import { useEditorUiState } from '../composables/useEditorUiState'
 
@@ -222,6 +225,13 @@ const activeDependencyTree = computed(() => {
 
 // Refs
 const editorGroupRef = ref<InstanceType<typeof EditorGroup> | null>(null)
+
+const { openPreview, syncPreviewContent } = usePreviewPaneManager(editorGroupRef)
+const {
+  jumpToError,
+  jumpToNextError,
+  jumpToPreviousError
+} = useEditorErrorNavigation(editorGroupRef, txtErrors)
 
 // 计算可移动到的窗格列表（排除当前窗格）
 const availablePanesForMove = computed(() => {
@@ -624,6 +634,32 @@ async function handleOpenFile(node: FileNode, paneId?: string, jumpInfo?: any) {
   }
 }
 
+const { jumpToSearchResult: handleJumpToSearchResult } = useSearchNavigation(editorGroupRef, handleOpenFile)
+
+async function handlePreviewEvent(paneId: string) {
+  await openPreview(paneId, 'event')
+}
+
+async function handlePreviewGfx(paneId: string) {
+  await openPreview(paneId, 'gfx')
+}
+
+async function handlePreviewMio(paneId: string) {
+  await openPreview(paneId, 'mio')
+}
+
+async function handlePreviewFocus(paneId: string) {
+  await openPreview(paneId, 'focus')
+}
+
+async function handlePreviewMap(paneId: string) {
+  await openPreview(paneId, 'map')
+}
+
+async function handlePreviewGui(paneId: string) {
+  await openPreview(paneId, 'gui')
+}
+
 // 右键菜单包装函数（处理 selectedNode 高亮）
 function handleShowTreeContextMenu(event: MouseEvent, node: FileNode | null = null) {
   showTreeContextMenu(event, node)
@@ -927,7 +963,7 @@ async function openModifierSheet() {
 }
 
 // 处理预览事件
-async function handlePreviewEvent(paneId: string) {
+async function legacyHandlePreviewEvent(paneId: string) {
   if (!editorGroupRef.value) return
   
   const sourcePane = editorGroupRef.value.panes.find(p => p.id === paneId)
@@ -990,7 +1026,7 @@ async function handlePreviewEvent(paneId: string) {
   newPane.activeFileIndex = 0
 }
 
-async function handlePreviewGfx(paneId: string) {
+async function legacyHandlePreviewGfx(paneId: string) {
   if (!editorGroupRef.value) return
 
   const sourcePane = editorGroupRef.value.panes.find(p => p.id === paneId)
@@ -1054,7 +1090,7 @@ async function handlePreviewGfx(paneId: string) {
 }
 
 // 处理预览 MIO
-async function handlePreviewMio(paneId: string) {
+async function legacyHandlePreviewMio(paneId: string) {
   if (!editorGroupRef.value) return
 
   const sourcePane = editorGroupRef.value.panes.find(p => p.id === paneId)
@@ -1123,7 +1159,7 @@ async function handleJumpToMioFromPreview(sourcePaneId: string, sourceFilePath: 
 }
 
 // 处理预览国策树
-async function handlePreviewFocus(paneId: string) {
+async function legacyHandlePreviewFocus(paneId: string) {
   if (!editorGroupRef.value) return
   
   const sourcePane = editorGroupRef.value.panes.find(p => p.id === paneId)
@@ -1187,7 +1223,7 @@ async function handlePreviewFocus(paneId: string) {
 }
 
 // 处理预览地图
-async function handlePreviewMap(paneId: string) {
+async function legacyHandlePreviewMap(paneId: string) {
   if (!editorGroupRef.value) return
   
   const sourcePane = editorGroupRef.value.panes.find(p => p.id === paneId)
@@ -1251,7 +1287,7 @@ async function handlePreviewMap(paneId: string) {
 }
 
 // 处理预览 GUI
-async function handlePreviewGui(paneId: string) {
+async function legacyHandlePreviewGui(paneId: string) {
   if (!editorGroupRef.value) return
   
   const sourcePane = editorGroupRef.value.panes.find(p => p.id === paneId)
@@ -1436,7 +1472,7 @@ async function handleLaunchGame() {
 }
 
 // 跳转到错误行
-function jumpToError(error: {line: number, msg: string, type: string}) {
+function legacyJumpToError(error: {line: number, msg: string, type: string}) {
   console.log('[Editor] jumpToError called with:', error)
   
   if (!editorGroupRef.value) {
@@ -1456,7 +1492,7 @@ function handleErrorsChange(_paneId: string, errors: Array<{line: number, msg: s
 }
 
 // 处理内容变化 - 同步预览文件内容
-function handleContentChange(paneId: string, content: string) {
+function legacyHandleContentChange(paneId: string, content: string) {
   if (!editorGroupRef.value) return
   
   // 查找当前活动的窗格
@@ -1519,7 +1555,7 @@ async function handlePerformSearch() {
   }
 }
 
-async function handleJumpToSearchResult(result: any) {
+async function legacyHandleJumpToSearchResult(result: any) {
   const targetPath = result?.file?.path
   if (!targetPath) return
 
@@ -1562,7 +1598,7 @@ async function handleJumpToSearchResult(result: any) {
 }
 
 // 跳转到下一个错误
-function handleNextError() {
+function legacyHandleNextError() {
   if (!editorGroupRef.value) return
   const activePaneId = editorGroupRef.value.activePaneId
   const activePane = editorGroupRef.value.panes.find(p => p.id === activePaneId)
@@ -1585,7 +1621,7 @@ function handleNextError() {
 }
 
 // 跳转到上一个错误
-function handlePreviousError() {
+function legacyHandlePreviousError() {
   if (!editorGroupRef.value) return
   const activePaneId = editorGroupRef.value.activePaneId
   const activePane = editorGroupRef.value.panes.find(p => p.id === activePaneId)
@@ -1610,6 +1646,32 @@ function handlePreviousError() {
 }
 
 // 切换自动保存
+void [
+  legacyHandlePreviewEvent,
+  legacyHandlePreviewGfx,
+  legacyHandlePreviewMio,
+  legacyHandlePreviewFocus,
+  legacyHandlePreviewMap,
+  legacyHandlePreviewGui,
+  legacyJumpToError,
+  legacyHandleContentChange,
+  legacyHandleJumpToSearchResult,
+  legacyHandleNextError,
+  legacyHandlePreviousError
+]
+
+function handleContentChange(paneId: string, content: string) {
+  syncPreviewContent(paneId, content)
+}
+
+function handleNextError() {
+  jumpToNextError()
+}
+
+function handlePreviousError() {
+  jumpToPreviousError()
+}
+
 async function toggleAutoSave() {
   autoSave.value = !autoSave.value
 }
