@@ -37,11 +37,13 @@ import { readFileContent } from '../api/tauri'
 import { useDependencyManager } from '../composables/useDependencyManager'
 
 // 新提取的模块
-import { basename, escapeRegExp, isImageFile, isPathUnder, convertRustFileNode } from '../utils/fileUtils'
+import { escapeRegExp, isImageFile, isPathUnder, convertRustFileNode } from '../utils/fileUtils'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
 import { useContextMenu } from '../composables/useContextMenu'
 import { loadFontConfigFromSettings } from '../composables/useEditorFont'
 import { usePluginManager } from '../composables/usePluginManager'
+import { handleInsertTemplate, type EditorMethods } from '../composables/useEditorTemplates'
+import { jumpFromFocusPreview, jumpFromGfxPreview, jumpFromMioPreview } from '../composables/usePreviewNavigation'
 import PluginIframeHost from '../components/plugins/PluginIframeHost.vue'
 
 // Highlight.js 语言定义已移至 useSyntaxHighlight.ts 中
@@ -95,68 +97,13 @@ const {
   handleConfirmDialogCancel
 } = useConfirmDialog()
 
-async function handleJumpToFocusFromPreview(sourcePaneId: string, sourceFilePath: string, _focusId: string, line: number) {
-  if (!editorGroupRef.value) return
-
-  const panes = editorGroupRef.value.panes
-  let targetPane = panes.find(p => {
-    const active = p.openFiles[p.activeFileIndex]
-    return !!active && active.isFocusTree !== true
-  })
-
-  if (!targetPane) {
-    targetPane = panes.find(p => p.id === sourcePaneId)
-  }
-  if (!targetPane) return
-
-  editorGroupRef.value.setActivePane(targetPane.id)
-
-  const node: FileNode = {
-    name: basename(sourceFilePath),
-    path: sourceFilePath,
-    isDirectory: false
-  }
-
-  await handleOpenFile(node, targetPane.id)
-
-  setTimeout(() => {
-    const paneRef = (editorGroupRef.value as any)?.paneRefs?.get?.(targetPane!.id)
-    if (paneRef?.jumpToLine) {
-      paneRef.jumpToLine(line)
-    }
-  }, 80)
+// 预览跳转函数（使用 usePreviewNavigation 模块）
+async function handleJumpToFocusFromPreview(sourcePaneId: string, sourceFilePath: string, focusId: string, line: number) {
+  await jumpFromFocusPreview(editorGroupRef.value, sourcePaneId, sourceFilePath, focusId, line, handleOpenFile)
 }
 
 async function handleJumpToGfxFromPreview(sourcePaneId: string, sourceFilePath: string, line: number) {
-  if (!editorGroupRef.value) return
-
-  const panes = editorGroupRef.value.panes
-  let targetPane = panes.find(p => {
-    const active = p.openFiles[p.activeFileIndex]
-    return !!active && active.isGfxPreview !== true
-  })
-
-  if (!targetPane) {
-    targetPane = panes.find(p => p.id === sourcePaneId)
-  }
-  if (!targetPane) return
-
-  editorGroupRef.value.setActivePane(targetPane.id)
-
-  const node: FileNode = {
-    name: basename(sourceFilePath),
-    path: sourceFilePath,
-    isDirectory: false
-  }
-
-  await handleOpenFile(node, targetPane.id)
-
-  setTimeout(() => {
-    const paneRef = (editorGroupRef.value as any)?.paneRefs?.get?.(targetPane!.id)
-    if (paneRef?.jumpToLine) {
-      paneRef.jumpToLine(line)
-    }
-  }, 80)
+  await jumpFromGfxPreview(editorGroupRef.value, sourcePaneId, sourceFilePath, line, handleOpenFile)
 }
 
 async function handlePerformReplace(replaceText: string) {
@@ -1206,36 +1153,9 @@ async function handlePreviewMio(paneId: string) {
   newPane.activeFileIndex = 0
 }
 
-async function handleJumpToMioFromPreview(sourcePaneId: string, sourceFilePath: string, _traitId: string, line: number) {
-  if (!editorGroupRef.value) return
-
-  const panes = editorGroupRef.value.panes
-  let targetPane = panes.find(p => {
-    const active = p.openFiles[p.activeFileIndex]
-    return !!active && active.isMioPreview !== true
-  })
-
-  if (!targetPane) {
-    targetPane = panes.find(p => p.id === sourcePaneId)
-  }
-  if (!targetPane) return
-
-  editorGroupRef.value.setActivePane(targetPane.id)
-
-  const node: FileNode = {
-    name: basename(sourceFilePath),
-    path: sourceFilePath,
-    isDirectory: false
-  }
-
-  await handleOpenFile(node, targetPane.id)
-
-  setTimeout(() => {
-    const paneRef = (editorGroupRef.value as any)?.paneRefs?.get?.(targetPane!.id)
-    if (paneRef?.jumpToLine) {
-      paneRef.jumpToLine(line)
-    }
-  }, 80)
+// 预览跳转函数（使用 usePreviewNavigation 模块）
+async function handleJumpToMioFromPreview(sourcePaneId: string, sourceFilePath: string, traitId: string, line: number) {
+  await jumpFromMioPreview(editorGroupRef.value, sourcePaneId, sourceFilePath, traitId, line, handleOpenFile)
 }
 
 // 处理预览国策树
@@ -1486,187 +1406,14 @@ async function handleEditorContextMenuAction(action: string, paneId: string) {
         console.error('粘贴失败:', error)
       }
       break
-      
+
     case 'insertIdeaTemplate':
-      // 插入 Idea 模板
-      handleInsertIdeaTemplate(pane, editorMethods)
-      break
-      
     case 'insertTagTemplate':
-      // 插入 Tag 初始态定义模板
-      handleInsertTagTemplate(pane, editorMethods)
-      break
-      
     case 'insertBopTemplate':
-      // 插入权力平衡模板
-      handleInsertBopTemplate(pane, editorMethods)
+      // 使用 useEditorTemplates 模块插入模板
+      handleInsertTemplate(action, pane, editorMethods as EditorMethods)
       break
   }
-}
-
-// 处理插入 Idea 模板
-function handleInsertIdeaTemplate(pane: any, editorMethods: any) {
-  // 检查当前文件路径
-  if (pane.activeFileIndex === -1) return
-  
-  const currentFile = pane.openFiles[pane.activeFileIndex]
-  if (!currentFile) return
-  
-  const filePath = currentFile.node.path
-  
-  // 检查文件是否在 common/ideas/ 目录下
-  const normalizedPath = filePath.replace(/\\/g, '/')
-  if (!normalizedPath.includes('common/ideas/')) {
-    alert('错误：只能在 common/ideas/ 目录下的文件中插入 Idea 模板')
-    return
-  }
-  
-  // 构建 Idea 模板
-  const template = `ideas = {
-\tcountry = {
-\t\tidea_name = {
-\t\t\tpicture = your_image
-\t\t\tallowed = {
-\t\t\t\talways = yes
-\t\t\t}
-\t\t\tallowed_civil_war = {
-\t\t\t\talways = yes
-\t\t\t}
-\t\t\tmodifier = {
-\t\t\t}
-\t\t}
-\t}
-}`
-  
-  // 在光标位置插入模板
-  editorMethods.insertText?.(template)
-}
-
-// 处理插入 Tag 初始态定义模板
-function handleInsertTagTemplate(pane: any, editorMethods: any) {
-  // 检查当前文件路径
-  if (pane.activeFileIndex === -1) return
-  
-  const currentFile = pane.openFiles[pane.activeFileIndex]
-  if (!currentFile) return
-  
-  const filePath = currentFile.node.path
-  
-  // 检查文件是否在 history/countries/ 目录下
-  const normalizedPath = filePath.replace(/\\/g, '/')
-  if (!normalizedPath.includes('history/countries/')) {
-    alert('错误：只能在 history/countries/ 目录下的文件中插入 Tag 初始态定义模板')
-    return
-  }
-  
-  // 构建 Tag 初始态定义模板
-  const template = `capital = your_tag_owner_provinces
-
-set_research_slots = your_research_slots
-
-set_oob = army_file
-
-set_stability = your_stability_value
-set_war_support = your_war_support_value
-
-set_politics = {
-\truling_party = your_ruling_party
-\telections_allowed = no
-}
-
-set_popularities = {
-\tdemocratic = democratic_value
-\tcommunism = communism_value
-\tneutrality = neutrality_value
-\tfascism = fascism_value
-}
-
-add_ideas = {
-\tidea1
-\tidea2\t
-}
-
-recruit_character = char1
-recruit_character = char2
-
-set_technology = {
-}`
-  
-  // 在光标位置插入模板
-  editorMethods.insertText?.(template)
-}
-
-// 处理插入权力平衡模板
-function handleInsertBopTemplate(pane: any, editorMethods: any) {
-  // 检查当前文件路径
-  if (pane.activeFileIndex === -1) return
-  
-  const currentFile = pane.openFiles[pane.activeFileIndex]
-  if (!currentFile) return
-  
-  const filePath = currentFile.node.path
-  
-  // 检查文件是否在 common/bop/ 目录下
-  const normalizedPath = filePath.replace(/\\/g, '/')
-  if (!normalizedPath.includes('common/bop/')) {
-    alert('错误：只能在 common/bop/ 目录下的文件中插入权力平衡模板')
-    return
-  }
-  
-  // 构建权力平衡模板
-  const template = `bop_name = {
-
-\tinitial_value = #默认值
-
-\tleft_side = #左侧名称
-\tright_side = #右侧名称
-
-\tdecision_category = #决议组
-\t
-\t# 中间范围
-\trange = {
-
-\t\tid = 
-
-\t\tmin = 
-
-\t\tmax = 
-
-\t\tmodifier = {
-\t\t}
-\t}
-\t
-\t#右侧
-\tside = {
-
-\t\tid = #右侧名称
-
-\t\ticon = 
-\t\t
-\t\t# 阈值1
-\t\trange = {
-
-\t\t\tid = 
-
-\t\t\tmin = 
-
-\t\t\tmax = 
-
-\t\t\tmodifier = {
-\t\t\t}
-\t\t}
-\t\t
-\t\t# 阈值2
-\t\trange = {
-\t\t\t...
-\t\t}
-\t}
-\t
-\t#左侧同理
-}`
-  
-  // 在光标位置插入模板
-  editorMethods.insertText?.(template)
 }
 
 // 处理打包
