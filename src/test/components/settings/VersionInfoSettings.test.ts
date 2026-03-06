@@ -80,7 +80,7 @@ describe('VersionInfoSettings', () => {
     mockCheckForUpdates.mockResolvedValue({
       hasUpdate: false,
       latestVersion: 'v0.2.8-dev',
-      releaseUrl: 'https://github.com/cyberlieflife/HOI4-Code-Studio/releases/latest'
+      releaseUrl: 'https://github.com/cybercyberlieflife/HOI4-Code-Studio/releases/latest'
     })
 
     const wrapper = mount(VersionInfoSettings, {
@@ -104,7 +104,7 @@ describe('VersionInfoSettings', () => {
     mockCheckForUpdates.mockResolvedValue({
       hasUpdate: true,
       latestVersion: 'v0.3.0',
-      releaseUrl: 'https://github.com/cyberlieflife/HOI4-Code-Studio/releases/v0.3.0'
+      releaseUrl: 'https://github.com/cybercyberlieflife/HOI4-Code-Studio/releases/v0.3.0'
     })
 
     const wrapper = mount(VersionInfoSettings, {
@@ -120,7 +120,7 @@ describe('VersionInfoSettings', () => {
     expect(wrapper.emitted('show-update-dialog')).toHaveLength(1)
     expect(wrapper.emitted('show-update-dialog')?.[0]).toEqual([{
       version: 'v0.3.0',
-      url: 'https://github.com/cyberlieflife/HOI4-Code-Studio/releases/v0.3.0'
+      url: 'https://github.com/cybercyberlieflife/HOI4-Code-Studio/releases/v0.3.0'
     }])
     // No status message for update available
     expect(wrapper.emitted('status-message')).toBeUndefined()
@@ -172,7 +172,7 @@ describe('VersionInfoSettings', () => {
     mockCheckForUpdates.mockResolvedValue({
       hasUpdate: false,
       latestVersion: 'v0.2.8-dev',
-      releaseUrl: 'https://github.com/cyberlieflife/HOI4-Code-Studio/releases/latest'
+      releaseUrl: 'https://github.com/cybercyberlieflife/HOI4-Code-Studio/releases/latest'
     })
 
     const wrapper = mount(VersionInfoSettings, {
@@ -198,7 +198,7 @@ describe('VersionInfoSettings', () => {
       return {
         hasUpdate: false,
         latestVersion: 'v0.2.8-dev',
-        releaseUrl: 'https://github.com/cyberlieflife/HOI4-Code-Studio/releases/latest'
+        releaseUrl: 'https://github.com/cybercyberlieflife/HOI4-Code-Studio/releases/latest'
       }
     })
 
@@ -275,7 +275,7 @@ describe('VersionInfoSettings', () => {
     mockCheckForUpdates.mockResolvedValue({
       hasUpdate: false,
       latestVersion: 'v0.2.8-dev',
-      releaseUrl: 'https://github.com/cyberlieflife/HOI4-Code-Studio/releases/latest'
+      releaseUrl: 'https://github.com/cybercyberlieflife/HOI4-Code-Studio/releases/latest'
     })
 
     const wrapper = mount(VersionInfoSettings, {

@@ -240,7 +240,7 @@ export async function checkForUpdates(
       console.log('[版本检查] 缓存未命中或已过期，发起网络请求')
     }
     
-    console.log('[版本检查] 请求 URL: https://api.github.com/repos/LiefLife/HOI4-Code-Studio/releases/latest')
+    console.log('[版本检查] 请求 URL: https://api.github.com/repos/cyberlieflife/HOI4-Code-Studio/releases/latest')
     console.log('[版本检查] 使用 Token:', githubToken ? '✅ 是（5000次/小时）' : '❌ 否（60次/小时）')
     
     const headers: HeadersInit = {
@@ -252,7 +252,7 @@ export async function checkForUpdates(
       headers['Authorization'] = `token ${githubToken.trim()}`
     }
     
-    const response = await fetch('https://api.github.com/repos/LiefLife/HOI4-Code-Studio/releases/latest', {
+    const response = await fetch('https://api.github.com/repos/cyberlieflife/HOI4-Code-Studio/releases/latest', {
       headers
     })
     

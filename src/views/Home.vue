@@ -113,15 +113,15 @@ function handleDocumentation() {
 }
 
 async function handleContribute() {
-  await openUrl('https://github.com/cyberlieflife/HOI4-Code-Studio/pulls')
+  await openUrl('https://github.com/cybercyberlieflife/HOI4-Code-Studio/pulls')
 }
 
 async function handleReportIssue() {
-  await openUrl('https://github.com/cyberlieflife/HOI4-Code-Studio/issues')
+  await openUrl('https://github.com/cybercyberlieflife/HOI4-Code-Studio/issues')
 }
 
 async function handleDiscussions() {
-  await openUrl('https://github.com/cyberlieflife/HOI4-Code-Studio/discussions')
+  await openUrl('https://github.com/cybercyberlieflife/HOI4-Code-Studio/discussions')
 }
 
 // 打开更新日志面板

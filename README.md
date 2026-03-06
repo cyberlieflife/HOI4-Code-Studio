@@ -136,9 +136,9 @@ cargo test
 
 ## 仓库链接
 
-- 项目主页：[https://github.com/cyberlieflife/HOI4-Code-Studio](https://github.com/cyberlieflife/HOI4-Code-Studio)
-- Issues：[https://github.com/cyberlieflife/HOI4-Code-Studio/issues](https://github.com/cyberlieflife/HOI4-Code-Studio/issues)
-- Discussions：[https://github.com/cyberlieflife/HOI4-Code-Studio/discussions](https://github.com/cyberlieflife/HOI4-Code-Studio/discussions)
+- 项目主页：[https://github.com/cybercyberlieflife/HOI4-Code-Studio](https://github.com/cybercyberlieflife/HOI4-Code-Studio)
+- Issues：[https://github.com/cybercyberlieflife/HOI4-Code-Studio/issues](https://github.com/cybercyberlieflife/HOI4-Code-Studio/issues)
+- Discussions：[https://github.com/cybercyberlieflife/HOI4-Code-Studio/discussions](https://github.com/cybercyberlieflife/HOI4-Code-Studio/discussions)
 
 ## 免责声明
 

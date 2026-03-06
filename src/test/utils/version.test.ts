@@ -216,7 +216,7 @@ describe('version.ts', () => {
       expect(result.error).toBeUndefined()
       
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-        'https://api.github.com/repos/LiefLife/HOI4-Code-Studio/releases/latest',
+        'https://api.github.com/repos/cyberlieflife/HOI4-Code-Studio/releases/latest',
         {
           headers: {
             'Accept': 'application/vnd.github.v3+json'
@@ -264,7 +264,7 @@ describe('version.ts', () => {
       await checkForUpdates('v0.1.0', 'test-token')
       
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-        'https://api.github.com/repos/LiefLife/HOI4-Code-Studio/releases/latest',
+        'https://api.github.com/repos/cyberlieflife/HOI4-Code-Studio/releases/latest',
         {
           headers: {
             'Accept': 'application/vnd.github.v3+json',
