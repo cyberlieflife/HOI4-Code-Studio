@@ -4,7 +4,7 @@ import ProjectInfo from './ProjectInfo.vue'
 import GameDirectory from './GameDirectory.vue'
 import ErrorList from './ErrorList.vue'
 import SearchPanel from './SearchPanel.vue'
-import AIPanel from './AIPanel.vue'
+import AIPanelConstruction from './AIPanelConstruction.vue'
 import PluginIframeHost from '../plugins/PluginIframeHost.vue'
 import type { FileNode } from '../../composables/useFileManager'
 import type { SearchResult } from '../../composables/useSearch'
@@ -227,7 +227,7 @@ watch(localActivePluginPanelUid, (uid) => {
           />
         </div>
 
-        <AIPanel
+        <AIPanelConstruction
           v-else-if="localActiveTab === 'ai'"
           :key="'ai'"
         />
