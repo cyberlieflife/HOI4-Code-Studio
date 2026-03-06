@@ -113,11 +113,11 @@ function handleDocumentation() {
 }
 
 async function handleContribute() {
-  await openUrl('https://github.com/LiefLife/HOI4-Code-Studio/pulls')
+  await openUrl('https://github.com/cyberlieflife/HOI4-Code-Studio/pulls')
 }
 
 async function handleReportIssue() {
-  await openUrl('https://github.com/LiefLife/HOI4-Code-Studio/issues')
+  await openUrl('https://github.com/cyberlieflife/HOI4-Code-Studio/issues')
 }
 
 // 打开更新日志面板
