@@ -2,11 +2,11 @@
 //!
 //! 实现基于规则的 AST 验证功能
 
-use crate::cwtools::models::{AST, Statement, KeyValue, Value, Position};
-use crate::cwtools::rules::{RuleSet, Rule, RuleType, FieldType, ValueType, RuleOptions};
 use crate::cwtools::diagnostic::{Diagnostic, DiagnosticManager, Severity};
-use crate::cwtools::validator::scope::{ScopeManager, Scope};
+use crate::cwtools::models::{KeyValue, Position, Statement, Value, AST};
+use crate::cwtools::rules::{FieldType, Rule, RuleOptions, RuleSet, RuleType, ValueType};
 use crate::cwtools::validator::reference::ReferenceChecker;
+use crate::cwtools::validator::scope::{Scope, ScopeManager};
 use std::collections::HashMap;
 
 /// 验证上下文
@@ -36,7 +36,7 @@ impl ValidationContext {
     pub fn enter_child(&self, key: String, scope: Option<Scope>) -> Self {
         let mut parent_keys = self.parent_keys.clone();
         parent_keys.push(key);
-        
+
         Self {
             current_scope: scope.unwrap_or(self.current_scope),
             current_type: self.current_type.clone(),
@@ -126,18 +126,18 @@ impl Validator {
         // 清空之前的诊断信息
         self.diagnostic_manager.clear();
         self.field_counts.clear();
-        
+
         // 重置作用域管理器
         self.scope_manager.reset();
-        
+
         // 创建初始验证上下文
         let context = ValidationContext::new(self.scope_manager.current_scope());
-        
+
         // 验证所有顶层语句
         for statement in &ast.statements {
             self.validate_statement(statement, &context);
         }
-        
+
         // 返回验证结果
         let diagnostics = self.diagnostic_manager.get_all().to_vec();
         ValidationResult::failure(diagnostics)
@@ -170,11 +170,11 @@ impl Validator {
     /// * `context` - 验证上下文
     pub fn validate_key_value(&mut self, kv: &KeyValue, context: &ValidationContext) {
         let key = &kv.key;
-        
+
         // 记录字段出现次数
         let field_key = format!("{}:{}", context.parent_keys.join("/"), key);
         *self.field_counts.entry(field_key.clone()).or_insert(0) += 1;
-        
+
         // 查找适用的规则
         if let Some(rules) = self.find_applicable_rules(key, context) {
             for rule in rules {
@@ -192,12 +192,20 @@ impl Validator {
     }
 
     /// 验证单独的值
-    fn validate_value_only(&mut self, value: &Value, position: Position, context: &ValidationContext) {
+    fn validate_value_only(
+        &mut self,
+        value: &Value,
+        position: Position,
+        context: &ValidationContext,
+    ) {
         // 对于单独的值，尝试根据上下文类型验证
         if let Some(type_name) = &context.current_type {
             // 先获取规则的克隆，避免借用冲突
-            let rules = self.rule_set.get_type(type_name).map(|type_def| type_def.rules.clone());
-            
+            let rules = self
+                .rule_set
+                .get_type(type_name)
+                .map(|type_def| type_def.rules.clone());
+
             if let Some(rules) = rules {
                 // 查找 LeafValueRule
                 for rule in &rules {
@@ -220,16 +228,14 @@ impl Validator {
                     if let Some(push_scope) = rule.options.push_scope {
                         self.scope_manager.push_scope(push_scope);
                     }
-                    
+
                     // 创建子上下文
-                    let child_context = context.enter_child(
-                        kv.key.clone(),
-                        rule.options.push_scope,
-                    );
-                    
+                    let child_context =
+                        context.enter_child(kv.key.clone(), rule.options.push_scope);
+
                     // 验证子句内容
                     self.validate_clause(statements, children, &child_context);
-                    
+
                     // 恢复作用域
                     if rule.options.push_scope.is_some() {
                         self.scope_manager.pop_scope();
@@ -375,7 +381,7 @@ impl Validator {
                             full_path.push_str(ext);
                         }
                     }
-                    
+
                     let path = std::path::Path::new(&full_path);
                     if !self.reference_checker.check_file_path(path) {
                         self.add_diagnostic(
@@ -395,7 +401,10 @@ impl Validator {
                             self.add_diagnostic(
                                 "V011".to_string(),
                                 Severity::Error,
-                                format!("无效的枚举值 '{}', 期望: {:?}", value_str, enum_def.values),
+                                format!(
+                                    "无效的枚举值 '{}', 期望: {:?}",
+                                    value_str, enum_def.values
+                                ),
                                 position,
                             );
                         }
@@ -413,7 +422,12 @@ impl Validator {
                 // 验证别名
                 if let Some(alias) = self.rule_set.get_alias(alias_name) {
                     // 递归验证别名规则
-                    self.validate_value(value, &self.get_field_type_from_rule(&alias.rule), position, context);
+                    self.validate_value(
+                        value,
+                        &self.get_field_type_from_rule(&alias.rule),
+                        position,
+                        context,
+                    );
                 }
             }
             FieldType::Variable { is_int, min, max } => {
@@ -466,39 +480,37 @@ impl Validator {
                     );
                 }
             }
-            ValueType::Float { min, max } => {
-                match value {
-                    Value::Float(f) => {
-                        if f < min || f > max {
-                            self.add_diagnostic(
-                                "V017".to_string(),
-                                Severity::Error,
-                                format!("浮点数值 {} 超出范围 [{}, {}]", f, min, max),
-                                position,
-                            );
-                        }
-                    }
-                    Value::Integer(i) => {
-                        let f = *i as f64;
-                        if f < *min || f > *max {
-                            self.add_diagnostic(
-                                "V018".to_string(),
-                                Severity::Error,
-                                format!("数值 {} 超出范围 [{}, {}]", f, min, max),
-                                position,
-                            );
-                        }
-                    }
-                    _ => {
+            ValueType::Float { min, max } => match value {
+                Value::Float(f) => {
+                    if f < min || f > max {
                         self.add_diagnostic(
-                            "V019".to_string(),
+                            "V017".to_string(),
                             Severity::Error,
-                            "期望浮点数值".to_string(),
+                            format!("浮点数值 {} 超出范围 [{}, {}]", f, min, max),
                             position,
                         );
                     }
                 }
-            }
+                Value::Integer(i) => {
+                    let f = *i as f64;
+                    if f < *min || f > *max {
+                        self.add_diagnostic(
+                            "V018".to_string(),
+                            Severity::Error,
+                            format!("数值 {} 超出范围 [{}, {}]", f, min, max),
+                            position,
+                        );
+                    }
+                }
+                _ => {
+                    self.add_diagnostic(
+                        "V019".to_string(),
+                        Severity::Error,
+                        "期望浮点数值".to_string(),
+                        position,
+                    );
+                }
+            },
             ValueType::Boolean => {
                 if value.as_boolean().is_none() {
                     self.add_diagnostic(
@@ -559,7 +571,7 @@ impl Validator {
         for statement in statements {
             self.validate_statement(statement, context);
         }
-        
+
         // 检查必需字段
         self.check_required_fields(statements, rules, context);
     }
@@ -580,7 +592,7 @@ impl Validator {
                 }
             }
         }
-        
+
         // 否则尝试从全局类型中查找
         for type_def in self.rule_set.types.values() {
             let mut applicable_rules = Vec::new();
@@ -593,7 +605,7 @@ impl Validator {
                 return Some(applicable_rules);
             }
         }
-        
+
         None
     }
 
@@ -632,12 +644,12 @@ impl Validator {
         if parts.len() != 3 {
             return false;
         }
-        
+
         // 验证年份
         if parts[0].parse::<i32>().is_err() {
             return false;
         }
-        
+
         // 验证月份
         if let Ok(month) = parts[1].parse::<u32>() {
             if !(1..=12).contains(&month) {
@@ -646,7 +658,7 @@ impl Validator {
         } else {
             return false;
         }
-        
+
         // 验证日期
         if let Ok(day) = parts[2].parse::<u32>() {
             if !(1..=31).contains(&day) {
@@ -655,14 +667,20 @@ impl Validator {
         } else {
             return false;
         }
-        
+
         true
     }
 
     /// 添加诊断信息
-    fn add_diagnostic(&mut self, code: String, severity: Severity, message: String, position: Position) {
+    fn add_diagnostic(
+        &mut self,
+        code: String,
+        severity: Severity,
+        message: String,
+        position: Position,
+    ) {
         use crate::cwtools::models::Range;
-        
+
         let diagnostic = Diagnostic::new(
             code,
             severity,
@@ -702,7 +720,7 @@ impl Validator {
                 *present_keys.entry(kv.key.clone()).or_insert(0) += 1;
             }
         }
-        
+
         // 检查每个规则的必需字段
         for rule in rules {
             let (key_pattern, min_count) = match &rule.rule_type {
@@ -715,10 +733,10 @@ impl Validator {
                 }
                 _ => (None, 0),
             };
-            
+
             if let Some(key) = key_pattern {
                 let count = present_keys.get(key).copied().unwrap_or(0);
-                
+
                 // 检查最小出现次数
                 if count < min_count {
                     let position = if let Some(Statement::KeyValue(kv)) = statements.first() {
@@ -726,7 +744,7 @@ impl Validator {
                     } else {
                         Position::start()
                     };
-                    
+
                     self.add_diagnostic(
                         "V024".to_string(),
                         Severity::Error,
@@ -737,7 +755,7 @@ impl Validator {
                         position,
                     );
                 }
-                
+
                 // 检查最大出现次数
                 if let Some(max_count) = rule.options.max {
                     if count > max_count {
@@ -777,7 +795,7 @@ impl Validator {
                 position,
             );
         }
-        
+
         // 检查最大出现次数
         if let Some(max) = options.max {
             if count > max {
@@ -944,7 +962,7 @@ impl Validator {
             Value::Float(f) => Some(*f),
             _ => None,
         };
-        
+
         if let Some(num) = num_value {
             if num < min || num > max {
                 self.add_diagnostic(
@@ -1080,12 +1098,7 @@ impl Validator {
     ///
     /// # 返回
     /// 如果值是有效的枚举值返回 true
-    pub fn check_enum_value(
-        &mut self,
-        value: &Value,
-        enum_name: &str,
-        position: Position,
-    ) -> bool {
+    pub fn check_enum_value(&mut self, value: &Value, enum_name: &str, position: Position) -> bool {
         if let Some(enum_def) = self.rule_set.get_enum(enum_name) {
             if let Some(value_str) = value.as_string() {
                 if enum_def.contains(value_str) {
@@ -1135,15 +1148,11 @@ impl Validator {
     ///
     /// # 返回
     /// 如果作用域匹配返回 true
-    pub fn check_scope(
-        &mut self,
-        required_scopes: &[Scope],
-        position: Position,
-    ) -> bool {
+    pub fn check_scope(&mut self, required_scopes: &[Scope], position: Position) -> bool {
         if required_scopes.is_empty() {
             return true;
         }
-        
+
         match self.scope_manager.validate_scope(required_scopes) {
             Ok(()) => true,
             Err(err) => {
@@ -1248,10 +1257,13 @@ impl Validator {
         position: Position,
     ) -> bool {
         // 查找修饰符定义并克隆必要的数据以避免借用冲突
-        let modifier_info = self.rule_set.modifiers.iter()
+        let modifier_info = self
+            .rule_set
+            .modifiers
+            .iter()
             .find(|m| m.name == modifier_name)
             .map(|m| (m.scopes.clone(), m.value_type.clone()));
-        
+
         if let Some((scopes, value_type)) = modifier_info {
             // 检查作用域匹配
             let current_scope = self.scope_manager.current_scope();
@@ -1269,10 +1281,10 @@ impl Validator {
                 );
                 return false;
             }
-            
+
             // 验证值类型
             self.validate_value_type(value, &value_type, position);
-            
+
             true
         } else {
             // 未找到修饰符定义，发出警告
@@ -1303,9 +1315,12 @@ impl Validator {
         expected_category: crate::cwtools::rules::ModifierCategory,
         position: Position,
     ) -> bool {
-        let modifier_def = self.rule_set.modifiers.iter()
+        let modifier_def = self
+            .rule_set
+            .modifiers
+            .iter()
             .find(|m| m.name == modifier_name);
-        
+
         if let Some(modifier) = modifier_def {
             if modifier.category != expected_category {
                 self.add_diagnostic(
@@ -1336,18 +1351,17 @@ impl Validator {
     ///
     /// # 返回
     /// 如果作用域匹配返回 true
-    pub fn check_modifier_scope(
-        &mut self,
-        modifier_name: &str,
-        position: Position,
-    ) -> bool {
-        let modifier_def = self.rule_set.modifiers.iter()
+    pub fn check_modifier_scope(&mut self, modifier_name: &str, position: Position) -> bool {
+        let modifier_def = self
+            .rule_set
+            .modifiers
+            .iter()
             .find(|m| m.name == modifier_name);
-        
+
         if let Some(modifier) = modifier_def {
             let current_scope = self.scope_manager.current_scope();
             let scope_matches = modifier.scopes.iter().any(|s| s.matches(current_scope));
-            
+
             if !scope_matches {
                 self.add_diagnostic(
                     "V048".to_string(),
@@ -1382,9 +1396,12 @@ impl Validator {
         value: &Value,
         position: Position,
     ) {
-        let modifier_def = self.rule_set.modifiers.iter()
+        let modifier_def = self
+            .rule_set
+            .modifiers
+            .iter()
             .find(|m| m.name == modifier_name);
-        
+
         if let Some(modifier) = modifier_def {
             // 根据值类型验证范围
             match &modifier.value_type {
@@ -1409,7 +1426,7 @@ impl Validator {
                         Value::Integer(i) => Some(*i as f64),
                         _ => None,
                     };
-                    
+
                     if let Some(num) = num_val {
                         if num < *min || num > *max {
                             self.add_diagnostic(

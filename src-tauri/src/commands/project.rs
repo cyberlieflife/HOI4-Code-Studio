@@ -627,9 +627,7 @@ fn package_project_impl(opts: PackageOptions) -> PackageResult {
                         if let Some(arr) = deps.as_array() {
                             arr.iter()
                                 .filter_map(|dep| {
-                                    dep.get("path")
-                                        .and_then(|p| p.as_str())
-                                        .map(PathBuf::from)
+                                    dep.get("path").and_then(|p| p.as_str()).map(PathBuf::from)
                                 })
                                 .collect()
                         } else {

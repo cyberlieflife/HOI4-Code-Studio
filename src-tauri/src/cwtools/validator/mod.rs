@@ -2,10 +2,10 @@
 //!
 //! 负责基于规则验证 AST 的正确性
 
-pub mod scope;
-pub mod reference;
 pub mod core;
+pub mod reference;
+pub mod scope;
 
-pub use scope::{Scope, ScopeError, ScopeManager, ScopeTransition};
+pub use core::{ValidationContext, ValidationResult, Validator};
 pub use reference::ReferenceChecker;
-pub use core::{Validator, ValidationContext, ValidationResult};
+pub use scope::{Scope, ScopeError, ScopeManager, ScopeTransition};

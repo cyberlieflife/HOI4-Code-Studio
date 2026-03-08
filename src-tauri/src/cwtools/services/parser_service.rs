@@ -121,13 +121,14 @@ impl ParserService {
         // 检查内存使用，如果超过限制则清理
         // 预留一些空间给新的解析结果
         let reserved_space = content.len() * 2; // 粗略估算
-        while self.current_memory_bytes + reserved_space > self.max_memory_bytes && !self.cache.is_empty() {
+        while self.current_memory_bytes + reserved_space > self.max_memory_bytes
+            && !self.cache.is_empty()
+        {
             self.evict_oldest();
         }
 
         // 解析文件
-        let mut parser = Parser::new(content, path.to_string())
-            .map_err(|e| vec![e])?;
+        let mut parser = Parser::new(content, path.to_string()).map_err(|e| vec![e])?;
         let ast = parser.parse()?;
 
         // 更新缓存
@@ -163,22 +164,24 @@ impl ParserService {
     fn update_cache(&mut self, path: String, ast: AST, version: u64) {
         // 估算 AST 的内存大小
         let estimated_size = self.estimate_ast_size(&ast);
-        
+
         // 如果替换现有缓存，先减去旧的内存使用
         if let Some(old_cached) = self.cache.get(&path) {
-            self.current_memory_bytes = self.current_memory_bytes.saturating_sub(old_cached.estimated_size);
+            self.current_memory_bytes = self
+                .current_memory_bytes
+                .saturating_sub(old_cached.estimated_size);
         }
-        
+
         let cached = CachedParse {
             ast,
             version,
             timestamp: Instant::now(),
             estimated_size,
         };
-        
+
         // 更新内存使用统计
         self.current_memory_bytes += estimated_size;
-        
+
         self.cache.insert(path, cached);
     }
 
@@ -194,16 +197,16 @@ impl ParserService {
     fn estimate_ast_size(&self, ast: &AST) -> usize {
         // 基础大小：AST 结构体本身
         let mut size = std::mem::size_of::<AST>();
-        
+
         // 文件路径字符串
         size += ast.source_file.len();
-        
+
         // 语句列表
         size += ast.statements.len() * std::mem::size_of::<crate::cwtools::models::Statement>();
-        
+
         // 粗略估算：每个语句平均占用 200 字节（包括字符串内容）
         size += ast.statements.len() * 200;
-        
+
         size
     }
 
@@ -213,9 +216,8 @@ impl ParserService {
     /// * `max_age` - 最大缓存时间
     fn clear_old_cache(&mut self, max_age: Duration) {
         let now = Instant::now();
-        self.cache.retain(|_, cached| {
-            now.duration_since(cached.timestamp) < max_age
-        });
+        self.cache
+            .retain(|_, cached| now.duration_since(cached.timestamp) < max_age);
     }
 
     /// 驱逐最旧的缓存条目
@@ -236,7 +238,9 @@ impl ParserService {
         // 移除最旧的条目
         if let Some(key) = oldest_key {
             if let Some(removed) = self.cache.remove(&key) {
-                self.current_memory_bytes = self.current_memory_bytes.saturating_sub(removed.estimated_size);
+                self.current_memory_bytes = self
+                    .current_memory_bytes
+                    .saturating_sub(removed.estimated_size);
             }
         }
     }
@@ -247,7 +251,7 @@ impl ParserService {
     fn evict_by_memory_pressure(&mut self) {
         // 目标：将内存使用降到最大值的 75%
         let target_memory = (self.max_memory_bytes * 3) / 4;
-        
+
         while self.current_memory_bytes > target_memory && !self.cache.is_empty() {
             self.evict_oldest();
         }
@@ -265,7 +269,9 @@ impl ParserService {
     /// * `path` - 文件路径
     pub fn invalidate(&mut self, path: &str) {
         if let Some(removed) = self.cache.remove(path) {
-            self.current_memory_bytes = self.current_memory_bytes.saturating_sub(removed.estimated_size);
+            self.current_memory_bytes = self
+                .current_memory_bytes
+                .saturating_sub(removed.estimated_size);
         }
     }
 
@@ -296,11 +302,11 @@ impl ParserService {
         // 1. 分析变更范围，确定受影响的语句
         // 2. 只重新解析受影响的部分
         // 3. 合并新旧 AST
-        
+
         // 检查是否需要增量解析
         // 如果变更很小（如单个字符），可以尝试局部重解析
         // 如果变更很大，直接全量解析更高效
-        
+
         self.parse_file(path, content, version)
     }
 
@@ -320,13 +326,13 @@ impl ParserService {
             if change.range.start.line != change.range.end.line {
                 return true;
             }
-            
+
             // 如果变更包含花括号，可能影响结构，认为是重大变更
             if change.text.contains('{') || change.text.contains('}') {
                 return true;
             }
         }
-        
+
         false
     }
 
@@ -343,21 +349,21 @@ impl ParserService {
     #[allow(dead_code)]
     fn apply_changes(&self, original: &str, changes: &[TextChange]) -> String {
         let mut result = original.to_string();
-        
+
         // 按照偏移量从后往前应用变更，避免位置偏移问题
         let mut sorted_changes = changes.to_vec();
         sorted_changes.sort_by(|a, b| b.range.start.offset.cmp(&a.range.start.offset));
-        
+
         for change in sorted_changes {
             let start = change.range.start.offset;
             let end = change.range.end.offset;
-            
+
             // 确保偏移量有效
             if start <= result.len() && end <= result.len() && start <= end {
                 result.replace_range(start..end, &change.text);
             }
         }
-        
+
         result
     }
 
@@ -417,7 +423,7 @@ mod tests {
         let mut service = ParserService::new();
         let content = "key = value";
         let result = service.parse_file("test.txt", content, 1);
-        
+
         assert!(result.is_ok());
         let ast = result.unwrap();
         assert_eq!(ast.statements.len(), 1);
@@ -427,15 +433,15 @@ mod tests {
     fn test_parse_file_caching() {
         let mut service = ParserService::new();
         let content = "key = value";
-        
+
         // 第一次解析
         let result1 = service.parse_file("test.txt", content, 1);
         assert!(result1.is_ok());
-        
+
         // 第二次解析，应该从缓存获取
         let result2 = service.parse_file("test.txt", content, 1);
         assert!(result2.is_ok());
-        
+
         // 验证缓存中有一个条目
         assert_eq!(service.cache.len(), 1);
     }
@@ -445,15 +451,15 @@ mod tests {
         let mut service = ParserService::new();
         let content1 = "key1 = value1";
         let content2 = "key2 = value2";
-        
+
         // 第一次解析
         let result1 = service.parse_file("test.txt", content1, 1);
         assert!(result1.is_ok());
-        
+
         // 版本变化，应该重新解析
         let result2 = service.parse_file("test.txt", content2, 2);
         assert!(result2.is_ok());
-        
+
         // 验证缓存中仍然只有一个条目（被更新了）
         assert_eq!(service.cache.len(), 1);
     }
@@ -462,11 +468,11 @@ mod tests {
     fn test_cache_invalidation() {
         let mut service = ParserService::new();
         let content = "key = value";
-        
+
         // 解析并缓存
         let _ = service.parse_file("test.txt", content, 1);
         assert_eq!(service.cache.len(), 1);
-        
+
         // 使缓存失效
         service.invalidate("test.txt");
         assert_eq!(service.cache.len(), 0);
@@ -475,14 +481,14 @@ mod tests {
     #[test]
     fn test_clear_cache() {
         let mut service = ParserService::new();
-        
+
         // 解析多个文件
         let _ = service.parse_file("test1.txt", "key1 = value1", 1);
         let _ = service.parse_file("test2.txt", "key2 = value2", 1);
         let _ = service.parse_file("test3.txt", "key3 = value3", 1);
-        
+
         assert_eq!(service.cache.len(), 3);
-        
+
         // 清空缓存
         service.clear_cache();
         assert_eq!(service.cache.len(), 0);
@@ -491,18 +497,19 @@ mod tests {
     #[test]
     fn test_cache_eviction() {
         // 创建只能缓存 2 个条目的服务
-        let mut service = ParserService::with_config(2, Duration::from_secs(300), 500 * 1024 * 1024);
-        
+        let mut service =
+            ParserService::with_config(2, Duration::from_secs(300), 500 * 1024 * 1024);
+
         // 解析 3 个文件
         let _ = service.parse_file("test1.txt", "key1 = value1", 1);
         std::thread::sleep(Duration::from_millis(10)); // 确保时间戳不同
         let _ = service.parse_file("test2.txt", "key2 = value2", 1);
         std::thread::sleep(Duration::from_millis(10));
         let _ = service.parse_file("test3.txt", "key3 = value3", 1);
-        
+
         // 应该只有 2 个条目（最旧的被驱逐）
         assert_eq!(service.cache.len(), 2);
-        
+
         // test1.txt 应该被驱逐
         assert!(!service.cache.contains_key("test1.txt"));
         assert!(service.cache.contains_key("test2.txt"));
@@ -512,15 +519,15 @@ mod tests {
     #[test]
     fn test_cache_stats() {
         let mut service = ParserService::new();
-        
+
         let (count, max, mem_used, mem_max) = service.cache_stats();
         assert_eq!(count, 0);
         assert_eq!(max, 100);
         assert_eq!(mem_used, 0);
         assert_eq!(mem_max, 500 * 1024 * 1024);
-        
+
         let _ = service.parse_file("test.txt", "key = value", 1);
-        
+
         let (count, max, mem_used, _) = service.cache_stats();
         assert_eq!(count, 1);
         assert_eq!(max, 100);
@@ -530,14 +537,14 @@ mod tests {
     #[test]
     fn test_parse_error_handling() {
         let mut service = ParserService::new();
-        
+
         // 无效的语法
         let content = "= invalid";
         let result = service.parse_file("test.txt", content, 1);
-        
+
         // 应该返回错误
         assert!(result.is_err());
-        
+
         // 错误不应该被缓存
         assert_eq!(service.cache.len(), 0);
     }
@@ -545,16 +552,16 @@ mod tests {
     #[test]
     fn test_multiple_files() {
         let mut service = ParserService::new();
-        
+
         // 解析多个不同的文件
         let result1 = service.parse_file("file1.txt", "key1 = value1", 1);
         let result2 = service.parse_file("file2.txt", "key2 = value2", 1);
         let result3 = service.parse_file("file3.txt", "key3 = value3", 1);
-        
+
         assert!(result1.is_ok());
         assert!(result2.is_ok());
         assert!(result3.is_ok());
-        
+
         // 应该有 3 个缓存条目
         assert_eq!(service.cache.len(), 3);
     }
@@ -562,7 +569,7 @@ mod tests {
     #[test]
     fn test_complex_script_parsing() {
         let mut service = ParserService::new();
-        
+
         let content = r#"
 country_event = {
     id = test.1
@@ -575,10 +582,10 @@ country_event = {
     }
 }
 "#;
-        
+
         let result = service.parse_file("event.txt", content, 1);
         assert!(result.is_ok());
-        
+
         let ast = result.unwrap();
         assert_eq!(ast.statements.len(), 1);
     }
@@ -586,25 +593,22 @@ country_event = {
     #[test]
     fn test_parse_incremental_simple() {
         let mut service = ParserService::new();
-        
+
         let original = "key1 = value1";
         let updated = "key1 = value2";
-        
+
         // 第一次解析
         let _ = service.parse_file("test.txt", original, 1);
-        
+
         // 增量解析
         let changes = vec![TextChange {
-            range: Range::new(
-                Position::new(1, 8, 7),
-                Position::new(1, 14, 13),
-            ),
+            range: Range::new(Position::new(1, 8, 7), Position::new(1, 14, 13)),
             text: "value2".to_string(),
         }];
-        
+
         let result = service.parse_incremental("test.txt", updated, 2, &changes);
         assert!(result.is_ok());
-        
+
         let ast = result.unwrap();
         assert_eq!(ast.statements.len(), 1);
     }
@@ -612,25 +616,22 @@ country_event = {
     #[test]
     fn test_parse_incremental_add_line() {
         let mut service = ParserService::new();
-        
+
         let original = "key1 = value1";
         let updated = "key1 = value1\nkey2 = value2";
-        
+
         // 第一次解析
         let _ = service.parse_file("test.txt", original, 1);
-        
+
         // 增量解析（添加新行）
         let changes = vec![TextChange {
-            range: Range::new(
-                Position::new(1, 14, 13),
-                Position::new(1, 14, 13),
-            ),
+            range: Range::new(Position::new(1, 14, 13), Position::new(1, 14, 13)),
             text: "\nkey2 = value2".to_string(),
         }];
-        
+
         let result = service.parse_incremental("test.txt", updated, 2, &changes);
         assert!(result.is_ok());
-        
+
         let ast = result.unwrap();
         assert_eq!(ast.statements.len(), 2);
     }
@@ -638,25 +639,22 @@ country_event = {
     #[test]
     fn test_parse_incremental_delete_line() {
         let mut service = ParserService::new();
-        
+
         let original = "key1 = value1\nkey2 = value2";
         let updated = "key1 = value1";
-        
+
         // 第一次解析
         let _ = service.parse_file("test.txt", original, 1);
-        
+
         // 增量解析（删除行）
         let changes = vec![TextChange {
-            range: Range::new(
-                Position::new(1, 14, 13),
-                Position::new(2, 14, 27),
-            ),
+            range: Range::new(Position::new(1, 14, 13), Position::new(2, 14, 27)),
             text: "".to_string(),
         }];
-        
+
         let result = service.parse_incremental("test.txt", updated, 2, &changes);
         assert!(result.is_ok());
-        
+
         let ast = result.unwrap();
         assert_eq!(ast.statements.len(), 1);
     }
@@ -664,14 +662,14 @@ country_event = {
     #[test]
     fn test_parse_incremental_complex_change() {
         let mut service = ParserService::new();
-        
+
         let original = r#"
 option = {
     name = old_name
     value = 10
 }
 "#;
-        
+
         let updated = r#"
 option = {
     name = new_name
@@ -679,28 +677,22 @@ option = {
     extra = yes
 }
 "#;
-        
+
         // 第一次解析
         let _ = service.parse_file("test.txt", original, 1);
-        
+
         // 增量解析（多处修改）
         let changes = vec![
             TextChange {
-                range: Range::new(
-                    Position::new(3, 12, 24),
-                    Position::new(3, 20, 32),
-                ),
+                range: Range::new(Position::new(3, 12, 24), Position::new(3, 20, 32)),
                 text: "new_name".to_string(),
             },
             TextChange {
-                range: Range::new(
-                    Position::new(4, 12, 49),
-                    Position::new(4, 14, 51),
-                ),
+                range: Range::new(Position::new(4, 12, 49), Position::new(4, 14, 51)),
                 text: "20".to_string(),
             },
         ];
-        
+
         let result = service.parse_incremental("test.txt", updated, 2, &changes);
         assert!(result.is_ok());
     }
@@ -708,33 +700,24 @@ option = {
     #[test]
     fn test_is_major_change() {
         let service = ParserService::new();
-        
+
         // 单行小改动
         let small_change = vec![TextChange {
-            range: Range::new(
-                Position::new(1, 1, 0),
-                Position::new(1, 5, 4),
-            ),
+            range: Range::new(Position::new(1, 1, 0), Position::new(1, 5, 4)),
             text: "test".to_string(),
         }];
         assert!(!service.is_major_change(&small_change));
-        
+
         // 跨行改动
         let multiline_change = vec![TextChange {
-            range: Range::new(
-                Position::new(1, 1, 0),
-                Position::new(2, 5, 10),
-            ),
+            range: Range::new(Position::new(1, 1, 0), Position::new(2, 5, 10)),
             text: "test".to_string(),
         }];
         assert!(service.is_major_change(&multiline_change));
-        
+
         // 包含花括号
         let brace_change = vec![TextChange {
-            range: Range::new(
-                Position::new(1, 1, 0),
-                Position::new(1, 5, 4),
-            ),
+            range: Range::new(Position::new(1, 1, 0), Position::new(1, 5, 4)),
             text: "{ }".to_string(),
         }];
         assert!(service.is_major_change(&brace_change));
@@ -743,18 +726,15 @@ option = {
     #[test]
     fn test_apply_changes() {
         let service = ParserService::new();
-        
+
         let original = "key = value";
-        
+
         // 单个变更
         let changes = vec![TextChange {
-            range: Range::new(
-                Position::new(1, 7, 6),
-                Position::new(1, 12, 11),
-            ),
+            range: Range::new(Position::new(1, 7, 6), Position::new(1, 12, 11)),
             text: "new_value".to_string(),
         }];
-        
+
         let result = service.apply_changes(original, &changes);
         assert_eq!(result, "key = new_value");
     }
@@ -762,27 +742,21 @@ option = {
     #[test]
     fn test_apply_multiple_changes() {
         let service = ParserService::new();
-        
+
         let original = "key1 = value1\nkey2 = value2";
-        
+
         // 多个变更
         let changes = vec![
             TextChange {
-                range: Range::new(
-                    Position::new(1, 8, 7),
-                    Position::new(1, 14, 13),
-                ),
+                range: Range::new(Position::new(1, 8, 7), Position::new(1, 14, 13)),
                 text: "new1".to_string(),
             },
             TextChange {
-                range: Range::new(
-                    Position::new(2, 8, 21),
-                    Position::new(2, 14, 27),
-                ),
+                range: Range::new(Position::new(2, 8, 21), Position::new(2, 14, 27)),
                 text: "new2".to_string(),
             },
         ];
-        
+
         let result = service.apply_changes(original, &changes);
         assert_eq!(result, "key1 = new1\nkey2 = new2");
     }
@@ -790,48 +764,48 @@ option = {
     #[test]
     fn test_incremental_parse_equivalence() {
         let mut service = ParserService::new();
-        
+
         let original = "key = old_value";
         let updated = "key = new_value";
-        
+
         // 完整解析
         let full_parse = service.parse_file("test1.txt", updated, 1).unwrap();
-        
+
         // 增量解析
         let changes = vec![TextChange {
-            range: Range::new(
-                Position::new(1, 7, 6),
-                Position::new(1, 16, 15),
-            ),
+            range: Range::new(Position::new(1, 7, 6), Position::new(1, 16, 15)),
             text: "new_value".to_string(),
         }];
-        
+
         let incremental_parse = service
             .parse_incremental("test2.txt", updated, 1, &changes)
             .unwrap();
-        
+
         // 两种解析方式应该产生相同数量的语句
-        assert_eq!(full_parse.statements.len(), incremental_parse.statements.len());
+        assert_eq!(
+            full_parse.statements.len(),
+            incremental_parse.statements.len()
+        );
     }
 
     #[test]
     fn test_memory_usage_tracking() {
         let mut service = ParserService::new();
-        
+
         // 初始内存使用应该为 0
         let (_, _, mem_used, _) = service.cache_stats();
         assert_eq!(mem_used, 0);
-        
+
         // 解析一个文件
         let _ = service.parse_file("test.txt", "key = value", 1);
-        
+
         // 内存使用应该增加
         let (_, _, mem_used, _) = service.cache_stats();
         assert!(mem_used > 0);
-        
+
         // 清空缓存
         service.clear_cache();
-        
+
         // 内存使用应该回到 0
         let (_, _, mem_used, _) = service.cache_stats();
         assert_eq!(mem_used, 0);
@@ -840,14 +814,14 @@ option = {
     #[test]
     fn test_memory_usage_percent() {
         let mut service = ParserService::new();
-        
+
         // 初始应该是 0%
         assert_eq!(service.memory_usage_percent(), 0.0);
-        
+
         // 解析一些文件
         let _ = service.parse_file("test1.txt", "key1 = value1", 1);
         let _ = service.parse_file("test2.txt", "key2 = value2", 1);
-        
+
         // 应该有一些内存使用
         let percent = service.memory_usage_percent();
         assert!(percent > 0.0);
@@ -858,35 +832,44 @@ option = {
     fn test_memory_based_eviction() {
         // 创建内存限制为 5 KB 的服务
         let mut service = ParserService::with_config(100, Duration::from_secs(300), 5 * 1024);
-        
+
         // 解析多个文件，应该触发基于内存的驱逐
         // 使用更大的内容以确保触发内存限制
         let content = "key1 = value1\nkey2 = value2\nkey3 = value3\nkey4 = value4\nkey5 = value5\nkey6 = value6";
-        
+
         for i in 0..15 {
             let _ = service.parse_file(&format!("test{}.txt", i), content, 1);
         }
-        
+
         // 由于内存限制，不应该缓存所有 15 个文件
         let (count, _, mem_used, mem_max) = service.cache_stats();
-        assert!(count < 15, "应该有缓存被驱逐，但缓存了所有 {} 个文件", count);
+        assert!(
+            count < 15,
+            "应该有缓存被驱逐，但缓存了所有 {} 个文件",
+            count
+        );
         // 允许一些误差，因为估算不是完全精确的
-        assert!(mem_used <= mem_max + 2048, "内存使用 {} 超过限制 {} + 2048", mem_used, mem_max);
+        assert!(
+            mem_used <= mem_max + 2048,
+            "内存使用 {} 超过限制 {} + 2048",
+            mem_used,
+            mem_max
+        );
     }
 
     #[test]
     fn test_invalidate_updates_memory() {
         let mut service = ParserService::new();
-        
+
         // 解析文件
         let _ = service.parse_file("test.txt", "key = value", 1);
-        
+
         let (_, _, mem_before, _) = service.cache_stats();
         assert!(mem_before > 0);
-        
+
         // 使缓存失效
         service.invalidate("test.txt");
-        
+
         let (_, _, mem_after, _) = service.cache_stats();
         assert_eq!(mem_after, 0);
     }
@@ -894,16 +877,16 @@ option = {
     #[test]
     fn test_cache_replacement_updates_memory() {
         let mut service = ParserService::new();
-        
+
         // 解析文件
         let _ = service.parse_file("test.txt", "key = value", 1);
         let (_, _, mem_v1, _) = service.cache_stats();
-        
+
         // 用更大的内容替换
         let large_content = "key1 = value1\nkey2 = value2\nkey3 = value3\nkey4 = value4";
         let _ = service.parse_file("test.txt", large_content, 2);
         let (_, _, mem_v2, _) = service.cache_stats();
-        
+
         // 新版本应该使用更多内存
         assert!(mem_v2 > mem_v1);
     }
@@ -911,15 +894,15 @@ option = {
     #[test]
     fn test_estimate_ast_size() {
         let service = ParserService::new();
-        
+
         // 创建一个简单的 AST
         let ast = AST {
             statements: vec![],
             source_file: "test.txt".to_string(),
         };
-        
+
         let size = service.estimate_ast_size(&ast);
-        
+
         // 应该至少包含基础结构大小
         assert!(size > 0);
     }
@@ -928,19 +911,19 @@ option = {
     fn test_memory_pressure_eviction() {
         // 创建内存限制为 20 KB 的服务
         let mut service = ParserService::with_config(100, Duration::from_secs(300), 20 * 1024);
-        
+
         // 解析足够多的文件以触发内存压力
         let content = "key = value\nkey2 = value2\nkey3 = value3\nkey4 = value4";
-        
+
         for i in 0..20 {
             let _ = service.parse_file(&format!("test{}.txt", i), content, 1);
             std::thread::sleep(Duration::from_millis(1)); // 确保时间戳不同
         }
-        
+
         // 内存使用应该在限制范围内（允许一些误差）
         let (_, _, mem_used, mem_max) = service.cache_stats();
         assert!(mem_used <= mem_max + 2048); // 允许 2KB 误差
-        
+
         // 应该有一些缓存被驱逐
         let (count, _, _, _) = service.cache_stats();
         assert!(count < 20);

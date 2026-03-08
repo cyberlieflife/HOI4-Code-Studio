@@ -2,10 +2,10 @@
 //!
 //! 定义 CWT 规则文件的数据结构，包括类型定义、规则、字段类型等
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use crate::cwtools::diagnostic::Severity;
 use crate::cwtools::validator::scope::Scope;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// 规则集合
 ///
@@ -75,17 +75,17 @@ impl RuleSet {
         for (name, type_def) in other.types {
             self.types.insert(name, type_def);
         }
-        
+
         // 合并枚举定义
         for (name, enum_def) in other.enums {
             self.enums.insert(name, enum_def);
         }
-        
+
         // 合并别名规则
         for (name, alias) in other.aliases {
             self.aliases.insert(name, alias);
         }
-        
+
         // 合并修饰符定义
         self.modifiers.extend(other.modifiers);
     }
@@ -542,5 +542,3 @@ pub enum ModifierCategory {
     /// 空军修饰符
     Air,
 }
-
-

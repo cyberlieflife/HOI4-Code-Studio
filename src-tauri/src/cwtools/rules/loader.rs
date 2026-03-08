@@ -6,9 +6,9 @@ use super::types::{
     AliasRule, EnumDefinition, FieldType, ModifierCategory, ModifierDefinition, Rule, RuleOptions,
     RuleSet, RuleType, SubTypeDefinition, TypeDefinition, ValueType,
 };
+use crate::cwtools::diagnostic::Severity;
 use crate::cwtools::models::{Operator, Position, Value as AstValue};
 use crate::cwtools::parser::Parser;
-use crate::cwtools::diagnostic::Severity;
 use crate::cwtools::validator::scope::Scope;
 use std::collections::HashMap;
 use std::fs;
@@ -105,8 +105,10 @@ impl RuleLoader {
 
         // 解析文件
         let mut parser = Parser::new(&content, path.display().to_string()).map_err(|e| {
-            vec![RuleError::new(format!("Failed to create parser: {}", e.message))
-                .with_file(path.display().to_string())]
+            vec![
+                RuleError::new(format!("Failed to create parser: {}", e.message))
+                    .with_file(path.display().to_string()),
+            ]
         })?;
         let ast = parser.parse().map_err(|errors| {
             errors
@@ -402,7 +404,8 @@ impl RuleLoader {
                             if self.is_option_key(&kv.key) {
                                 self.parse_option_into(&kv.key, &kv.value, &mut options)?;
                             } else {
-                                let child_rule = self.parse_rule(&kv.key, &kv.value, kv.operator)?;
+                                let child_rule =
+                                    self.parse_rule(&kv.key, &kv.value, kv.operator)?;
                                 children.push(child_rule);
                             }
                         }
@@ -446,9 +449,7 @@ impl RuleLoader {
     /// 从值解析字段类型
     fn parse_field_type(&self, value: &AstValue) -> Result<FieldType, RuleError> {
         match value {
-            AstValue::String(s) | AstValue::QuotedString(s) => {
-                self.parse_field_type_from_string(s)
-            }
+            AstValue::String(s) | AstValue::QuotedString(s) => self.parse_field_type_from_string(s),
             AstValue::Integer(_) => Ok(FieldType::Value(ValueType::int())),
             AstValue::Float(_) => Ok(FieldType::Value(ValueType::float())),
             AstValue::Boolean(_) => Ok(FieldType::Value(ValueType::Boolean)),
@@ -657,7 +658,7 @@ impl RuleLoader {
                 // 如果类型已存在，合并规则
                 target_type.rules.extend(source_type.rules);
                 target_type.subtypes.extend(source_type.subtypes);
-                
+
                 // 合并选项（后加载的覆盖先加载的）
                 if source_type.options.skip_root_key {
                     target_type.options.skip_root_key = true;
@@ -700,11 +701,7 @@ impl RuleLoader {
         // 合并修饰符定义（去重）
         for modifier in source.modifiers {
             // 检查是否已存在同名修饰符
-            if !target
-                .modifiers
-                .iter()
-                .any(|m| m.name == modifier.name)
-            {
+            if !target.modifiers.iter().any(|m| m.name == modifier.name) {
                 target.modifiers.push(modifier);
             }
         }
@@ -875,14 +872,10 @@ mod tests {
         let error = RuleError::new("Test error".to_string());
         assert_eq!(error.to_string(), "Test error");
 
-        let error = RuleError::with_position(
-            "Test error".to_string(),
-            Position::new(10, 5, 100),
-        );
+        let error = RuleError::with_position("Test error".to_string(), Position::new(10, 5, 100));
         assert_eq!(error.to_string(), "10:5: Test error");
 
-        let error = RuleError::new("Test error".to_string())
-            .with_file("test.cwt".to_string());
+        let error = RuleError::new("Test error".to_string()).with_file("test.cwt".to_string());
         assert_eq!(error.to_string(), "test.cwt:Test error");
     }
 
@@ -915,20 +908,14 @@ mod tests {
             loader.parse_severity("info"),
             Ok(Severity::Information)
         ));
-        assert!(matches!(
-            loader.parse_severity("hint"),
-            Ok(Severity::Hint)
-        ));
+        assert!(matches!(loader.parse_severity("hint"), Ok(Severity::Hint)));
         assert!(loader.parse_severity("unknown").is_err());
     }
 
     #[test]
     fn test_parse_scope() {
         let loader = RuleLoader::new();
-        assert!(matches!(
-            loader.parse_scope("country"),
-            Ok(Scope::Country)
-        ));
+        assert!(matches!(loader.parse_scope("country"), Ok(Scope::Country)));
         assert!(matches!(loader.parse_scope("state"), Ok(Scope::State)));
         assert!(matches!(
             loader.parse_scope("unit_leader"),
@@ -958,13 +945,21 @@ mod tests {
 
         // 测试 severity
         loader
-            .parse_option_into("severity", &AstValue::String("warning".to_string()), &mut options)
+            .parse_option_into(
+                "severity",
+                &AstValue::String("warning".to_string()),
+                &mut options,
+            )
             .unwrap();
         assert_eq!(options.severity, Some(Severity::Warning));
 
         // 测试 push_scope
         loader
-            .parse_option_into("push_scope", &AstValue::String("country".to_string()), &mut options)
+            .parse_option_into(
+                "push_scope",
+                &AstValue::String("country".to_string()),
+                &mut options,
+            )
             .unwrap();
         assert_eq!(options.push_scope, Some(Scope::Country));
 
@@ -1018,7 +1013,7 @@ mod tests {
         assert_eq!(target.types.len(), 2);
         assert!(target.types.contains_key("type1"));
         assert!(target.types.contains_key("type2"));
-        
+
         // type1 应该有两个规则
         let merged_type1 = target.types.get("type1").unwrap();
         assert_eq!(merged_type1.rules.len(), 2);

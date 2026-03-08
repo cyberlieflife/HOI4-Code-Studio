@@ -3,7 +3,9 @@
 //! 当系统遇到严重错误时，提供降级模式以确保基本功能可用
 
 use crate::cwtools::error_logger::{ErrorLogger, LogLevel};
-use crate::cwtools::rules::types::{RuleSet, TypeDefinition, RuleOptions, Rule, RuleType, FieldType};
+use crate::cwtools::rules::types::{
+    FieldType, Rule, RuleOptions, RuleSet, RuleType, TypeDefinition,
+};
 use std::sync::{Arc, Mutex};
 
 /// 降级模式类型
@@ -101,10 +103,8 @@ impl FallbackManager {
     pub fn set_mode(&self, mode: FallbackMode) {
         let mut current = self.current_mode.lock().unwrap();
         if *current != mode {
-            self.logger.log_info(
-                "fallback",
-                format!("切换降级模式: {} -> {}", current, mode),
-            );
+            self.logger
+                .log_info("fallback", format!("切换降级模式: {} -> {}", current, mode));
             *current = mode;
         }
     }
@@ -118,7 +118,8 @@ impl FallbackManager {
         *count += 1;
 
         let message = error_message.into();
-        self.logger.log_error("fallback", format!("错误 #{}: {}", *count, message));
+        self.logger
+            .log_error("fallback", format!("错误 #{}: {}", *count, message));
 
         // 检查是否需要自动降级
         if self.auto_fallback && *count >= self.error_threshold {
@@ -128,14 +129,20 @@ impl FallbackManager {
                     self.set_mode(FallbackMode::Basic);
                     self.logger.log_warning(
                         "fallback",
-                        format!("错误次数达到阈值 {}，自动降级到基础模式", self.error_threshold),
+                        format!(
+                            "错误次数达到阈值 {}，自动降级到基础模式",
+                            self.error_threshold
+                        ),
                     );
                 }
                 FallbackMode::Basic => {
                     self.set_mode(FallbackMode::Minimal);
                     self.logger.log_warning(
                         "fallback",
-                        format!("错误次数达到阈值 {}，自动降级到最小模式", self.error_threshold),
+                        format!(
+                            "错误次数达到阈值 {}，自动降级到最小模式",
+                            self.error_threshold
+                        ),
                     );
                 }
                 FallbackMode::Minimal => {
@@ -186,19 +193,16 @@ impl FallbackManager {
     /// 降级规则集
     pub fn create_fallback_ruleset(&self) -> RuleSet {
         let mode = self.current_mode();
-        
+
         match mode {
             FallbackMode::Normal => {
                 // 正常模式不应该调用此方法
-                self.logger.log_warning("fallback", "在正常模式下创建降级规则集");
+                self.logger
+                    .log_warning("fallback", "在正常模式下创建降级规则集");
                 RuleSet::new()
             }
-            FallbackMode::Basic => {
-                self.create_basic_ruleset()
-            }
-            FallbackMode::Minimal => {
-                self.create_minimal_ruleset()
-            }
+            FallbackMode::Basic => self.create_basic_ruleset(),
+            FallbackMode::Minimal => self.create_minimal_ruleset(),
             FallbackMode::Disabled => {
                 // 禁用模式返回空规则集
                 RuleSet::new()
@@ -269,7 +273,8 @@ impl FallbackManager {
     /// 只包含最基本的语法验证规则
     fn create_minimal_ruleset(&self) -> RuleSet {
         let ruleset = RuleSet::new();
-        self.logger.log_info("fallback", "创建最小规则集（空规则集）");
+        self.logger
+            .log_info("fallback", "创建最小规则集（空规则集）");
         ruleset
     }
 
@@ -324,8 +329,14 @@ mod tests {
     fn test_fallback_mode_from_str() {
         assert_eq!(FallbackMode::from_str("normal"), Some(FallbackMode::Normal));
         assert_eq!(FallbackMode::from_str("basic"), Some(FallbackMode::Basic));
-        assert_eq!(FallbackMode::from_str("minimal"), Some(FallbackMode::Minimal));
-        assert_eq!(FallbackMode::from_str("disabled"), Some(FallbackMode::Disabled));
+        assert_eq!(
+            FallbackMode::from_str("minimal"),
+            Some(FallbackMode::Minimal)
+        );
+        assert_eq!(
+            FallbackMode::from_str("disabled"),
+            Some(FallbackMode::Disabled)
+        );
         assert_eq!(FallbackMode::from_str("unknown"), None);
     }
 
@@ -341,7 +352,7 @@ mod tests {
     fn test_fallback_manager_creation() {
         let logger = create_test_logger();
         let manager = FallbackManager::new(logger, 10, true);
-        
+
         assert_eq!(manager.current_mode(), FallbackMode::Normal);
         assert_eq!(manager.error_count(), 0);
         assert_eq!(manager.error_threshold(), 10);
@@ -352,12 +363,12 @@ mod tests {
     fn test_set_mode() {
         let logger = create_test_logger();
         let manager = FallbackManager::new(logger, 10, true);
-        
+
         assert_eq!(manager.current_mode(), FallbackMode::Normal);
-        
+
         manager.set_mode(FallbackMode::Basic);
         assert_eq!(manager.current_mode(), FallbackMode::Basic);
-        
+
         manager.set_mode(FallbackMode::Minimal);
         assert_eq!(manager.current_mode(), FallbackMode::Minimal);
     }
@@ -366,11 +377,11 @@ mod tests {
     fn test_record_error_without_auto_fallback() {
         let logger = create_test_logger();
         let manager = FallbackManager::new(logger, 10, false);
-        
+
         for i in 0..15 {
             manager.record_error(format!("Error {}", i));
         }
-        
+
         // 不应该自动降级
         assert_eq!(manager.current_mode(), FallbackMode::Normal);
         assert_eq!(manager.error_count(), 15);
@@ -380,20 +391,20 @@ mod tests {
     fn test_record_error_with_auto_fallback() {
         let logger = create_test_logger();
         let manager = FallbackManager::new(logger, 5, true);
-        
+
         // 记录 5 个错误，应该降级到 Basic
         for i in 0..5 {
             manager.record_error(format!("Error {}", i));
         }
         assert_eq!(manager.current_mode(), FallbackMode::Basic);
         assert_eq!(manager.error_count(), 0); // 错误计数应该被重置
-        
+
         // 再记录 5 个错误，应该降级到 Minimal
         for i in 0..5 {
             manager.record_error(format!("Error {}", i));
         }
         assert_eq!(manager.current_mode(), FallbackMode::Minimal);
-        
+
         // 再记录 5 个错误，应该降级到 Disabled
         for i in 0..5 {
             manager.record_error(format!("Error {}", i));
@@ -405,11 +416,11 @@ mod tests {
     fn test_reset_error_count() {
         let logger = create_test_logger();
         let manager = FallbackManager::new(logger, 10, false);
-        
+
         manager.record_error("Error 1");
         manager.record_error("Error 2");
         assert_eq!(manager.error_count(), 2);
-        
+
         manager.reset_error_count();
         assert_eq!(manager.error_count(), 0);
     }
@@ -418,10 +429,10 @@ mod tests {
     fn test_try_recover() {
         let logger = create_test_logger();
         let manager = FallbackManager::new(logger, 10, true);
-        
+
         manager.set_mode(FallbackMode::Basic);
         assert_eq!(manager.current_mode(), FallbackMode::Basic);
-        
+
         manager.try_recover();
         assert_eq!(manager.current_mode(), FallbackMode::Normal);
         assert_eq!(manager.error_count(), 0);
@@ -431,15 +442,15 @@ mod tests {
     fn test_should_use_fallback() {
         let logger = create_test_logger();
         let manager = FallbackManager::new(logger, 10, true);
-        
+
         assert!(!manager.should_use_fallback());
-        
+
         manager.set_mode(FallbackMode::Basic);
         assert!(manager.should_use_fallback());
-        
+
         manager.set_mode(FallbackMode::Minimal);
         assert!(manager.should_use_fallback());
-        
+
         manager.set_mode(FallbackMode::Disabled);
         assert!(manager.should_use_fallback());
     }
@@ -448,17 +459,17 @@ mod tests {
     fn test_create_fallback_ruleset() {
         let logger = create_test_logger();
         let manager = FallbackManager::new(logger, 10, true);
-        
+
         // 基础模式
         manager.set_mode(FallbackMode::Basic);
         let basic_ruleset = manager.create_fallback_ruleset();
         assert!(!basic_ruleset.types.is_empty());
-        
+
         // 最小模式
         manager.set_mode(FallbackMode::Minimal);
         let minimal_ruleset = manager.create_fallback_ruleset();
         assert!(minimal_ruleset.types.is_empty());
-        
+
         // 禁用模式
         manager.set_mode(FallbackMode::Disabled);
         let disabled_ruleset = manager.create_fallback_ruleset();
@@ -469,15 +480,15 @@ mod tests {
     fn test_mode_description() {
         let logger = create_test_logger();
         let manager = FallbackManager::new(logger, 10, true);
-        
+
         assert!(manager.mode_description().contains("正常模式"));
-        
+
         manager.set_mode(FallbackMode::Basic);
         assert!(manager.mode_description().contains("基础模式"));
-        
+
         manager.set_mode(FallbackMode::Minimal);
         assert!(manager.mode_description().contains("最小模式"));
-        
+
         manager.set_mode(FallbackMode::Disabled);
         assert!(manager.mode_description().contains("禁用模式"));
     }
@@ -486,9 +497,9 @@ mod tests {
     fn test_set_error_threshold() {
         let logger = create_test_logger();
         let mut manager = FallbackManager::new(logger, 10, true);
-        
+
         assert_eq!(manager.error_threshold(), 10);
-        
+
         manager.set_error_threshold(20);
         assert_eq!(manager.error_threshold(), 20);
     }
@@ -497,9 +508,9 @@ mod tests {
     fn test_set_auto_fallback() {
         let logger = create_test_logger();
         let mut manager = FallbackManager::new(logger, 10, true);
-        
+
         assert!(manager.is_auto_fallback_enabled());
-        
+
         manager.set_auto_fallback(false);
         assert!(!manager.is_auto_fallback_enabled());
     }
@@ -508,7 +519,7 @@ mod tests {
     fn test_default_with_logger() {
         let logger = create_test_logger();
         let manager = FallbackManager::default_with_logger(logger);
-        
+
         assert_eq!(manager.current_mode(), FallbackMode::Normal);
         assert_eq!(manager.error_threshold(), 10);
         assert!(manager.is_auto_fallback_enabled());

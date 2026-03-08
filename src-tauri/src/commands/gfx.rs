@@ -64,10 +64,8 @@ pub fn parse_gfx_preview(
     .map_err(|e| format!("Regex error: {}", e))?;
 
     // 预编译循环中使用的正则表达式
-    let re_x = Regex::new(r"(?i)x\s*=\s*(-?\d+)")
-        .map_err(|e| format!("Regex error: {}", e))?;
-    let re_y = Regex::new(r"(?i)y\s*=\s*(-?\d+)")
-        .map_err(|e| format!("Regex error: {}", e))?;
+    let re_x = Regex::new(r"(?i)x\s*=\s*(-?\d+)").map_err(|e| format!("Regex error: {}", e))?;
+    let re_y = Regex::new(r"(?i)y\s*=\s*(-?\d+)").map_err(|e| format!("Regex error: {}", e))?;
 
     let mut items: Vec<GfxSpritePreviewItem> = Vec::new();
     let mut current_pos: usize = 0;

@@ -90,10 +90,7 @@ pub fn launch_game() -> LaunchGameResult {
 
         #[cfg(target_os = "windows")]
         {
-            match Command::new("cmd")
-                .args(["/C", "start", steam_url])
-                .spawn()
-            {
+            match Command::new("cmd").args(["/C", "start", steam_url]).spawn() {
                 Ok(_) => {
                     return LaunchGameResult {
                         success: true,

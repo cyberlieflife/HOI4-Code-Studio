@@ -454,7 +454,7 @@ pub fn search_files(
 
     // 递归收集所有文件，支持文件类型过滤
     let mut all_files = Vec::new();
-    
+
     // 使用 FileService 收集文件
     use crate::services::FileService;
     let file_service = FileService::new();

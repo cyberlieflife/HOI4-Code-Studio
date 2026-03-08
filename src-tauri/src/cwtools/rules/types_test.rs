@@ -2,9 +2,9 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::cwtools::diagnostic::Severity;
     use crate::cwtools::rules::types::*;
     use crate::cwtools::validator::scope::Scope;
-    use crate::cwtools::diagnostic::Severity;
 
     #[test]
     fn test_ruleset_creation() {
@@ -20,7 +20,7 @@ mod tests {
         let mut ruleset = RuleSet::new();
         let type_def = TypeDefinition::new("test_type".to_string());
         ruleset.add_type("test_type".to_string(), type_def);
-        
+
         assert_eq!(ruleset.types.len(), 1);
         assert!(ruleset.get_type("test_type").is_some());
         assert!(ruleset.get_type("nonexistent").is_none());
@@ -31,7 +31,7 @@ mod tests {
         let mut ruleset = RuleSet::new();
         let enum_def = EnumDefinition::new("test_enum".to_string(), "Test enum".to_string());
         ruleset.add_enum("test_enum".to_string(), enum_def);
-        
+
         assert_eq!(ruleset.enums.len(), 1);
         assert!(ruleset.get_enum("test_enum").is_some());
         assert!(ruleset.get_enum("nonexistent").is_none());
@@ -43,7 +43,7 @@ mod tests {
         let rule = Rule::leaf_rule(FieldType::Scalar, FieldType::Scalar);
         let alias = AliasRule::new("test_alias".to_string(), rule);
         ruleset.add_alias("test_alias".to_string(), alias);
-        
+
         assert_eq!(ruleset.aliases.len(), 1);
         assert!(ruleset.get_alias("test_alias").is_some());
         assert!(ruleset.get_alias("nonexistent").is_none());
@@ -58,7 +58,7 @@ mod tests {
             vec![Scope::Country],
         );
         ruleset.add_modifier(modifier);
-        
+
         assert_eq!(ruleset.modifiers.len(), 1);
     }
 
@@ -75,7 +75,7 @@ mod tests {
         let mut type_def = TypeDefinition::new("test_type".to_string());
         let rule = Rule::leaf_rule(FieldType::Scalar, FieldType::Scalar);
         type_def.add_rule(rule);
-        
+
         assert_eq!(type_def.rules.len(), 1);
     }
 
@@ -84,7 +84,7 @@ mod tests {
         let mut type_def = TypeDefinition::new("test_type".to_string());
         let subtype = SubTypeDefinition::new("subtype".to_string());
         type_def.add_subtype(subtype);
-        
+
         assert_eq!(type_def.subtypes.len(), 1);
     }
 
@@ -100,7 +100,7 @@ mod tests {
         let mut subtype = SubTypeDefinition::new("subtype".to_string());
         let rule = Rule::leaf_rule(FieldType::Scalar, FieldType::Scalar);
         subtype.add_rule(rule);
-        
+
         assert_eq!(subtype.rules.len(), 1);
     }
 
@@ -113,7 +113,7 @@ mod tests {
             },
             RuleOptions::default(),
         );
-        
+
         match rule.rule_type {
             RuleType::LeafRule { .. } => {}
             _ => panic!("Expected LeafRule"),
@@ -123,9 +123,12 @@ mod tests {
     #[test]
     fn test_rule_node_rule() {
         let rule = Rule::node_rule(FieldType::Scalar, vec![]);
-        
+
         match rule.rule_type {
-            RuleType::NodeRule { ref left, ref children } => {
+            RuleType::NodeRule {
+                ref left,
+                ref children,
+            } => {
                 assert_eq!(*left, FieldType::Scalar);
                 assert_eq!(children.len(), 0);
             }
@@ -136,9 +139,12 @@ mod tests {
     #[test]
     fn test_rule_leaf_rule() {
         let rule = Rule::leaf_rule(FieldType::Scalar, FieldType::Value(ValueType::int()));
-        
+
         match rule.rule_type {
-            RuleType::LeafRule { ref left, ref right } => {
+            RuleType::LeafRule {
+                ref left,
+                ref right,
+            } => {
                 assert_eq!(*left, FieldType::Scalar);
                 match right {
                     FieldType::Value(ValueType::Int { .. }) => {}
@@ -155,35 +161,33 @@ mod tests {
             left: FieldType::Scalar,
             children: vec![],
         };
-        
+
         let leaf_rule = RuleType::LeafRule {
             left: FieldType::Scalar,
             right: FieldType::Scalar,
         };
-        
+
         let leaf_value_rule = RuleType::LeafValueRule {
             right: FieldType::Scalar,
         };
-        
-        let value_clause_rule = RuleType::ValueClauseRule {
-            children: vec![],
-        };
-        
+
+        let value_clause_rule = RuleType::ValueClauseRule { children: vec![] };
+
         match node_rule {
             RuleType::NodeRule { .. } => {}
             _ => panic!("Expected NodeRule"),
         }
-        
+
         match leaf_rule {
             RuleType::LeafRule { .. } => {}
             _ => panic!("Expected LeafRule"),
         }
-        
+
         match leaf_value_rule {
             RuleType::LeafValueRule { .. } => {}
             _ => panic!("Expected LeafValueRule"),
         }
-        
+
         match value_clause_rule {
             RuleType::ValueClauseRule { .. } => {}
             _ => panic!("Expected ValueClauseRule"),
@@ -212,7 +216,7 @@ mod tests {
             min: 0.0,
             max: 100.0,
         };
-        
+
         assert!(matches!(value_type, FieldType::Value(_)));
         assert!(matches!(specific, FieldType::Specific(_)));
         assert!(matches!(scalar, FieldType::Scalar));
@@ -278,7 +282,7 @@ mod tests {
         let boolean = ValueType::Boolean;
         let percent = ValueType::Percent;
         let date = ValueType::Date;
-        
+
         assert!(matches!(boolean, ValueType::Boolean));
         assert!(matches!(percent, ValueType::Percent));
         assert!(matches!(date, ValueType::Date));
@@ -306,7 +310,7 @@ mod tests {
             .with_severity(Severity::Warning)
             .with_description("Test description".to_string())
             .with_warning_only(true);
-        
+
         assert_eq!(options.min, 1);
         assert_eq!(options.max, Some(5));
         assert_eq!(options.required_scopes.len(), 1);
@@ -329,7 +333,7 @@ mod tests {
         let mut enum_def = EnumDefinition::new("test_enum".to_string(), "Test enum".to_string());
         enum_def.add_value("value1".to_string());
         enum_def.add_value("value2".to_string());
-        
+
         assert_eq!(enum_def.values.len(), 2);
         assert_eq!(enum_def.values[0], "value1");
         assert_eq!(enum_def.values[1], "value2");
@@ -340,7 +344,7 @@ mod tests {
         let mut enum_def = EnumDefinition::new("test_enum".to_string(), "Test enum".to_string());
         enum_def.add_value("value1".to_string());
         enum_def.add_value("value2".to_string());
-        
+
         assert!(enum_def.contains("value1"));
         assert!(enum_def.contains("value2"));
         assert!(!enum_def.contains("value3"));
@@ -350,7 +354,7 @@ mod tests {
     fn test_alias_rule_creation() {
         let rule = Rule::leaf_rule(FieldType::Scalar, FieldType::Scalar);
         let alias = AliasRule::new("test_alias".to_string(), rule);
-        
+
         assert_eq!(alias.name, "test_alias");
     }
 
@@ -361,7 +365,7 @@ mod tests {
             ModifierCategory::Country,
             vec![Scope::Country, Scope::State],
         );
-        
+
         assert_eq!(modifier.name, "test_modifier");
         assert_eq!(modifier.category, ModifierCategory::Country);
         assert_eq!(modifier.scopes.len(), 2);
@@ -375,7 +379,7 @@ mod tests {
             vec![Scope::Country],
         )
         .with_value_type(ValueType::int_range(0, 100));
-        
+
         match modifier.value_type {
             ValueType::Int { min, max } => {
                 assert_eq!(min, 0);
@@ -394,7 +398,7 @@ mod tests {
             ModifierCategory::UnitLeader,
             ModifierCategory::Air,
         ];
-        
+
         assert_eq!(categories.len(), 5);
     }
 
@@ -428,7 +432,7 @@ mod tests {
             Scope::Air,
             Scope::Any,
         ];
-        
+
         assert_eq!(scopes.len(), 5);
     }
 
@@ -457,7 +461,7 @@ mod tests {
             Severity::Information,
             Severity::Hint,
         ];
-        
+
         assert_eq!(severities.len(), 4);
     }
 }

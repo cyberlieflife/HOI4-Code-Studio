@@ -1,20 +1,20 @@
 //! 引用检查器模块
 //!
 //! 负责验证脚本中的引用是否存在（国家标签、想法、事件、本地化等）
-//! 
+//!
 //! 本模块集成了现有的 tag_validator 和 idea_registry 模块，
 //! 避免重复实现相同的功能
 
+use once_cell::sync::Lazy;
+use rayon::prelude::*;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
-use once_cell::sync::Lazy;
-use rayon::prelude::*;
 
 // 导入现有的验证模块
-use crate::tag_validator::validate_tags_content;
 use crate::idea_registry::load_ideas;
+use crate::tag_validator::validate_tags_content;
 
 /// 引用检查器
 ///
@@ -88,19 +88,19 @@ impl ReferenceChecker {
     pub fn load_references(&mut self, project_root: &Path, game_root: &Path) {
         // 加载国家标签
         self.load_country_tags(project_root, game_root);
-        
+
         // 加载想法
         self.load_ideas(project_root, game_root);
-        
+
         // 加载事件
         self.load_events(project_root, game_root);
-        
+
         // 加载本地化
         self.load_localisation(project_root, game_root);
-        
+
         // 加载文件路径
         self.load_file_paths(project_root, game_root);
-        
+
         // 更新缓存
         self.update_cache();
     }
@@ -111,12 +111,12 @@ impl ReferenceChecker {
     fn load_country_tags(&mut self, project_root: &Path, game_root: &Path) {
         // 使用现有的 country_tags 模块加载标签
         use crate::country_tags::load_country_tags as load_tags;
-        
+
         let project_str = project_root.to_str().map(|s| s.to_string());
         let game_str = game_root.to_str().map(|s| s.to_string());
-        
+
         let response = load_tags(project_str, game_str, None);
-        
+
         if response.success {
             if let Some(tags) = response.tags {
                 self.country_tags = tags.into_iter().map(|entry| entry.code).collect();
@@ -140,7 +140,8 @@ impl ReferenceChecker {
             let files: Vec<_> = entries
                 .filter_map(|e| e.ok())
                 .filter(|e| {
-                    e.path().extension()
+                    e.path()
+                        .extension()
                         .and_then(|s| s.to_str())
                         .map(|s| s.eq_ignore_ascii_case("txt"))
                         .unwrap_or(false)
@@ -189,7 +190,10 @@ impl ReferenceChecker {
                     let ident = current_ident.trim().to_string();
                     if !ident.is_empty() && ident.len() >= 2 && ident.len() <= 4 {
                         // 检查是否全是大写字母或数字
-                        if ident.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()) {
+                        if ident
+                            .chars()
+                            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+                        {
                             // 跳过空白
                             while let Some(&next) = chars.peek() {
                                 if next.is_whitespace() {
@@ -230,9 +234,9 @@ impl ReferenceChecker {
     fn load_ideas(&mut self, project_root: &Path, game_root: &Path) {
         let project_str = project_root.to_str().map(|s| s.to_string());
         let game_str = game_root.to_str().map(|s| s.to_string());
-        
+
         let response = load_ideas(project_str, game_str, None);
-        
+
         if response.success {
             if let Some(ideas) = response.ideas {
                 self.ideas = ideas.into_iter().map(|entry| entry.id).collect();
@@ -256,7 +260,8 @@ impl ReferenceChecker {
             let files: Vec<_> = entries
                 .filter_map(|e| e.ok())
                 .filter(|e| {
-                    e.path().extension()
+                    e.path()
+                        .extension()
                         .and_then(|s| s.to_str())
                         .map(|s| s.eq_ignore_ascii_case("txt"))
                         .unwrap_or(false)
@@ -304,10 +309,14 @@ impl ReferenceChecker {
                 '{' => {
                     let ident = current_ident.take();
                     stack.push(ident.clone());
-                    
+
                     // 检查是否在 ideas 块的第三层（ideas -> category -> idea_name）
                     if stack.len() >= 3 {
-                        if let (Some(Some(ideas_key)), Some(Some(_category)), Some(Some(idea_name))) = (
+                        if let (
+                            Some(Some(ideas_key)),
+                            Some(Some(_category)),
+                            Some(Some(idea_name)),
+                        ) = (
                             stack.get(stack.len() - 3),
                             stack.get(stack.len() - 2),
                             stack.last(),
@@ -360,13 +369,13 @@ impl ReferenceChecker {
     /// 从 events 目录加载所有事件 ID
     fn load_events(&mut self, project_root: &Path, game_root: &Path) {
         let mut events = HashSet::new();
-        
+
         // 从游戏目录加载
         self.load_events_from_dir(&game_root.join("events"), &mut events);
-        
+
         // 从项目目录加载
         self.load_events_from_dir(&project_root.join("events"), &mut events);
-        
+
         self.events = events;
     }
 
@@ -380,7 +389,8 @@ impl ReferenceChecker {
             let files: Vec<_> = entries
                 .filter_map(|e| e.ok())
                 .filter(|e| {
-                    e.path().extension()
+                    e.path()
+                        .extension()
                         .and_then(|s| s.to_str())
                         .map(|s| s.eq_ignore_ascii_case("txt"))
                         .unwrap_or(false)
@@ -510,13 +520,13 @@ impl ReferenceChecker {
     /// 从 localisation 目录加载所有本地化键
     fn load_localisation(&mut self, project_root: &Path, game_root: &Path) {
         let mut keys = HashSet::new();
-        
+
         // 从游戏目录加载
         self.load_localisation_from_dir(&game_root.join("localisation"), &mut keys);
-        
+
         // 从项目目录加载
         self.load_localisation_from_dir(&project_root.join("localisation"), &mut keys);
-        
+
         self.localisation_keys = keys;
     }
 
@@ -530,7 +540,8 @@ impl ReferenceChecker {
             let files: Vec<_> = entries
                 .filter_map(|e| e.ok())
                 .filter(|e| {
-                    e.path().extension()
+                    e.path()
+                        .extension()
                         .and_then(|s| s.to_str())
                         .map(|s| s.eq_ignore_ascii_case("yml"))
                         .unwrap_or(false)
@@ -560,7 +571,7 @@ impl ReferenceChecker {
 
         for line in content.lines() {
             let line = line.trim();
-            
+
             // 跳过注释、空行和语言标记行（如 l_english:）
             if line.starts_with('#') || line.is_empty() || line.ends_with(':') {
                 continue;
@@ -570,9 +581,10 @@ impl ReferenceChecker {
             if let Some(colon_pos) = line.find(':') {
                 let key = line[..colon_pos].trim();
                 // 确保键不为空且只包含有效字符，且不是语言标记
-                if !key.is_empty() 
-                    && key.chars().all(|c| self.is_ident_char(c)) 
-                    && !key.starts_with("l_") {
+                if !key.is_empty()
+                    && key.chars().all(|c| self.is_ident_char(c))
+                    && !key.starts_with("l_")
+                {
                     keys.push(key.to_string());
                 }
             }
@@ -586,13 +598,13 @@ impl ReferenceChecker {
     /// 收集项目和游戏目录中的所有文件路径
     fn load_file_paths(&mut self, project_root: &Path, game_root: &Path) {
         let mut paths = HashSet::new();
-        
+
         // 从游戏目录加载
         self.collect_file_paths(game_root, &mut paths);
-        
+
         // 从项目目录加载
         self.collect_file_paths(project_root, &mut paths);
-        
+
         self.file_paths = paths;
     }
 
@@ -603,7 +615,7 @@ impl ReferenceChecker {
         }
 
         let mut stack = vec![dir.to_path_buf()];
-        
+
         while let Some(current) = stack.pop() {
             if let Ok(entries) = fs::read_dir(&current) {
                 for entry in entries.filter_map(|e| e.ok()) {
@@ -739,7 +751,6 @@ impl Default for ReferenceChecker {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -755,29 +766,33 @@ mod tests {
         fs::create_dir_all(root.join("common/country_tags")).unwrap();
         fs::write(
             root.join("common/country_tags/00_countries.txt"),
-            "GER = { color = rgb { 255 0 0 } }\nUSA = { color = rgb { 0 0 255 } }\nCHI = { }"
-        ).unwrap();
+            "GER = { color = rgb { 255 0 0 } }\nUSA = { color = rgb { 0 0 255 } }\nCHI = { }",
+        )
+        .unwrap();
 
         // 创建 common/ideas 目录
         fs::create_dir_all(root.join("common/ideas")).unwrap();
         fs::write(
             root.join("common/ideas/00_ideas.txt"),
-            "ideas = {\n  country = {\n    test_idea = { }\n    another_idea = { }\n  }\n}"
-        ).unwrap();
+            "ideas = {\n  country = {\n    test_idea = { }\n    another_idea = { }\n  }\n}",
+        )
+        .unwrap();
 
         // 创建 events 目录
         fs::create_dir_all(root.join("events")).unwrap();
         fs::write(
             root.join("events/test_events.txt"),
-            "country_event = {\n  id = test.1\n}\nnews_event = {\n  id = news.100\n}"
-        ).unwrap();
+            "country_event = {\n  id = test.1\n}\nnews_event = {\n  id = news.100\n}",
+        )
+        .unwrap();
 
         // 创建 localisation 目录
         fs::create_dir_all(root.join("localisation")).unwrap();
         fs::write(
             root.join("localisation/test_l_english.yml"),
-            "l_english:\n test_key:0 \"Test Value\"\n another_key:0 \"Another Value\""
-        ).unwrap();
+            "l_english:\n test_key:0 \"Test Value\"\n another_key:0 \"Another Value\"",
+        )
+        .unwrap();
 
         temp_dir
     }
@@ -796,7 +811,7 @@ mod tests {
         let checker = ReferenceChecker::new();
         let content = "GER = { color = rgb { 255 0 0 } }\nUSA = { }\nFRA = { }";
         let tags = checker.extract_country_tags(content);
-        
+
         assert_eq!(tags.len(), 3);
         assert!(tags.contains(&"GER".to_string()));
         assert!(tags.contains(&"USA".to_string()));
@@ -808,7 +823,7 @@ mod tests {
         let checker = ReferenceChecker::new();
         let content = "# Comment\nGER = { }\n# Another comment\nUSA = { }";
         let tags = checker.extract_country_tags(content);
-        
+
         assert_eq!(tags.len(), 2);
         assert!(tags.contains(&"GER".to_string()));
         assert!(tags.contains(&"USA".to_string()));
@@ -817,9 +832,10 @@ mod tests {
     #[test]
     fn test_extract_ideas() {
         let checker = ReferenceChecker::new();
-        let content = "ideas = {\n  country = {\n    test_idea = { }\n    another_idea = { }\n  }\n}";
+        let content =
+            "ideas = {\n  country = {\n    test_idea = { }\n    another_idea = { }\n  }\n}";
         let ideas = checker.extract_ideas(content);
-        
+
         assert_eq!(ideas.len(), 2);
         assert!(ideas.contains(&"test_idea".to_string()));
         assert!(ideas.contains(&"another_idea".to_string()));
@@ -830,7 +846,7 @@ mod tests {
         let checker = ReferenceChecker::new();
         let content = "country_event = {\n  id = test.1\n}\nnews_event = {\n  id = news.100\n}";
         let events = checker.extract_events(content);
-        
+
         assert_eq!(events.len(), 2);
         assert!(events.contains(&"test.1".to_string()));
         assert!(events.contains(&"news.100".to_string()));
@@ -841,7 +857,7 @@ mod tests {
         let checker = ReferenceChecker::new();
         let content = "l_english:\n test_key:0 \"Test\"\n another_key:1 \"Another\"";
         let keys = checker.extract_localisation_keys(content);
-        
+
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(&"test_key".to_string()));
         assert!(keys.contains(&"another_key".to_string()));
@@ -852,7 +868,7 @@ mod tests {
         let checker = ReferenceChecker::new();
         let content = "l_english:\n # Comment\n test_key:0 \"Test\"\n # Another\n key2:0 \"Value\"";
         let keys = checker.extract_localisation_keys(content);
-        
+
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(&"test_key".to_string()));
         assert!(keys.contains(&"key2".to_string()));
@@ -862,29 +878,35 @@ mod tests {
     fn test_load_references() {
         let temp_dir = create_test_structure();
         let root = temp_dir.path();
-        
+
         let mut checker = ReferenceChecker::new();
         checker.load_references(root, root);
-        
+
         // 由于集成了现有模块，如果模块返回空结果，测试可能失败
         // 这是预期的行为，因为现有模块可能需要特定的目录结构
         // 我们只验证方法不会崩溃
-        
+
         // 如果加载成功，验证数据
         if checker.country_tag_count() > 0 {
-            assert!(checker.check_country_tag("GER") || checker.check_country_tag("USA") || checker.check_country_tag("CHI"));
+            assert!(
+                checker.check_country_tag("GER")
+                    || checker.check_country_tag("USA")
+                    || checker.check_country_tag("CHI")
+            );
         }
-        
+
         if checker.idea_count() > 0 {
             assert!(checker.check_idea("test_idea") || checker.check_idea("another_idea"));
         }
-        
+
         if checker.event_count() > 0 {
             assert!(checker.check_event("test.1") || checker.check_event("news.100"));
         }
-        
+
         if checker.localisation_key_count() > 0 {
-            assert!(checker.check_localisation("test_key") || checker.check_localisation("another_key"));
+            assert!(
+                checker.check_localisation("test_key") || checker.check_localisation("another_key")
+            );
         }
     }
 
@@ -892,7 +914,7 @@ mod tests {
     fn test_check_country_tag_case_insensitive() {
         let mut checker = ReferenceChecker::new();
         checker.country_tags.insert("GER".to_string());
-        
+
         assert!(checker.check_country_tag("GER"));
         assert!(checker.check_country_tag("ger"));
         assert!(checker.check_country_tag("Ger"));
@@ -905,14 +927,14 @@ mod tests {
         checker.ideas.insert("test_idea".to_string());
         checker.events.insert("test.1".to_string());
         checker.localisation_keys.insert("test_key".to_string());
-        
+
         assert!(checker.country_tag_count() > 0);
         assert!(checker.idea_count() > 0);
         assert!(checker.event_count() > 0);
         assert!(checker.localisation_key_count() > 0);
-        
+
         checker.clear();
-        
+
         assert_eq!(checker.country_tag_count(), 0);
         assert_eq!(checker.idea_count(), 0);
         assert_eq!(checker.event_count(), 0);
@@ -922,7 +944,7 @@ mod tests {
     #[test]
     fn test_is_ident_char() {
         let checker = ReferenceChecker::new();
-        
+
         assert!(checker.is_ident_char('a'));
         assert!(checker.is_ident_char('Z'));
         assert!(checker.is_ident_char('0'));
@@ -938,16 +960,16 @@ mod tests {
     fn test_from_cache() {
         // 清除缓存
         ReferenceChecker::clear_cache();
-        
+
         // 第一次调用应该返回空的检查器
         let checker1 = ReferenceChecker::from_cache();
         assert_eq!(checker1.country_tag_count(), 0);
-        
+
         // 创建并缓存数据
         let mut checker2 = ReferenceChecker::new();
         checker2.country_tags.insert("GER".to_string());
         checker2.update_cache();
-        
+
         // 从缓存加载应该包含数据
         let checker3 = ReferenceChecker::from_cache();
         assert_eq!(checker3.country_tag_count(), 1);
@@ -959,7 +981,7 @@ mod tests {
         let mut checker = ReferenceChecker::new();
         let path = PathBuf::from("common/ideas/test.txt");
         checker.file_paths.insert(path.clone());
-        
+
         assert!(checker.check_file_path(&path));
         assert!(!checker.check_file_path(&PathBuf::from("nonexistent.txt")));
     }

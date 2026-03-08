@@ -2,8 +2,8 @@
 //!
 //! 本模块实现 HOI4 脚本的作用域管理和验证功能
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// HOI4 脚本作用域类型
 ///
@@ -109,10 +109,7 @@ pub enum ScopeError {
     /// 作用域栈为空
     EmptyStack,
     /// 作用域不匹配
-    ScopeMismatch {
-        expected: Vec<Scope>,
-        actual: Scope,
-    },
+    ScopeMismatch { expected: Vec<Scope>, actual: Scope },
 }
 
 impl std::fmt::Display for ScopeError {
@@ -326,7 +323,7 @@ impl ScopeManager {
         if let Some(transition) = self.scope_transitions.get(command) {
             let target_scope = transition.to;
             let can_transition = transition.can_transition_from(current);
-            
+
             // 检查是否可以从当前作用域转换
             if can_transition {
                 self.push_scope(target_scope);
@@ -500,7 +497,9 @@ mod tests {
 
         // 当前是 Country 作用域
         assert!(manager.validate_scope(&[Scope::Country]).is_ok());
-        assert!(manager.validate_scope(&[Scope::Country, Scope::State]).is_ok());
+        assert!(manager
+            .validate_scope(&[Scope::Country, Scope::State])
+            .is_ok());
         assert!(manager.validate_scope(&[Scope::Any]).is_ok());
 
         // 不匹配的作用域

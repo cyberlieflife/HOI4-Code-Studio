@@ -104,37 +104,37 @@ impl Default for RuleConfig {
 pub struct ValidationConfig {
     /// 规则文件路径列表
     pub rule_paths: Vec<PathBuf>,
-    
+
     /// 规则配置映射（规则名称 -> 规则配置）
     #[serde(default)]
     pub rules: HashMap<String, RuleConfig>,
-    
+
     /// 全局禁用的规则类型集合
     #[serde(default)]
     pub disabled_rule_types: HashSet<String>,
-    
+
     /// 默认错误严重程度
     #[serde(default = "default_severity")]
     pub default_severity: Severity,
-    
+
     /// 是否启用引用检查
     #[serde(default = "default_true")]
     pub enable_reference_check: bool,
-    
+
     /// 是否启用作用域检查
     #[serde(default = "default_true")]
     pub enable_scope_check: bool,
-    
+
     /// 是否启用修饰符检查
     #[serde(default = "default_true")]
     pub enable_modifier_check: bool,
-    
+
     /// 项目根目录
     pub project_root: Option<PathBuf>,
-    
+
     /// 游戏根目录
     pub game_root: Option<PathBuf>,
-    
+
     /// 缓存配置
     #[serde(default)]
     pub cache: CacheConfig,
@@ -211,9 +211,7 @@ impl ValidationConfig {
 
     /// 获取规则的严重程度
     pub fn get_rule_severity(&self, rule_name: &str) -> Option<Severity> {
-        self.rules
-            .get(rule_name)
-            .and_then(|config| config.severity)
+        self.rules.get(rule_name).and_then(|config| config.severity)
     }
 
     /// 禁用规则类型
@@ -343,15 +341,15 @@ pub struct CacheConfig {
     /// 是否启用缓存
     #[serde(default = "default_true")]
     pub enabled: bool,
-    
+
     /// 最大缓存条目数
     #[serde(default = "default_max_entries")]
     pub max_entries: usize,
-    
+
     /// 最大内存使用（字节）
     #[serde(default = "default_max_memory")]
     pub max_memory_bytes: usize,
-    
+
     /// 缓存过期时间（秒）
     #[serde(default = "default_cache_ttl")]
     pub ttl_seconds: u64,
@@ -510,8 +508,7 @@ mod tests {
 
     #[test]
     fn test_rule_config_with_description() {
-        let config = RuleConfig::enabled()
-            .with_description("Test rule".to_string());
+        let config = RuleConfig::enabled().with_description("Test rule".to_string());
         assert_eq!(config.description, Some("Test rule".to_string()));
     }
 
@@ -529,14 +526,14 @@ mod tests {
     fn test_add_remove_rule_path() {
         let mut config = ValidationConfig::new();
         let path = PathBuf::from("test.cwt");
-        
+
         config.add_rule_path(path.clone());
         assert_eq!(config.rule_paths.len(), 1);
-        
+
         // 添加重复路径不应增加数量
         config.add_rule_path(path.clone());
         assert_eq!(config.rule_paths.len(), 1);
-        
+
         config.remove_rule_path(&path);
         assert_eq!(config.rule_paths.len(), 0);
     }
@@ -544,13 +541,13 @@ mod tests {
     #[test]
     fn test_enable_disable_rule() {
         let mut config = ValidationConfig::new();
-        
+
         config.disable_rule("test_rule".to_string());
         assert!(!config.is_rule_enabled("test_rule"));
-        
+
         config.enable_rule("test_rule".to_string());
         assert!(config.is_rule_enabled("test_rule"));
-        
+
         // 未配置的规则默认启用
         assert!(config.is_rule_enabled("unknown_rule"));
     }
@@ -558,13 +555,13 @@ mod tests {
     #[test]
     fn test_set_rule_severity() {
         let mut config = ValidationConfig::new();
-        
+
         config.set_rule_severity("test_rule".to_string(), Severity::Warning);
         assert_eq!(
             config.get_rule_severity("test_rule"),
             Some(Severity::Warning)
         );
-        
+
         // 未配置的规则返回 None
         assert_eq!(config.get_rule_severity("unknown_rule"), None);
     }
@@ -572,10 +569,10 @@ mod tests {
     #[test]
     fn test_disable_enable_rule_type() {
         let mut config = ValidationConfig::new();
-        
+
         config.disable_rule_type("type_check".to_string());
         assert!(!config.is_rule_type_enabled("type_check"));
-        
+
         config.enable_rule_type("type_check");
         assert!(config.is_rule_type_enabled("type_check"));
     }
@@ -584,15 +581,15 @@ mod tests {
     fn test_save_load_config() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("config.json");
-        
+
         let mut config = ValidationConfig::new();
         config.enable_reference_check = false;
         config.default_severity = Severity::Warning;
-        
+
         // 保存配置
         config.save_to_file(&config_path).unwrap();
         assert!(config_path.exists());
-        
+
         // 加载配置
         let loaded_config = ValidationConfig::load_from_file(&config_path).unwrap();
         assert!(!loaded_config.enable_reference_check);
@@ -604,11 +601,11 @@ mod tests {
         let mut config = ValidationConfig::new();
         config.enable_reference_check = false;
         config.default_severity = Severity::Warning;
-        
+
         // 导出为 JSON
         let json = config.export_json().unwrap();
         assert!(json.contains("enable_reference_check"));
-        
+
         // 从 JSON 导入
         let imported_config = ValidationConfig::import_json(&json).unwrap();
         assert!(!imported_config.enable_reference_check);
@@ -620,13 +617,13 @@ mod tests {
         let mut config1 = ValidationConfig::new();
         config1.add_rule_path(PathBuf::from("rule1.cwt"));
         config1.disable_rule("rule1".to_string());
-        
+
         let mut config2 = ValidationConfig::new();
         config2.add_rule_path(PathBuf::from("rule2.cwt"));
         config2.disable_rule("rule2".to_string());
-        
+
         config1.merge(config2);
-        
+
         assert_eq!(config1.rule_paths.len(), 2);
         assert!(!config1.is_rule_enabled("rule1"));
         assert!(!config1.is_rule_enabled("rule2"));
@@ -637,9 +634,9 @@ mod tests {
         let mut config = ValidationConfig::new();
         config.enable_reference_check = false;
         config.add_rule_path(PathBuf::from("test.cwt"));
-        
+
         config.reset();
-        
+
         assert!(config.enable_reference_check);
         assert!(config.rule_paths.is_empty());
     }
@@ -659,9 +656,9 @@ mod tests {
         let mut config2 = CacheConfig::new();
         config2.max_entries = 200;
         config2.enabled = false;
-        
+
         config1.merge(config2);
-        
+
         assert!(!config1.enabled);
         assert_eq!(config1.max_entries, 200);
     }
@@ -677,14 +674,14 @@ mod tests {
     fn test_config_manager_save_load() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("config.json");
-        
+
         let mut manager = ConfigManager::new();
         manager.config_mut().enable_reference_check = false;
-        
+
         // 保存配置
         manager.save_as(&config_path).unwrap();
         assert!(config_path.exists());
-        
+
         // 创建新的管理器并加载
         let mut new_manager = ConfigManager::new();
         new_manager.load(&config_path).unwrap();
@@ -695,16 +692,16 @@ mod tests {
     fn test_config_manager_reload() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("config.json");
-        
+
         let mut manager = ConfigManager::new();
         manager.config_mut().enable_reference_check = false;
         manager.save_as(&config_path).unwrap();
-        
+
         // 修改配置文件
         let mut config = ValidationConfig::load_from_file(&config_path).unwrap();
         config.enable_reference_check = true;
         config.save_to_file(&config_path).unwrap();
-        
+
         // 重新加载
         manager.reload().unwrap();
         assert!(manager.config().enable_reference_check);
@@ -714,10 +711,10 @@ mod tests {
     fn test_config_manager_export_import() {
         let mut manager = ConfigManager::new();
         manager.config_mut().enable_reference_check = false;
-        
+
         // 导出
         let json = manager.export_json().unwrap();
-        
+
         // 导入到新管理器
         let mut new_manager = ConfigManager::new();
         new_manager.import_json(&json).unwrap();
@@ -728,10 +725,12 @@ mod tests {
     fn test_config_manager_reset() {
         let mut manager = ConfigManager::new();
         manager.config_mut().enable_reference_check = false;
-        manager.config_mut().add_rule_path(PathBuf::from("test.cwt"));
-        
+        manager
+            .config_mut()
+            .add_rule_path(PathBuf::from("test.cwt"));
+
         manager.reset();
-        
+
         assert!(manager.config().enable_reference_check);
         assert!(manager.config().rule_paths.is_empty());
     }
@@ -740,7 +739,7 @@ mod tests {
     fn test_config_validation_nonexistent_path() {
         let mut config = ValidationConfig::new();
         config.add_rule_path(PathBuf::from("/nonexistent/path/rule.cwt"));
-        
+
         let result = config.validate();
         assert!(result.is_err());
     }
@@ -749,7 +748,7 @@ mod tests {
     fn test_config_validation_nonexistent_project_root() {
         let mut config = ValidationConfig::new();
         config.project_root = Some(PathBuf::from("/nonexistent/project"));
-        
+
         let result = config.validate();
         assert!(result.is_err());
     }
@@ -777,11 +776,11 @@ mod tests {
     #[test]
     fn test_validation_config_with_all_options() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // 创建临时规则文件
         let rule_path = temp_dir.path().join("test.cwt");
         fs::write(&rule_path, "# test rule").unwrap();
-        
+
         let mut config = ValidationConfig::new();
         config.add_rule_path(rule_path);
         config.disable_rule("test_rule".to_string());
@@ -795,14 +794,14 @@ mod tests {
         config.game_root = Some(temp_dir.path().to_path_buf());
         config.cache.enabled = false;
         config.cache.max_entries = 50;
-        
+
         // 验证配置
         assert!(config.validate().is_ok());
-        
+
         // 保存并重新加载
         let config_path = temp_dir.path().join("full_config.json");
         config.save_to_file(&config_path).unwrap();
-        
+
         let loaded_config = ValidationConfig::load_from_file(&config_path).unwrap();
         assert_eq!(loaded_config.rule_paths.len(), 1);
         assert!(!loaded_config.is_rule_enabled("test_rule"));

@@ -55,12 +55,15 @@ impl ValidationServiceState {
     /// * `Ok(())` - 初始化成功
     /// * `Err(String)` - 初始化失败的错误信息
     pub fn initialize(&self, rule_paths: Vec<PathBuf>) -> Result<(), String> {
-        let service = ValidationService::new(rule_paths)
-            .map_err(|e| format!("初始化验证服务失败: {}", e))?;
-        
-        let mut state = self.service.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
+        let service =
+            ValidationService::new(rule_paths).map_err(|e| format!("初始化验证服务失败: {}", e))?;
+
+        let mut state = self
+            .service
+            .lock()
+            .map_err(|e| format!("锁定状态失败: {}", e))?;
         *state = Some(service);
-        
+
         Ok(())
     }
 
@@ -77,16 +80,16 @@ impl ValidationServiceState {
             Ok(t) => t,
             Err(_) => return true, // 如果锁定失败，直接执行
         };
-        
+
         let now = Instant::now();
-        
+
         if let Some(last_time) = tasks.get(task_id) {
             let elapsed = now.duration_since(*last_time);
             if elapsed < Duration::from_millis(self.debounce_delay_ms) {
                 return false; // 还在防抖期内
             }
         }
-        
+
         tasks.insert(task_id.to_string(), now);
         true
     }
@@ -107,9 +110,13 @@ impl ValidationServiceState {
     /// * `Ok(ValidationService)` - 验证服务的克隆
     /// * `Err(String)` - 获取失败的错误信息
     fn get_service(&self) -> Result<ValidationService, String> {
-        let state = self.service.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
-        
-        state.as_ref()
+        let state = self
+            .service
+            .lock()
+            .map_err(|e| format!("锁定状态失败: {}", e))?;
+
+        state
+            .as_ref()
             .ok_or_else(|| "验证服务未初始化".to_string())
             .map(|_| {
                 // 由于 ValidationService 没有实现 Clone，我们需要创建一个新实例
@@ -253,7 +260,11 @@ fn diagnostic_to_dto(diagnostic: &Diagnostic) -> DiagnosticDto {
         message: diagnostic.message.clone(),
         range: range_to_dto(&diagnostic.range),
         source: diagnostic.source.clone(),
-        suggestions: diagnostic.suggestions.iter().map(suggestion_to_dto).collect(),
+        suggestions: diagnostic
+            .suggestions
+            .iter()
+            .map(suggestion_to_dto)
+            .collect(),
     }
 }
 
@@ -284,10 +295,7 @@ fn suggestion_to_dto(suggestion: &crate::cwtools::diagnostic::Suggestion) -> Sug
 
 /// 将 DTO Range 转换为内部 Range
 fn dto_to_range(dto: &RangeDto) -> Range {
-    Range::new(
-        dto_to_position(&dto.start),
-        dto_to_position(&dto.end),
-    )
+    Range::new(dto_to_position(&dto.start), dto_to_position(&dto.end))
 }
 
 /// 将 DTO Position 转换为内部 Position
@@ -347,28 +355,32 @@ pub async fn validate_script(
     let path = file_path.unwrap_or_else(|| "untitled.txt".to_string());
     let ver = version.unwrap_or(1);
     let skip = skip_debounce.unwrap_or(false);
-    
+
     // 防抖检查
     if !skip && !state.should_execute(&path) {
         return Err("任务被防抖取消".to_string());
     }
-    
+
     // 在后台线程执行验证
     let service_lock = state.service.clone();
     let path_clone = path.clone();
     let content_clone = content.clone();
-    
+
     let result = {
-        let service_guard = service_lock.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
-        let service = service_guard.as_ref().ok_or_else(|| "验证服务未初始化，请先调用 initialize_validation_service".to_string())?;
-        
+        let service_guard = service_lock
+            .lock()
+            .map_err(|e| format!("锁定状态失败: {}", e))?;
+        let service = service_guard.as_ref().ok_or_else(|| {
+            "验证服务未初始化，请先调用 initialize_validation_service".to_string()
+        })?;
+
         // 执行验证
         service.validate_file(&path_clone, &content_clone, ver)
     };
-    
+
     // 清除防抖记录
     state.clear_debounce(&path);
-    
+
     // 转换为 DTO
     Ok(ValidationResponse {
         success: result.success,
@@ -401,15 +413,20 @@ pub async fn validate_script_incremental(
     state: State<'_, ValidationServiceState>,
 ) -> Result<ValidationResponse, String> {
     // 获取验证服务
-    let service_lock = state.service.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
-    let service = service_lock.as_ref().ok_or_else(|| "验证服务未初始化".to_string())?;
-    
+    let service_lock = state
+        .service
+        .lock()
+        .map_err(|e| format!("锁定状态失败: {}", e))?;
+    let service = service_lock
+        .as_ref()
+        .ok_or_else(|| "验证服务未初始化".to_string())?;
+
     // 转换变更列表
     let text_changes: Vec<TextChange> = changes.iter().map(dto_to_text_change).collect();
-    
+
     // 执行增量验证
     let response = service.validate_incremental(&file_path, &content, version, &text_changes);
-    
+
     // 转换为 DTO
     Ok(ValidationResponse {
         success: response.success,
@@ -438,19 +455,25 @@ pub async fn parse_file(
     state: State<'_, ValidationServiceState>,
 ) -> Result<ParseResponse, String> {
     use std::time::Instant;
-    
+
     // 获取验证服务中的解析器
-    let service_lock = state.service.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
-    let service = service_lock.as_ref().ok_or_else(|| "验证服务未初始化".to_string())?;
-    
+    let service_lock = state
+        .service
+        .lock()
+        .map_err(|e| format!("锁定状态失败: {}", e))?;
+    let service = service_lock
+        .as_ref()
+        .ok_or_else(|| "验证服务未初始化".to_string())?;
+
     // 执行解析
     let start = Instant::now();
     let response = service.validate_file(&file_path, &content, 1);
     let parse_time_ms = start.elapsed().as_millis() as u64;
-    
+
     // 如果有解析错误，返回错误信息
     if !response.diagnostics.is_empty() && response.parse_time_ms > 0 {
-        let errors: Vec<ParseErrorDto> = response.diagnostics
+        let errors: Vec<ParseErrorDto> = response
+            .diagnostics
             .iter()
             .filter(|d| d.severity == crate::cwtools::diagnostic::Severity::Error)
             .map(|d| ParseErrorDto {
@@ -459,7 +482,7 @@ pub async fn parse_file(
                 error_type: d.code.clone(),
             })
             .collect();
-        
+
         return Ok(ParseResponse {
             success: errors.is_empty(),
             ast: None,
@@ -467,7 +490,7 @@ pub async fn parse_file(
             parse_time_ms,
         });
     }
-    
+
     // 解析成功，返回空的 AST（暂时不序列化完整的 AST）
     Ok(ParseResponse {
         success: true,
@@ -498,13 +521,14 @@ pub async fn format_script_command(
 ) -> Result<String, String> {
     // 首先解析内容为 AST
     use crate::cwtools::parser::Parser;
-    
+
     let mut parser = Parser::new(&content, "format.txt".to_string())
         .map_err(|e| format!("创建解析器失败: {}", e))?;
-    
-    let ast = parser.parse()
+
+    let ast = parser
+        .parse()
         .map_err(|errors| format!("解析失败: {} 个错误", errors.len()))?;
-    
+
     // 调用格式化函数
     Ok(format_script(&ast))
 }
@@ -525,18 +549,24 @@ pub async fn reload_rules(
     state: State<'_, ValidationServiceState>,
 ) -> Result<(), String> {
     // 获取验证服务
-    let service_lock = state.service.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
-    let service = service_lock.as_ref().ok_or_else(|| "验证服务未初始化".to_string())?;
-    
+    let service_lock = state
+        .service
+        .lock()
+        .map_err(|e| format!("锁定状态失败: {}", e))?;
+    let service = service_lock
+        .as_ref()
+        .ok_or_else(|| "验证服务未初始化".to_string())?;
+
     // 如果提供了新的规则路径，需要重新初始化服务
     if let Some(paths) = rule_paths {
         drop(service_lock); // 释放锁
         let path_bufs: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
         return state.initialize(path_bufs);
     }
-    
+
     // 否则重新加载现有规则
-    service.reload_rules()
+    service
+        .reload_rules()
         .map_err(|e| format!("重新加载规则失败: {}", e))
 }
 
@@ -552,9 +582,14 @@ pub async fn clear_validation_cache(
     state: State<'_, ValidationServiceState>,
 ) -> Result<(), String> {
     // 获取验证服务
-    let service_lock = state.service.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
-    let service = service_lock.as_ref().ok_or_else(|| "验证服务未初始化".to_string())?;
-    
+    let service_lock = state
+        .service
+        .lock()
+        .map_err(|e| format!("锁定状态失败: {}", e))?;
+    let service = service_lock
+        .as_ref()
+        .ok_or_else(|| "验证服务未初始化".to_string())?;
+
     service.clear_cache();
     Ok(())
 }
@@ -573,9 +608,14 @@ pub async fn invalidate_file_cache(
     state: State<'_, ValidationServiceState>,
 ) -> Result<(), String> {
     // 获取验证服务
-    let service_lock = state.service.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
-    let service = service_lock.as_ref().ok_or_else(|| "验证服务未初始化".to_string())?;
-    
+    let service_lock = state
+        .service
+        .lock()
+        .map_err(|e| format!("锁定状态失败: {}", e))?;
+    let service = service_lock
+        .as_ref()
+        .ok_or_else(|| "验证服务未初始化".to_string())?;
+
     service.invalidate_cache(&file_path);
     Ok(())
 }
@@ -590,17 +630,22 @@ pub async fn get_cache_stats(
     state: State<'_, ValidationServiceState>,
 ) -> Result<HashMap<String, usize>, String> {
     // 获取验证服务
-    let service_lock = state.service.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
-    let service = service_lock.as_ref().ok_or_else(|| "验证服务未初始化".to_string())?;
-    
+    let service_lock = state
+        .service
+        .lock()
+        .map_err(|e| format!("锁定状态失败: {}", e))?;
+    let service = service_lock
+        .as_ref()
+        .ok_or_else(|| "验证服务未初始化".to_string())?;
+
     let (current, max, mem_used, mem_max) = service.cache_stats();
-    
+
     let mut stats = HashMap::new();
     stats.insert("current".to_string(), current);
     stats.insert("max".to_string(), max);
     stats.insert("memory_used".to_string(), mem_used);
     stats.insert("memory_max".to_string(), mem_max);
-    
+
     Ok(stats)
 }
 
@@ -614,17 +659,22 @@ pub async fn get_rule_stats(
     state: State<'_, ValidationServiceState>,
 ) -> Result<HashMap<String, usize>, String> {
     // 获取验证服务
-    let service_lock = state.service.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
-    let service = service_lock.as_ref().ok_or_else(|| "验证服务未初始化".to_string())?;
-    
+    let service_lock = state
+        .service
+        .lock()
+        .map_err(|e| format!("锁定状态失败: {}", e))?;
+    let service = service_lock
+        .as_ref()
+        .ok_or_else(|| "验证服务未初始化".to_string())?;
+
     let (types, enums, aliases, modifiers) = service.rule_stats();
-    
+
     let mut stats = HashMap::new();
     stats.insert("types".to_string(), types);
     stats.insert("enums".to_string(), enums);
     stats.insert("aliases".to_string(), aliases);
     stats.insert("modifiers".to_string(), modifiers);
-    
+
     Ok(stats)
 }
 
@@ -642,45 +692,51 @@ pub async fn validate_batch(
     state: State<'_, ValidationServiceState>,
 ) -> Result<Vec<ValidationResponse>, String> {
     // 获取验证服务
-    let service_lock = state.service.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
-    let service = service_lock.as_ref().ok_or_else(|| "验证服务未初始化".to_string())?;
-    
+    let service_lock = state
+        .service
+        .lock()
+        .map_err(|e| format!("锁定状态失败: {}", e))?;
+    let service = service_lock
+        .as_ref()
+        .ok_or_else(|| "验证服务未初始化".to_string())?;
+
     // 解析文件列表并收集到 Vec
     let mut file_data: Vec<(String, String, u64)> = Vec::new();
     for file in &files {
-        let path = file.get("path")
+        let path = file
+            .get("path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| "缺少 path 字段".to_string())?
             .to_string();
-        let content = file.get("content")
+        let content = file
+            .get("content")
             .and_then(|v| v.as_str())
             .ok_or_else(|| "缺少 content 字段".to_string())?
             .to_string();
-        let version = file.get("version")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(1);
-        
+        let version = file.get("version").and_then(|v| v.as_u64()).unwrap_or(1);
+
         file_data.push((path, content, version));
     }
-    
+
     // 批量验证 - 转换为引用
     let file_refs: Vec<(&str, &str, u64)> = file_data
         .iter()
         .map(|(path, content, version)| (path.as_str(), content.as_str(), *version))
         .collect();
-    
+
     let responses = service.validate_batch(file_refs);
-    
+
     // 转换为 DTO
-    Ok(responses.into_iter().map(|response| {
-        ValidationResponse {
+    Ok(responses
+        .into_iter()
+        .map(|response| ValidationResponse {
             success: response.success,
             diagnostics: response.diagnostics.iter().map(diagnostic_to_dto).collect(),
             parse_time_ms: response.parse_time_ms,
             validation_time_ms: response.validation_time_ms,
             total_time_ms: response.total_time_ms,
-        }
-    }).collect())
+        })
+        .collect())
 }
 
 /// 加载引用数据
@@ -701,13 +757,18 @@ pub async fn load_references(
     state: State<'_, ValidationServiceState>,
 ) -> Result<(), String> {
     // 获取验证服务
-    let service_lock = state.service.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
-    let service = service_lock.as_ref().ok_or_else(|| "验证服务未初始化".to_string())?;
-    
+    let service_lock = state
+        .service
+        .lock()
+        .map_err(|e| format!("锁定状态失败: {}", e))?;
+    let service = service_lock
+        .as_ref()
+        .ok_or_else(|| "验证服务未初始化".to_string())?;
+
     let project_path = PathBuf::from(project_root);
     let game_path = game_root.map(PathBuf::from);
-    
+
     service.load_references(&project_path, game_path.as_ref());
-    
+
     Ok(())
 }

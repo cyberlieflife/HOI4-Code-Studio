@@ -2,7 +2,7 @@
 //!
 //! 负责将 Token 流转换为抽象语法树（AST）
 
-use crate::cwtools::models::{Operator, Position, Statement, Token, Value, KeyValue, AST};
+use crate::cwtools::models::{KeyValue, Operator, Position, Statement, Token, Value, AST};
 use crate::cwtools::parser::lexer::{LexError, Lexer};
 use std::fmt;
 
@@ -69,7 +69,7 @@ impl ParseError {
     pub fn to_diagnostic(&self) -> crate::cwtools::diagnostic::Diagnostic {
         use crate::cwtools::diagnostic::Severity;
         use crate::cwtools::models::Range;
-        
+
         crate::cwtools::diagnostic::Diagnostic::new(
             format!("P{:03}", self.error_type as u32),
             Severity::Error,
@@ -116,7 +116,7 @@ impl<'a> Parser<'a> {
     pub fn new(input: &'a str, source_file: String) -> Result<Self, ParseError> {
         let mut lexer = Lexer::new(input);
         let current_token = lexer.next_token()?;
-        
+
         Ok(Self {
             lexer,
             current_token,
@@ -180,7 +180,7 @@ impl<'a> Parser<'a> {
         // 尝试解析键值对
         // 预读下一个 token 来判断是否为键值对
         let next_token = self.lexer.peek_token()?;
-        
+
         if matches!(next_token, Token::Operator(_)) {
             // 这是一个键值对
             return self.parse_key_value();
@@ -202,7 +202,10 @@ impl<'a> Parser<'a> {
             Token::Identifier(s) | Token::String(s) => s.clone(),
             _ => {
                 return Err(ParseError {
-                    message: format!("Expected identifier or string, found {:?}", self.current_token),
+                    message: format!(
+                        "Expected identifier or string, found {:?}",
+                        self.current_token
+                    ),
                     position: start_pos,
                     error_type: ParseErrorType::UnexpectedToken,
                 });
@@ -438,7 +441,7 @@ mod tests {
         let input = "key = value";
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 1);
         match &ast.statements[0] {
             Statement::KeyValue(kv) => {
@@ -458,7 +461,7 @@ mod tests {
         let input = "count = 42";
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 1);
         match &ast.statements[0] {
             Statement::KeyValue(kv) => {
@@ -477,7 +480,7 @@ mod tests {
         let input = "factor = 1.5";
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 1);
         match &ast.statements[0] {
             Statement::KeyValue(kv) => {
@@ -496,7 +499,7 @@ mod tests {
         let input = "enabled = yes";
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 1);
         match &ast.statements[0] {
             Statement::KeyValue(kv) => {
@@ -515,7 +518,7 @@ mod tests {
         let input = r#"title = "Test Title""#;
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 1);
         match &ast.statements[0] {
             Statement::KeyValue(kv) => {
@@ -534,7 +537,7 @@ mod tests {
         let input = "# This is a comment";
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 1);
         match &ast.statements[0] {
             Statement::Comment(text, _) => {
@@ -554,7 +557,7 @@ option = {
 "#;
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 1);
         match &ast.statements[0] {
             Statement::KeyValue(kv) => {
@@ -581,7 +584,7 @@ outer = {
 "#;
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 1);
         match &ast.statements[0] {
             Statement::KeyValue(kv) => {
@@ -618,7 +621,7 @@ key3 = yes
 "#;
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 3);
     }
 
@@ -636,9 +639,9 @@ h ?= 8
 "#;
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 8);
-        
+
         let operators = vec![
             Operator::Equals,
             Operator::GreaterThan,
@@ -649,7 +652,7 @@ h ?= 8
             Operator::EqualEqual,
             Operator::QuestionEqual,
         ];
-        
+
         for (i, op) in operators.iter().enumerate() {
             match &ast.statements[i] {
                 Statement::KeyValue(kv) => {
@@ -671,7 +674,7 @@ list = {
 "#;
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 1);
         match &ast.statements[0] {
             Statement::KeyValue(kv) => {
@@ -700,7 +703,7 @@ key2 = value2
 "#;
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 4);
         assert!(matches!(ast.statements[0], Statement::Comment(_, _)));
         assert!(matches!(ast.statements[1], Statement::KeyValue(_)));
@@ -718,7 +721,7 @@ key2 = value2
 "#;
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let result = parser.parse();
-        
+
         // 应该有错误
         assert!(result.is_err());
         let errors = result.unwrap_err();
@@ -734,7 +737,7 @@ key2 = value2
 "#;
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let result = parser.parse();
-        
+
         // 应该有错误，但能继续解析
         assert!(result.is_err());
     }
@@ -761,7 +764,7 @@ country_event = {
 "#;
         let mut parser = Parser::new(input, "test.txt".to_string()).unwrap();
         let ast = parser.parse().unwrap();
-        
+
         assert_eq!(ast.statements.len(), 1);
         match &ast.statements[0] {
             Statement::KeyValue(kv) => {

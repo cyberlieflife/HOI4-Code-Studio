@@ -148,7 +148,7 @@ impl Operator {
 }
 
 /// 抽象语法树
-/// 
+///
 /// 表示解析后的 Paradox 脚本文件的完整结构
 #[allow(dead_code, clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,7 +175,7 @@ impl AST {
     }
 
     /// 遍历所有语句
-    /// 
+    ///
     /// 使用访问者模式遍历 AST 中的所有语句节点
     pub fn traverse<F>(&self, visitor: &mut F)
     where
@@ -193,7 +193,7 @@ impl AST {
         F: FnMut(&Statement),
     {
         visitor(statement);
-        
+
         match statement {
             Statement::KeyValue(kv) => {
                 if let Value::Clause(statements) = &kv.value {
@@ -214,7 +214,7 @@ impl AST {
     }
 
     /// 查找指定位置的语句
-    /// 
+    ///
     /// 返回包含指定位置的最内层语句
     pub fn find_at_position(&self, pos: Position) -> Option<&Statement> {
         self.find_at_position_in_statements(&self.statements, pos)
@@ -278,7 +278,7 @@ impl AST {
 }
 
 /// 语句类型
-/// 
+///
 /// 表示 Paradox 脚本中的一个语句，可以是键值对、单独的值或注释
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -292,7 +292,7 @@ pub enum Statement {
 }
 
 /// 键值对
-/// 
+///
 /// 表示 Paradox 脚本中的键值对结构
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -321,7 +321,7 @@ impl KeyValue {
 }
 
 /// 值类型
-/// 
+///
 /// 表示 Paradox 脚本中的各种值类型
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -513,7 +513,7 @@ mod tests {
         let string = Value::String("test".to_string());
         let quoted = Value::QuotedString("quoted".to_string());
         let integer = Value::Integer(42);
-        
+
         assert_eq!(string.as_string(), Some("test"));
         assert_eq!(quoted.as_string(), Some("quoted"));
         assert_eq!(integer.as_string(), None);
@@ -523,7 +523,7 @@ mod tests {
     fn test_value_as_integer() {
         let integer = Value::Integer(42);
         let string = Value::String("test".to_string());
-        
+
         assert_eq!(integer.as_integer(), Some(42));
         assert_eq!(string.as_integer(), None);
     }
@@ -532,7 +532,7 @@ mod tests {
     fn test_value_as_float() {
         let float = Value::Float(3.14);
         let string = Value::String("test".to_string());
-        
+
         assert_eq!(float.as_float(), Some(3.14));
         assert_eq!(string.as_float(), None);
     }
@@ -541,7 +541,7 @@ mod tests {
     fn test_value_as_boolean() {
         let boolean = Value::Boolean(true);
         let string = Value::String("test".to_string());
-        
+
         assert_eq!(boolean.as_boolean(), Some(true));
         assert_eq!(string.as_boolean(), None);
     }
@@ -550,7 +550,7 @@ mod tests {
     fn test_value_as_clause() {
         let clause = Value::Clause(vec![]);
         let string = Value::String("test".to_string());
-        
+
         assert!(clause.as_clause().is_some());
         assert_eq!(clause.as_clause().unwrap().len(), 0);
         assert!(string.as_clause().is_none());
@@ -560,7 +560,7 @@ mod tests {
     fn test_ast_traverse() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let kv = KeyValue::new(
             "key".to_string(),
             Operator::Equals,
@@ -569,12 +569,12 @@ mod tests {
         );
         ast.add_statement(Statement::KeyValue(kv));
         ast.add_statement(Statement::Comment("comment".to_string(), pos));
-        
+
         let mut count = 0;
         ast.traverse(&mut |_| {
             count += 1;
         });
-        
+
         assert_eq!(count, 2);
     }
 
@@ -582,28 +582,28 @@ mod tests {
     fn test_ast_traverse_nested() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let inner_kv = KeyValue::new(
             "inner".to_string(),
             Operator::Equals,
             Value::Integer(42),
             pos,
         );
-        
+
         let outer_kv = KeyValue::new(
             "outer".to_string(),
             Operator::Equals,
             Value::Clause(vec![Statement::KeyValue(inner_kv)]),
             pos,
         );
-        
+
         ast.add_statement(Statement::KeyValue(outer_kv));
-        
+
         let mut count = 0;
         ast.traverse(&mut |_| {
             count += 1;
         });
-        
+
         assert_eq!(count, 2);
     }
 
@@ -612,7 +612,7 @@ mod tests {
         let mut ast = AST::new("test.txt".to_string());
         let pos1 = Position::new(1, 1, 0);
         let pos2 = Position::new(2, 1, 10);
-        
+
         let kv1 = KeyValue::new(
             "key1".to_string(),
             Operator::Equals,
@@ -625,10 +625,10 @@ mod tests {
             Value::String("value2".to_string()),
             pos2,
         );
-        
+
         ast.add_statement(Statement::KeyValue(kv1));
         ast.add_statement(Statement::KeyValue(kv2));
-        
+
         let found = ast.find_at_position(Position::new(1, 5, 5));
         assert!(found.is_some());
     }
@@ -636,27 +636,27 @@ mod tests {
     #[test]
     fn test_statement_types() {
         let pos = Position::new(1, 1, 0);
-        
+
         let kv = Statement::KeyValue(KeyValue::new(
             "key".to_string(),
             Operator::Equals,
             Value::String("value".to_string()),
             pos,
         ));
-        
+
         let value_only = Statement::ValueOnly(Value::Integer(42), pos);
         let comment = Statement::Comment("test".to_string(), pos);
-        
+
         match kv {
             Statement::KeyValue(_) => {}
             _ => panic!("Expected KeyValue"),
         }
-        
+
         match value_only {
             Statement::ValueOnly(_, _) => {}
             _ => panic!("Expected ValueOnly"),
         }
-        
+
         match comment {
             Statement::Comment(_, _) => {}
             _ => panic!("Expected Comment"),
