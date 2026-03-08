@@ -80,12 +80,10 @@ pub async fn load_config(
     path: String,
 ) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     let path_buf = PathBuf::from(path);
-    manager
-        .load(&path_buf)
-        .map_err(|e| e.to_string())?;
-    
+    manager.load(&path_buf).map_err(|e| e.to_string())?;
+
     let config = manager.config().clone();
     Ok(ConfigResponse::success_with_message(
         "配置加载成功".to_string(),
@@ -101,15 +99,11 @@ pub async fn load_config(
 /// # 返回
 /// 配置响应
 #[tauri::command]
-pub async fn save_config(
-    state: State<'_, ConfigManagerState>,
-) -> Result<ConfigResponse, String> {
+pub async fn save_config(state: State<'_, ConfigManagerState>) -> Result<ConfigResponse, String> {
     let manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
-    manager
-        .save()
-        .map_err(|e| e.to_string())?;
-    
+
+    manager.save().map_err(|e| e.to_string())?;
+
     Ok(ConfigResponse::success_with_message(
         "配置保存成功".to_string(),
         None,
@@ -130,12 +124,10 @@ pub async fn save_config_as(
     path: String,
 ) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     let path_buf = PathBuf::from(path);
-    manager
-        .save_as(&path_buf)
-        .map_err(|e| e.to_string())?;
-    
+    manager.save_as(&path_buf).map_err(|e| e.to_string())?;
+
     Ok(ConfigResponse::success_with_message(
         "配置保存成功".to_string(),
         None,
@@ -150,12 +142,10 @@ pub async fn save_config_as(
 /// # 返回
 /// 配置响应
 #[tauri::command]
-pub async fn get_config(
-    state: State<'_, ConfigManagerState>,
-) -> Result<ConfigResponse, String> {
+pub async fn get_config(state: State<'_, ConfigManagerState>) -> Result<ConfigResponse, String> {
     let manager = state.manager.lock().map_err(|e| e.to_string())?;
     let config = manager.config().clone();
-    
+
     Ok(ConfigResponse::success(Some(config)))
 }
 
@@ -173,13 +163,13 @@ pub async fn update_config(
     config: ValidationConfig,
 ) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     // 验证配置
     config.validate().map_err(|e| e.to_string())?;
-    
+
     // 更新配置
     *manager.config_mut() = config.clone();
-    
+
     Ok(ConfigResponse::success_with_message(
         "配置更新成功".to_string(),
         Some(config),
@@ -200,10 +190,10 @@ pub async fn add_rule_path(
     path: String,
 ) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     let path_buf = PathBuf::from(path);
     manager.config_mut().add_rule_path(path_buf);
-    
+
     let config = manager.config().clone();
     Ok(ConfigResponse::success_with_message(
         "规则路径添加成功".to_string(),
@@ -225,10 +215,10 @@ pub async fn remove_rule_path(
     path: String,
 ) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     let path_buf = PathBuf::from(path);
     manager.config_mut().remove_rule_path(&path_buf);
-    
+
     let config = manager.config().clone();
     Ok(ConfigResponse::success_with_message(
         "规则路径移除成功".to_string(),
@@ -250,9 +240,9 @@ pub async fn configure_rule(
     request: RuleConfigRequest,
 ) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     let config = manager.config_mut();
-    
+
     // 设置启用状态
     if let Some(enabled) = request.enabled {
         if enabled {
@@ -261,12 +251,12 @@ pub async fn configure_rule(
             config.disable_rule(request.rule_name.clone());
         }
     }
-    
+
     // 设置严重程度
     if let Some(severity) = request.severity {
         config.set_rule_severity(request.rule_name.clone(), severity);
     }
-    
+
     let config = manager.config().clone();
     Ok(ConfigResponse::success_with_message(
         format!("规则 {} 配置成功", request.rule_name),
@@ -288,9 +278,9 @@ pub async fn enable_rule(
     rule_name: String,
 ) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     manager.config_mut().enable_rule(rule_name.clone());
-    
+
     let config = manager.config().clone();
     Ok(ConfigResponse::success_with_message(
         format!("规则 {} 已启用", rule_name),
@@ -312,9 +302,9 @@ pub async fn disable_rule(
     rule_name: String,
 ) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     manager.config_mut().disable_rule(rule_name.clone());
-    
+
     let config = manager.config().clone();
     Ok(ConfigResponse::success_with_message(
         format!("规则 {} 已禁用", rule_name),
@@ -338,9 +328,11 @@ pub async fn set_rule_severity(
     severity: Severity,
 ) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
-    manager.config_mut().set_rule_severity(rule_name.clone(), severity);
-    
+
+    manager
+        .config_mut()
+        .set_rule_severity(rule_name.clone(), severity);
+
     let config = manager.config().clone();
     Ok(ConfigResponse::success_with_message(
         format!("规则 {} 严重程度已设置", rule_name),
@@ -356,11 +348,9 @@ pub async fn set_rule_severity(
 /// # 返回
 /// JSON 字符串
 #[tauri::command]
-pub async fn export_config_json(
-    state: State<'_, ConfigManagerState>,
-) -> Result<String, String> {
+pub async fn export_config_json(state: State<'_, ConfigManagerState>) -> Result<String, String> {
     let manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     manager.export_json().map_err(|e| e.to_string())
 }
 
@@ -378,9 +368,9 @@ pub async fn import_config_json(
     json: String,
 ) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     manager.import_json(&json).map_err(|e| e.to_string())?;
-    
+
     let config = manager.config().clone();
     Ok(ConfigResponse::success_with_message(
         "配置导入成功".to_string(),
@@ -396,13 +386,11 @@ pub async fn import_config_json(
 /// # 返回
 /// 配置响应
 #[tauri::command]
-pub async fn reset_config(
-    state: State<'_, ConfigManagerState>,
-) -> Result<ConfigResponse, String> {
+pub async fn reset_config(state: State<'_, ConfigManagerState>) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     manager.reset();
-    
+
     let config = manager.config().clone();
     Ok(ConfigResponse::success_with_message(
         "配置已重置为默认值".to_string(),
@@ -418,13 +406,11 @@ pub async fn reset_config(
 /// # 返回
 /// 配置响应
 #[tauri::command]
-pub async fn reload_config(
-    state: State<'_, ConfigManagerState>,
-) -> Result<ConfigResponse, String> {
+pub async fn reload_config(state: State<'_, ConfigManagerState>) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     manager.reload().map_err(|e| e.to_string())?;
-    
+
     let config = manager.config().clone();
     Ok(ConfigResponse::success_with_message(
         "配置重新加载成功".to_string(),
@@ -446,9 +432,9 @@ pub async fn disable_rule_type(
     rule_type: String,
 ) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     manager.config_mut().disable_rule_type(rule_type.clone());
-    
+
     let config = manager.config().clone();
     Ok(ConfigResponse::success_with_message(
         format!("规则类型 {} 已禁用", rule_type),
@@ -470,9 +456,9 @@ pub async fn enable_rule_type(
     rule_type: String,
 ) -> Result<ConfigResponse, String> {
     let mut manager = state.manager.lock().map_err(|e| e.to_string())?;
-    
+
     manager.config_mut().enable_rule_type(&rule_type);
-    
+
     let config = manager.config().clone();
     Ok(ConfigResponse::success_with_message(
         format!("规则类型 {} 已启用", rule_type),

@@ -50,6 +50,7 @@ pub struct MapContext {
     // 预计算的省份和州轮廓 (packed x | y << 16)
     pub province_outlines: HashMap<u32, Vec<u32>>,
     pub state_outlines: HashMap<u32, Vec<u32>>,
+    pub country_same_color_border_points: Vec<u32>,
 }
 
 pub struct MapState(pub Mutex<Option<MapContext>>);
@@ -950,6 +951,7 @@ pub fn initialize_map_context(
     let all_edges = detect_edges(width, height, &province_ids);
     let mut province_outlines: HashMap<u32, Vec<u32>> = HashMap::with_capacity(lut_size);
     let mut state_outlines: HashMap<u32, Vec<u32>> = HashMap::with_capacity(states.len());
+    let mut country_same_color_border_points = Vec::new();
 
     for edge in all_edges {
         let packed_points = edge.points;
@@ -979,6 +981,21 @@ pub fn initialize_map_context(
                 state_outlines.entry(ts).or_default().extend(&packed_points);
             }
         }
+
+        if edge.from_id != 0 && edge.to_id != 0 {
+            let from_owner = state_owners.get(&edge.from_id);
+            let to_owner = state_owners.get(&edge.to_id);
+            let from_color = country_color_lut.get(edge.from_id as usize);
+            let to_color = country_color_lut.get(edge.to_id as usize);
+
+            if let (Some(from_owner), Some(to_owner), Some(from_color), Some(to_color)) =
+                (from_owner, to_owner, from_color, to_color)
+            {
+                if from_owner != to_owner && from_color == to_color {
+                    country_same_color_border_points.extend(&packed_points);
+                }
+            }
+        }
     }
 
     // 并行去重轮廓点
@@ -990,6 +1007,8 @@ pub fn initialize_map_context(
         points.sort_unstable();
         points.dedup();
     });
+    country_same_color_border_points.sort_unstable();
+    country_same_color_border_points.dedup();
 
     // 7. Store in State
     let mut lock = state.0.lock().map_err(|_| "Failed to lock state")?;
@@ -1009,6 +1028,7 @@ pub fn initialize_map_context(
         province_bounds,
         province_outlines,
         state_outlines,
+        country_same_color_border_points,
     });
 
     Ok(format!("Map initialized: {}x{}", width, height))
@@ -1057,6 +1077,100 @@ pub struct MapMetadata {
     pub width: u32,
     pub height: u32,
     pub province_count: usize,
+}
+
+fn darken_pixel(pixel: &mut [u8]) {
+    pixel[0] = ((pixel[0] as u16 * 3) / 5) as u8;
+    pixel[1] = ((pixel[1] as u16 * 3) / 5) as u8;
+    pixel[2] = ((pixel[2] as u16 * 3) / 5) as u8;
+}
+
+fn apply_country_same_color_borders_to_preview(
+    pixels: &mut [u8],
+    target_width: u32,
+    target_height: u32,
+    map_width: u32,
+    map_height: u32,
+    border_points: &[u32],
+) {
+    if border_points.is_empty() || target_width == 0 || target_height == 0 {
+        return;
+    }
+
+    let mut border_mask = vec![false; (target_width * target_height) as usize];
+
+    for &packed in border_points {
+        let src_x = packed & 0xFFFF;
+        let src_y = packed >> 16;
+
+        if src_x >= map_width || src_y >= map_height {
+            continue;
+        }
+
+        let out_x = ((src_x as u64 * target_width as u64) / map_width as u64)
+            .min((target_width - 1) as u64) as u32;
+        let out_y = ((src_y as u64 * target_height as u64) / map_height as u64)
+            .min((target_height - 1) as u64) as u32;
+
+        border_mask[(out_y * target_width + out_x) as usize] = true;
+    }
+
+    for (index, is_border) in border_mask.into_iter().enumerate() {
+        if !is_border {
+            continue;
+        }
+
+        let pixel_index = index * 4;
+        darken_pixel(&mut pixels[pixel_index..pixel_index + 4]);
+    }
+}
+
+fn apply_country_same_color_borders_to_tile(
+    pixels: &mut [u8],
+    tile_size: u32,
+    src_x_start: u32,
+    src_y_start: u32,
+    scale: u32,
+    border_points: &[u32],
+) {
+    if border_points.is_empty() || tile_size == 0 || scale == 0 {
+        return;
+    }
+
+    let src_x_end = src_x_start as u64 + tile_size as u64 * scale as u64;
+    let src_y_end = src_y_start as u64 + tile_size as u64 * scale as u64;
+    let mut border_mask = vec![false; (tile_size * tile_size) as usize];
+
+    for &packed in border_points {
+        let src_x = (packed & 0xFFFF) as u64;
+        let src_y = (packed >> 16) as u64;
+
+        if src_x < src_x_start as u64
+            || src_x >= src_x_end
+            || src_y < src_y_start as u64
+            || src_y >= src_y_end
+        {
+            continue;
+        }
+
+        let out_x = ((src_x - src_x_start as u64) / scale as u64) as u32;
+        let out_y = ((src_y - src_y_start as u64) / scale as u64) as u32;
+
+        if out_x >= tile_size || out_y >= tile_size {
+            continue;
+        }
+
+        border_mask[(out_y * tile_size + out_x) as usize] = true;
+    }
+
+    for (index, is_border) in border_mask.into_iter().enumerate() {
+        if !is_border {
+            continue;
+        }
+
+        let pixel_index = index * 4;
+        darken_pixel(&mut pixels[pixel_index..pixel_index + 4]);
+    }
 }
 
 #[tauri::command]
@@ -1130,6 +1244,17 @@ pub fn get_map_preview(
                 }
             }
         });
+
+    if mode == "country" {
+        apply_country_same_color_borders_to_preview(
+            &mut pixels,
+            target_width,
+            target_height,
+            map_width,
+            map_height,
+            &ctx.country_same_color_border_points,
+        );
+    }
 
     Ok(pixels)
 }
@@ -1226,6 +1351,17 @@ pub fn get_map_tile_direct(
                 }
             }
         });
+
+    if mode == "country" {
+        apply_country_same_color_borders_to_tile(
+            &mut pixels,
+            tile_size,
+            src_x_start,
+            src_y_start,
+            scale,
+            &ctx.country_same_color_border_points,
+        );
+    }
 
     Ok(pixels)
 }

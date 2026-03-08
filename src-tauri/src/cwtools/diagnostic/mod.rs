@@ -2,8 +2,8 @@
 //!
 //! 提供错误、警告和信息的诊断功能，支持 CodeMirror 格式转换
 
-use serde::{Deserialize, Serialize};
 use crate::cwtools::models::{Position, Range};
+use serde::{Deserialize, Serialize};
 
 /// 诊断信息
 ///
@@ -315,10 +315,7 @@ mod tests {
     use super::*;
 
     fn create_test_range() -> Range {
-        Range::new(
-            Position::new(1, 1, 0),
-            Position::new(1, 10, 9),
-        )
+        Range::new(Position::new(1, 1, 0), Position::new(1, 10, 9))
     }
 
     #[test]
@@ -445,7 +442,10 @@ mod tests {
         assert_eq!(Severity::from_str("error"), Some(Severity::Error));
         assert_eq!(Severity::from_str("warning"), Some(Severity::Warning));
         assert_eq!(Severity::from_str("info"), Some(Severity::Information));
-        assert_eq!(Severity::from_str("information"), Some(Severity::Information));
+        assert_eq!(
+            Severity::from_str("information"),
+            Some(Severity::Information)
+        );
         assert_eq!(Severity::from_str("hint"), Some(Severity::Hint));
         assert_eq!(Severity::from_str("invalid"), None);
     }
@@ -459,10 +459,8 @@ mod tests {
 
     #[test]
     fn test_suggestion_with_replacement() {
-        let suggestion = Suggestion::with_replacement(
-            "Replace with this".to_string(),
-            "new_value".to_string(),
-        );
+        let suggestion =
+            Suggestion::with_replacement("Replace with this".to_string(), "new_value".to_string());
         assert_eq!(suggestion.message, "Replace with this");
         assert_eq!(suggestion.replacement, Some("new_value".to_string()));
     }
@@ -512,8 +510,18 @@ mod tests {
         let mut manager = DiagnosticManager::new();
         let range = create_test_range();
         let diags = vec![
-            Diagnostic::error("E001".to_string(), "Error 1".to_string(), range, "test".to_string()),
-            Diagnostic::warning("W001".to_string(), "Warning 1".to_string(), range, "test".to_string()),
+            Diagnostic::error(
+                "E001".to_string(),
+                "Error 1".to_string(),
+                range,
+                "test".to_string(),
+            ),
+            Diagnostic::warning(
+                "W001".to_string(),
+                "Warning 1".to_string(),
+                range,
+                "test".to_string(),
+            ),
         ];
 
         manager.add_all(diags);
@@ -561,9 +569,24 @@ mod tests {
         let mut manager = DiagnosticManager::new();
         let range = create_test_range();
 
-        manager.add(Diagnostic::error("E001".to_string(), "Error".to_string(), range, "test".to_string()));
-        manager.add(Diagnostic::warning("W001".to_string(), "Warning".to_string(), range, "test".to_string()));
-        manager.add(Diagnostic::info("I001".to_string(), "Info".to_string(), range, "test".to_string()));
+        manager.add(Diagnostic::error(
+            "E001".to_string(),
+            "Error".to_string(),
+            range,
+            "test".to_string(),
+        ));
+        manager.add(Diagnostic::warning(
+            "W001".to_string(),
+            "Warning".to_string(),
+            range,
+            "test".to_string(),
+        ));
+        manager.add(Diagnostic::info(
+            "I001".to_string(),
+            "Info".to_string(),
+            range,
+            "test".to_string(),
+        ));
 
         let errors = manager.filter_by_severity(Severity::Error);
         assert_eq!(errors.len(), 1);
@@ -579,9 +602,24 @@ mod tests {
         let mut manager = DiagnosticManager::new();
         let range = create_test_range();
 
-        manager.add(Diagnostic::error("E001".to_string(), "Error".to_string(), range, "test".to_string()));
-        manager.add(Diagnostic::warning("W001".to_string(), "Warning".to_string(), range, "test".to_string()));
-        manager.add(Diagnostic::info("I001".to_string(), "Info".to_string(), range, "test".to_string()));
+        manager.add(Diagnostic::error(
+            "E001".to_string(),
+            "Error".to_string(),
+            range,
+            "test".to_string(),
+        ));
+        manager.add(Diagnostic::warning(
+            "W001".to_string(),
+            "Warning".to_string(),
+            range,
+            "test".to_string(),
+        ));
+        manager.add(Diagnostic::info(
+            "I001".to_string(),
+            "Info".to_string(),
+            range,
+            "test".to_string(),
+        ));
 
         let errors_and_warnings = manager.filter_by_min_severity(Severity::Warning);
         assert_eq!(errors_and_warnings.len(), 2);
@@ -592,8 +630,18 @@ mod tests {
         let mut manager = DiagnosticManager::new();
         let range = create_test_range();
 
-        manager.add(Diagnostic::error("E001".to_string(), "Error".to_string(), range, "parser".to_string()));
-        manager.add(Diagnostic::warning("W001".to_string(), "Warning".to_string(), range, "validator".to_string()));
+        manager.add(Diagnostic::error(
+            "E001".to_string(),
+            "Error".to_string(),
+            range,
+            "parser".to_string(),
+        ));
+        manager.add(Diagnostic::warning(
+            "W001".to_string(),
+            "Warning".to_string(),
+            range,
+            "validator".to_string(),
+        ));
 
         let parser_diags = manager.filter_by_source("parser");
         assert_eq!(parser_diags.len(), 1);
@@ -605,9 +653,24 @@ mod tests {
         let mut manager = DiagnosticManager::new();
         let range = create_test_range();
 
-        manager.add(Diagnostic::error("E001".to_string(), "Error 1".to_string(), range, "test".to_string()));
-        manager.add(Diagnostic::error("E002".to_string(), "Error 2".to_string(), range, "test".to_string()));
-        manager.add(Diagnostic::warning("W001".to_string(), "Warning".to_string(), range, "test".to_string()));
+        manager.add(Diagnostic::error(
+            "E001".to_string(),
+            "Error 1".to_string(),
+            range,
+            "test".to_string(),
+        ));
+        manager.add(Diagnostic::error(
+            "E002".to_string(),
+            "Error 2".to_string(),
+            range,
+            "test".to_string(),
+        ));
+        manager.add(Diagnostic::warning(
+            "W001".to_string(),
+            "Warning".to_string(),
+            range,
+            "test".to_string(),
+        ));
 
         assert_eq!(manager.error_count(), 2);
     }
@@ -617,9 +680,24 @@ mod tests {
         let mut manager = DiagnosticManager::new();
         let range = create_test_range();
 
-        manager.add(Diagnostic::error("E001".to_string(), "Error".to_string(), range, "test".to_string()));
-        manager.add(Diagnostic::warning("W001".to_string(), "Warning 1".to_string(), range, "test".to_string()));
-        manager.add(Diagnostic::warning("W002".to_string(), "Warning 2".to_string(), range, "test".to_string()));
+        manager.add(Diagnostic::error(
+            "E001".to_string(),
+            "Error".to_string(),
+            range,
+            "test".to_string(),
+        ));
+        manager.add(Diagnostic::warning(
+            "W001".to_string(),
+            "Warning 1".to_string(),
+            range,
+            "test".to_string(),
+        ));
+        manager.add(Diagnostic::warning(
+            "W002".to_string(),
+            "Warning 2".to_string(),
+            range,
+            "test".to_string(),
+        ));
 
         assert_eq!(manager.warning_count(), 2);
     }
@@ -631,10 +709,20 @@ mod tests {
 
         assert!(!manager.has_errors());
 
-        manager.add(Diagnostic::warning("W001".to_string(), "Warning".to_string(), range, "test".to_string()));
+        manager.add(Diagnostic::warning(
+            "W001".to_string(),
+            "Warning".to_string(),
+            range,
+            "test".to_string(),
+        ));
         assert!(!manager.has_errors());
 
-        manager.add(Diagnostic::error("E001".to_string(), "Error".to_string(), range, "test".to_string()));
+        manager.add(Diagnostic::error(
+            "E001".to_string(),
+            "Error".to_string(),
+            range,
+            "test".to_string(),
+        ));
         assert!(manager.has_errors());
     }
 
@@ -645,10 +733,20 @@ mod tests {
 
         assert!(!manager.has_warnings());
 
-        manager.add(Diagnostic::error("E001".to_string(), "Error".to_string(), range, "test".to_string()));
+        manager.add(Diagnostic::error(
+            "E001".to_string(),
+            "Error".to_string(),
+            range,
+            "test".to_string(),
+        ));
         assert!(!manager.has_warnings());
 
-        manager.add(Diagnostic::warning("W001".to_string(), "Warning".to_string(), range, "test".to_string()));
+        manager.add(Diagnostic::warning(
+            "W001".to_string(),
+            "Warning".to_string(),
+            range,
+            "test".to_string(),
+        ));
         assert!(manager.has_warnings());
     }
 
@@ -657,8 +755,18 @@ mod tests {
         let mut manager = DiagnosticManager::new();
         let range = create_test_range();
 
-        manager.add(Diagnostic::error("E001".to_string(), "Error".to_string(), range, "test".to_string()));
-        manager.add(Diagnostic::warning("W001".to_string(), "Warning".to_string(), range, "test".to_string()));
+        manager.add(Diagnostic::error(
+            "E001".to_string(),
+            "Error".to_string(),
+            range,
+            "test".to_string(),
+        ));
+        manager.add(Diagnostic::warning(
+            "W001".to_string(),
+            "Warning".to_string(),
+            range,
+            "test".to_string(),
+        ));
 
         let cm_diags = manager.to_codemirror_format();
         assert_eq!(cm_diags.len(), 2);
@@ -674,9 +782,24 @@ mod tests {
         let range2 = Range::new(Position::new(1, 1, 0), Position::new(1, 5, 4));
         let range3 = Range::new(Position::new(1, 10, 9), Position::new(1, 15, 14));
 
-        manager.add(Diagnostic::error("E001".to_string(), "Error 1".to_string(), range1, "test".to_string()));
-        manager.add(Diagnostic::error("E002".to_string(), "Error 2".to_string(), range2, "test".to_string()));
-        manager.add(Diagnostic::error("E003".to_string(), "Error 3".to_string(), range3, "test".to_string()));
+        manager.add(Diagnostic::error(
+            "E001".to_string(),
+            "Error 1".to_string(),
+            range1,
+            "test".to_string(),
+        ));
+        manager.add(Diagnostic::error(
+            "E002".to_string(),
+            "Error 2".to_string(),
+            range2,
+            "test".to_string(),
+        ));
+        manager.add(Diagnostic::error(
+            "E003".to_string(),
+            "Error 3".to_string(),
+            range3,
+            "test".to_string(),
+        ));
 
         manager.sort_by_position();
 
@@ -691,7 +814,12 @@ mod tests {
         let mut manager = DiagnosticManager::new();
         let range = create_test_range();
 
-        manager.add(Diagnostic::error("E001".to_string(), "Error".to_string(), range, "test".to_string()));
+        manager.add(Diagnostic::error(
+            "E001".to_string(),
+            "Error".to_string(),
+            range,
+            "test".to_string(),
+        ));
 
         let json = manager.to_json();
         assert!(json.is_ok());

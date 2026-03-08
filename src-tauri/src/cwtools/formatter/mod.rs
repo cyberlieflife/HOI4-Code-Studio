@@ -2,7 +2,7 @@
 //!
 //! 提供将 AST 转换回格式化文本的功能
 
-use crate::cwtools::models::{AST, Statement, KeyValue, Value, Operator};
+use crate::cwtools::models::{KeyValue, Operator, Statement, Value, AST};
 
 /// 格式化配置
 #[derive(Debug, Clone)]
@@ -85,10 +85,15 @@ impl Formatter {
     /// * `statements` - 语句列表
     /// * `indent_level` - 当前缩进层级
     /// * `output` - 输出字符串缓冲区
-    fn format_statements(&self, statements: &[Statement], indent_level: usize, output: &mut String) {
+    fn format_statements(
+        &self,
+        statements: &[Statement],
+        indent_level: usize,
+        output: &mut String,
+    ) {
         for (i, statement) in statements.iter().enumerate() {
             self.format_statement(statement, indent_level, output);
-            
+
             // 在语句之间添加换行，但不在最后一个语句后添加
             if i < statements.len() - 1 {
                 output.push('\n');
@@ -127,13 +132,13 @@ impl Formatter {
     fn format_key_value(&self, kv: &KeyValue, indent_level: usize, output: &mut String) {
         self.add_indent(indent_level, output);
         output.push_str(&kv.key);
-        
+
         // 添加操作符
         if self.config.space_around_operator {
             output.push(' ');
         }
         output.push_str(self.format_operator(&kv.operator));
-        
+
         // 对于子句，根据配置决定是否添加空格
         // 对于其他值，在操作符后添加空格（如果配置允许）
         match &kv.value {
@@ -193,19 +198,25 @@ impl Formatter {
     /// * `indent_level` - 当前缩进层级
     /// * `output` - 输出字符串缓冲区
     /// * `add_space_before` - 是否在花括号前添加空格（用于避免重复空格）
-    fn format_clause(&self, statements: &[Statement], indent_level: usize, output: &mut String, add_space_before: bool) {
+    fn format_clause(
+        &self,
+        statements: &[Statement],
+        indent_level: usize,
+        output: &mut String,
+        add_space_before: bool,
+    ) {
         if add_space_before && self.config.space_before_brace {
             output.push(' ');
         }
         output.push('{');
-        
+
         if !statements.is_empty() {
             output.push('\n');
             self.format_statements(statements, indent_level + 1, output);
             output.push('\n');
             self.add_indent(indent_level, output);
         }
-        
+
         output.push('}');
     }
 
@@ -268,7 +279,7 @@ mod tests {
     fn test_format_simple_key_value() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let kv = KeyValue::new(
             "key".to_string(),
             Operator::Equals,
@@ -276,7 +287,7 @@ mod tests {
             pos,
         );
         ast.add_statement(Statement::KeyValue(kv));
-        
+
         let formatted = format_script(&ast);
         assert_eq!(formatted, "key = value");
     }
@@ -285,7 +296,7 @@ mod tests {
     fn test_format_integer_value() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let kv = KeyValue::new(
             "count".to_string(),
             Operator::Equals,
@@ -293,7 +304,7 @@ mod tests {
             pos,
         );
         ast.add_statement(Statement::KeyValue(kv));
-        
+
         let formatted = format_script(&ast);
         assert_eq!(formatted, "count = 42");
     }
@@ -302,7 +313,7 @@ mod tests {
     fn test_format_float_value() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let kv = KeyValue::new(
             "factor".to_string(),
             Operator::Equals,
@@ -310,7 +321,7 @@ mod tests {
             pos,
         );
         ast.add_statement(Statement::KeyValue(kv));
-        
+
         let formatted = format_script(&ast);
         assert_eq!(formatted, "factor = 3.14");
     }
@@ -319,7 +330,7 @@ mod tests {
     fn test_format_boolean_value() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let kv1 = KeyValue::new(
             "enabled".to_string(),
             Operator::Equals,
@@ -332,10 +343,10 @@ mod tests {
             Value::Boolean(false),
             pos,
         );
-        
+
         ast.add_statement(Statement::KeyValue(kv1));
         ast.add_statement(Statement::KeyValue(kv2));
-        
+
         let formatted = format_script(&ast);
         assert_eq!(formatted, "enabled = yes\ndisabled = no");
     }
@@ -344,7 +355,7 @@ mod tests {
     fn test_format_quoted_string() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let kv = KeyValue::new(
             "name".to_string(),
             Operator::Equals,
@@ -352,7 +363,7 @@ mod tests {
             pos,
         );
         ast.add_statement(Statement::KeyValue(kv));
-        
+
         let formatted = format_script(&ast);
         assert_eq!(formatted, "name = \"Test Name\"");
     }
@@ -361,7 +372,7 @@ mod tests {
     fn test_format_empty_clause() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let kv = KeyValue::new(
             "block".to_string(),
             Operator::Equals,
@@ -369,7 +380,7 @@ mod tests {
             pos,
         );
         ast.add_statement(Statement::KeyValue(kv));
-        
+
         let formatted = format_script(&ast);
         assert_eq!(formatted, "block = {}");
     }
@@ -378,23 +389,23 @@ mod tests {
     fn test_format_clause_with_content() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let inner_kv = KeyValue::new(
             "inner".to_string(),
             Operator::Equals,
             Value::Integer(42),
             pos,
         );
-        
+
         let outer_kv = KeyValue::new(
             "outer".to_string(),
             Operator::Equals,
             Value::Clause(vec![Statement::KeyValue(inner_kv)]),
             pos,
         );
-        
+
         ast.add_statement(Statement::KeyValue(outer_kv));
-        
+
         let formatted = format_script(&ast);
         assert_eq!(formatted, "outer = {\n\tinner = 42\n}");
     }
@@ -403,41 +414,44 @@ mod tests {
     fn test_format_nested_clauses() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let innermost_kv = KeyValue::new(
             "value".to_string(),
             Operator::Equals,
             Value::String("test".to_string()),
             pos,
         );
-        
+
         let middle_kv = KeyValue::new(
             "middle".to_string(),
             Operator::Equals,
             Value::Clause(vec![Statement::KeyValue(innermost_kv)]),
             pos,
         );
-        
+
         let outer_kv = KeyValue::new(
             "outer".to_string(),
             Operator::Equals,
             Value::Clause(vec![Statement::KeyValue(middle_kv)]),
             pos,
         );
-        
+
         ast.add_statement(Statement::KeyValue(outer_kv));
-        
+
         let formatted = format_script(&ast);
-        assert_eq!(formatted, "outer = {\n\tmiddle = {\n\t\tvalue = test\n\t}\n}");
+        assert_eq!(
+            formatted,
+            "outer = {\n\tmiddle = {\n\t\tvalue = test\n\t}\n}"
+        );
     }
 
     #[test]
     fn test_format_comment() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         ast.add_statement(Statement::Comment("# This is a comment".to_string(), pos));
-        
+
         let formatted = format_script(&ast);
         assert_eq!(formatted, "# This is a comment");
     }
@@ -446,7 +460,7 @@ mod tests {
     fn test_format_multiple_statements() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let kv1 = KeyValue::new(
             "key1".to_string(),
             Operator::Equals,
@@ -459,11 +473,11 @@ mod tests {
             Value::Integer(42),
             pos,
         );
-        
+
         ast.add_statement(Statement::KeyValue(kv1));
         ast.add_statement(Statement::Comment("# Comment".to_string(), pos));
         ast.add_statement(Statement::KeyValue(kv2));
-        
+
         let formatted = format_script(&ast);
         assert_eq!(formatted, "key1 = value1\n# Comment\nkey2 = 42");
     }
@@ -472,9 +486,12 @@ mod tests {
     fn test_format_value_only() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
-        ast.add_statement(Statement::ValueOnly(Value::String("standalone".to_string()), pos));
-        
+
+        ast.add_statement(Statement::ValueOnly(
+            Value::String("standalone".to_string()),
+            pos,
+        ));
+
         let formatted = format_script(&ast);
         assert_eq!(formatted, "standalone");
     }
@@ -483,7 +500,7 @@ mod tests {
     fn test_format_different_operators() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let operators = vec![
             Operator::Equals,
             Operator::GreaterThan,
@@ -494,20 +511,15 @@ mod tests {
             Operator::EqualEqual,
             Operator::QuestionEqual,
         ];
-        
+
         for (i, op) in operators.iter().enumerate() {
-            let kv = KeyValue::new(
-                format!("key{}", i),
-                *op,
-                Value::Integer(i as i64),
-                pos,
-            );
+            let kv = KeyValue::new(format!("key{}", i), *op, Value::Integer(i as i64), pos);
             ast.add_statement(Statement::KeyValue(kv));
         }
-        
+
         let formatted = format_script(&ast);
         let lines: Vec<&str> = formatted.lines().collect();
-        
+
         assert_eq!(lines[0], "key0 = 0");
         assert_eq!(lines[1], "key1 > 1");
         assert_eq!(lines[2], "key2 < 2");
@@ -522,26 +534,26 @@ mod tests {
     fn test_format_config_with_spaces() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let inner_kv = KeyValue::new(
             "inner".to_string(),
             Operator::Equals,
             Value::Integer(42),
             pos,
         );
-        
+
         let outer_kv = KeyValue::new(
             "outer".to_string(),
             Operator::Equals,
             Value::Clause(vec![Statement::KeyValue(inner_kv)]),
             pos,
         );
-        
+
         ast.add_statement(Statement::KeyValue(outer_kv));
-        
+
         let config = FormatConfig::with_spaces(4);
         let formatted = format_script_with_config(&ast, config);
-        
+
         assert_eq!(formatted, "outer = {\n    inner = 42\n}");
     }
 
@@ -549,7 +561,7 @@ mod tests {
     fn test_format_config_no_space_around_operator() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let kv = KeyValue::new(
             "key".to_string(),
             Operator::Equals,
@@ -557,13 +569,13 @@ mod tests {
             pos,
         );
         ast.add_statement(Statement::KeyValue(kv));
-        
+
         let config = FormatConfig {
             space_around_operator: false,
             ..Default::default()
         };
         let formatted = format_script_with_config(&ast, config);
-        
+
         assert_eq!(formatted, "key=value");
     }
 
@@ -571,29 +583,29 @@ mod tests {
     fn test_format_config_no_space_before_brace() {
         let mut ast = AST::new("test.txt".to_string());
         let pos = Position::new(1, 1, 0);
-        
+
         let inner_kv = KeyValue::new(
             "inner".to_string(),
             Operator::Equals,
             Value::Integer(42),
             pos,
         );
-        
+
         let outer_kv = KeyValue::new(
             "outer".to_string(),
             Operator::Equals,
             Value::Clause(vec![Statement::KeyValue(inner_kv)]),
             pos,
         );
-        
+
         ast.add_statement(Statement::KeyValue(outer_kv));
-        
+
         let config = FormatConfig {
             space_before_brace: false,
             ..Default::default()
         };
         let formatted = format_script_with_config(&ast, config);
-        
+
         assert_eq!(formatted, "outer ={\n\tinner = 42\n}");
     }
 }

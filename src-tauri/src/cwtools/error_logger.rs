@@ -6,11 +6,11 @@ use crate::cwtools::parser::ParseError;
 use crate::cwtools::rules::loader::RuleError;
 use crate::cwtools::services::validation_service::ServiceError;
 use crate::cwtools::validator::scope::ScopeError;
+use chrono::{DateTime, Local};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use chrono::{DateTime, Local};
 
 /// 日志级别
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -275,11 +275,7 @@ impl ErrorLogger {
     /// * `error` - 作用域错误
     /// * `file` - 源文件路径（可选）
     pub fn log_scope_error(&self, error: &ScopeError, file: Option<&str>) {
-        let mut entry = LogEntry::new(
-            LogLevel::Error,
-            "scope",
-            format!("Scope error: {}", error),
-        );
+        let mut entry = LogEntry::new(LogLevel::Error, "scope", format!("Scope error: {}", error));
 
         if let Some(f) = file {
             entry.source_file = Some(f.to_string());
@@ -484,9 +480,15 @@ impl ErrorLogger {
         let total = buffer.len();
         let debug = buffer.iter().filter(|e| e.level == LogLevel::Debug).count();
         let info = buffer.iter().filter(|e| e.level == LogLevel::Info).count();
-        let warning = buffer.iter().filter(|e| e.level == LogLevel::Warning).count();
+        let warning = buffer
+            .iter()
+            .filter(|e| e.level == LogLevel::Warning)
+            .count();
         let error = buffer.iter().filter(|e| e.level == LogLevel::Error).count();
-        let critical = buffer.iter().filter(|e| e.level == LogLevel::Critical).count();
+        let critical = buffer
+            .iter()
+            .filter(|e| e.level == LogLevel::Critical)
+            .count();
 
         (total, debug, info, warning, error, critical)
     }
@@ -536,9 +538,9 @@ mod tests {
 
     #[test]
     fn test_log_entry_with_source() {
-        let entry = LogEntry::new(LogLevel::Error, "test", "Test message")
-            .with_source("test.txt", 10, 5);
-        
+        let entry =
+            LogEntry::new(LogLevel::Error, "test", "Test message").with_source("test.txt", 10, 5);
+
         assert_eq!(entry.source_file, Some("test.txt".to_string()));
         assert_eq!(entry.line, Some(10));
         assert_eq!(entry.column, Some(5));
@@ -546,9 +548,9 @@ mod tests {
 
     #[test]
     fn test_log_entry_format() {
-        let entry = LogEntry::new(LogLevel::Error, "test", "Test message")
-            .with_source("test.txt", 10, 5);
-        
+        let entry =
+            LogEntry::new(LogLevel::Error, "test", "Test message").with_source("test.txt", 10, 5);
+
         let formatted = entry.format();
         assert!(formatted.contains("ERROR"));
         assert!(formatted.contains("[test]"));
@@ -573,12 +575,12 @@ mod tests {
     #[test]
     fn test_log_filtering_by_level() {
         let logger = ErrorLogger::new(None, LogLevel::Warning);
-        
+
         logger.log_debug("test", "Debug message");
         logger.log_info("test", "Info message");
         logger.log_warning("test", "Warning message");
         logger.log_error("test", "Error message");
-        
+
         // 只有 Warning 和 Error 应该被记录
         assert_eq!(logger.buffer_size(), 2);
     }
@@ -586,16 +588,16 @@ mod tests {
     #[test]
     fn test_log_parse_error() {
         let logger = ErrorLogger::new(None, LogLevel::Error);
-        
+
         let error = ParseError::new(
             "Test parse error".to_string(),
             crate::cwtools::models::Position::new(10, 5, 100),
             crate::cwtools::parser::ParseErrorType::UnexpectedToken,
         );
-        
+
         logger.log_parse_error(&error);
         assert_eq!(logger.buffer_size(), 1);
-        
+
         let logs = logger.get_logs_by_category("parser");
         assert_eq!(logs.len(), 1);
         assert!(logs[0].message.contains("Test parse error"));
@@ -604,15 +606,15 @@ mod tests {
     #[test]
     fn test_get_logs_by_level() {
         let logger = ErrorLogger::new(None, LogLevel::Debug);
-        
+
         logger.log_info("test", "Info 1");
         logger.log_warning("test", "Warning 1");
         logger.log_error("test", "Error 1");
         logger.log_info("test", "Info 2");
-        
+
         let errors = logger.get_logs_by_level(LogLevel::Error);
         assert_eq!(errors.len(), 1);
-        
+
         let infos = logger.get_logs_by_level(LogLevel::Info);
         assert_eq!(infos.len(), 2);
     }
@@ -620,14 +622,14 @@ mod tests {
     #[test]
     fn test_get_logs_by_category() {
         let logger = ErrorLogger::new(None, LogLevel::Debug);
-        
+
         logger.log_info("parser", "Parser message");
         logger.log_info("validator", "Validator message");
         logger.log_info("parser", "Another parser message");
-        
+
         let parser_logs = logger.get_logs_by_category("parser");
         assert_eq!(parser_logs.len(), 2);
-        
+
         let validator_logs = logger.get_logs_by_category("validator");
         assert_eq!(validator_logs.len(), 1);
     }
@@ -635,11 +637,11 @@ mod tests {
     #[test]
     fn test_clear_buffer() {
         let logger = ErrorLogger::new(None, LogLevel::Info);
-        
+
         logger.log_info("test", "Message 1");
         logger.log_info("test", "Message 2");
         assert_eq!(logger.buffer_size(), 2);
-        
+
         logger.clear_buffer();
         assert_eq!(logger.buffer_size(), 0);
     }
@@ -647,14 +649,14 @@ mod tests {
     #[test]
     fn test_get_stats() {
         let logger = ErrorLogger::new(None, LogLevel::Debug);
-        
+
         logger.log_debug("test", "Debug");
         logger.log_info("test", "Info");
         logger.log_info("test", "Info 2");
         logger.log_warning("test", "Warning");
         logger.log_error("test", "Error");
         logger.log_system_error("Critical");
-        
+
         let (total, debug, info, warning, error, critical) = logger.get_stats();
         assert_eq!(total, 6);
         assert_eq!(debug, 1);
@@ -668,15 +670,15 @@ mod tests {
     fn test_file_logging() {
         let temp_dir = TempDir::new().unwrap();
         let log_file = temp_dir.path().join("test.log");
-        
+
         let logger = ErrorLogger::new(Some(log_file.clone()), LogLevel::Info);
-        
+
         logger.log_info("test", "Test message 1");
         logger.log_error("test", "Test message 2");
-        
+
         // 刷新到文件
         logger.flush().unwrap();
-        
+
         // 读取文件内容
         let content = fs::read_to_string(&log_file).unwrap();
         assert!(content.contains("Test message 1"));
@@ -687,18 +689,18 @@ mod tests {
     fn test_auto_flush_on_buffer_full() {
         let temp_dir = TempDir::new().unwrap();
         let log_file = temp_dir.path().join("test.log");
-        
+
         let mut logger = ErrorLogger::new(Some(log_file.clone()), LogLevel::Info);
         logger.set_max_buffer_size(5);
-        
+
         // 添加超过缓冲区大小的日志
         for i in 0..10 {
             logger.log_info("test", format!("Message {}", i));
         }
-        
+
         // 缓冲区应该已经被刷新
         assert!(logger.buffer_size() < 10);
-        
+
         // 文件应该包含一些日志
         let content = fs::read_to_string(&log_file).unwrap();
         assert!(!content.is_empty());
@@ -708,19 +710,19 @@ mod tests {
     fn test_clear_log_file() {
         let temp_dir = TempDir::new().unwrap();
         let log_file = temp_dir.path().join("test.log");
-        
+
         let logger = ErrorLogger::new(Some(log_file.clone()), LogLevel::Info);
-        
+
         logger.log_info("test", "Test message");
         logger.flush().unwrap();
-        
+
         // 确认文件有内容
         let content = fs::read_to_string(&log_file).unwrap();
         assert!(!content.is_empty());
-        
+
         // 清空文件
         logger.clear_log_file().unwrap();
-        
+
         // 确认文件已清空
         let content = fs::read_to_string(&log_file).unwrap();
         assert!(content.is_empty());
@@ -729,10 +731,10 @@ mod tests {
     #[test]
     fn test_set_min_level() {
         let mut logger = ErrorLogger::new(None, LogLevel::Info);
-        
+
         logger.log_debug("test", "Debug message");
         assert_eq!(logger.buffer_size(), 0);
-        
+
         logger.set_min_level(LogLevel::Debug);
         logger.log_debug("test", "Debug message");
         assert_eq!(logger.buffer_size(), 1);
@@ -742,10 +744,10 @@ mod tests {
     fn test_console_output_toggle() {
         let mut logger = ErrorLogger::new(None, LogLevel::Info);
         assert!(logger.console_output);
-        
+
         logger.set_console_output(false);
         assert!(!logger.console_output);
-        
+
         // 日志仍然应该被记录到缓冲区
         logger.log_info("test", "Test message");
         assert_eq!(logger.buffer_size(), 1);
