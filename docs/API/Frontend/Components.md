@@ -35,7 +35,6 @@
 | 属性名 | 类型 | 默认值 | 描述 |
 |--------|------|--------|------|
 | `content` | `string` | `''` | 编辑器内容 |
-| `isReadOnly` | `boolean` | `false` | 是否为只读模式 |
 | `fileName` | `string` | `undefined` | 文件名，用于确定语言模式 |
 | `filePath` | `string` | `undefined` | 文件路径，用于错误检测 |
 | `projectRoot` | `string` | `undefined` | 项目根目录，用于错误检测 |
@@ -69,7 +68,6 @@
   <CodeMirrorEditor
     ref="editorRef"
     :content="fileContent"
-    :is-read-only="isReadOnly"
     :file-name="fileName"
     :file-path="filePath"
     :project-root="projectRoot"
@@ -90,8 +88,6 @@ const fileName = ref('example.txt')
 const filePath = ref('/path/to/example.txt')
 const projectRoot = ref('/path/to/project')
 const gameDirectory = ref('/path/to/game')
-const isReadOnly = ref(false)
-
 function handleContentChange(content) {
   fileContent.value = content
   console.log('内容已更新:', content)
@@ -223,7 +219,6 @@ async function saveCurrentFile() {
 | `isActive` | `boolean` | `false` | 是否为活动窗格 |
 | `projectPath` | `string` | - | 项目路径 |
 | `gameDirectory` | `string` | - | 游戏目录 |
-| `isReadOnly` | `boolean` | `false` | 是否为只读模式 |
 | `disableErrorHandling` | `boolean` | `false` | 是否禁用错误处理 |
 
 #### Events
@@ -259,7 +254,6 @@ async function saveCurrentFile() {
     :is-active="isActive"
     :project-path="projectPath"
     :game-directory="gameDirectory"
-    :is-read-only="isReadOnly"
     @switch-file="handleSwitchFile"
     @close-file="handleCloseFile"
     @content-change="handleContentChange"
@@ -280,8 +274,6 @@ const paneData = ref({
 const isActive = ref(true)
 const projectPath = ref('/path/to/project')
 const gameDirectory = ref('/path/to/game')
-const isReadOnly = ref(false)
-
 function handleSwitchFile(paneId, index) {
   console.log('切换文件:', { paneId, index })
 }

@@ -20,7 +20,6 @@ import { useEditorFont } from '../../composables/useEditorFont'
 
 const props = defineProps<{
   content: string
-  isReadOnly: boolean
   fileName?: string
   filePath?: string
   projectRoot?: string
@@ -217,7 +216,7 @@ async function initEditor() {
     indentOnInput(),
     indentUnit.of('    '), // 4 spaces
     EditorView.lineWrapping,
-    EditorView.editable.of(!props.isReadOnly),
+    EditorView.editable.of(true),
     autoIndentOnEnter,
     smartTab,
     keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -352,17 +351,6 @@ watch(() => props.content, (newContent) => {
     // 外部内容变更时重置版本号
     fileVersion.value = 0
   }
-})
-
-// 监听只读状态变化
-watch(() => props.isReadOnly, () => {
-  if (!editorView) return
-  
-  // 重新初始化编辑器以应用只读状态
-  editorView.destroy()
-  nextTick(() => {
-    initEditor()
-  })
 })
 
 // 监听文件名变化（切换语言）

@@ -9,7 +9,6 @@ export function useEditorState() {
   const hasUnsavedChanges = ref(false)
   const currentLine = ref(1)
   const currentColumn = ref(1)
-  const isReadOnly = ref(false)
   
   /**
    * 更新光标位置
@@ -43,22 +42,13 @@ export function useEditorState() {
     hasUnsavedChanges.value = false
   }
   
-  /**
-   * 设置只读状态
-   */
-  function setReadOnly(readonly: boolean) {
-    isReadOnly.value = readonly
-  }
-  
   return {
     fileContent,
     hasUnsavedChanges,
     currentLine,
     currentColumn,
-    isReadOnly,
     updateCursorPosition,
     onContentChange,
-    resetUnsavedChanges,
-    setReadOnly
+    resetUnsavedChanges
   }
 }

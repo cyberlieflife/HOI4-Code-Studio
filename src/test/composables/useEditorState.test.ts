@@ -18,7 +18,6 @@ describe('useEditorState', () => {
     expect(editorState.hasUnsavedChanges.value).toBe(false)
     expect(editorState.currentLine.value).toBe(1)
     expect(editorState.currentColumn.value).toBe(1)
-    expect(editorState.isReadOnly.value).toBe(false)
   })
 
   it('应该能够处理内容变化', () => {
@@ -37,14 +36,6 @@ describe('useEditorState', () => {
     // 重置未保存标记
     editorState.resetUnsavedChanges()
     expect(editorState.hasUnsavedChanges.value).toBe(false)
-  })
-
-  it('应该能够设置只读状态', () => {
-    editorState.setReadOnly(true)
-    expect(editorState.isReadOnly.value).toBe(true)
-
-    editorState.setReadOnly(false)
-    expect(editorState.isReadOnly.value).toBe(false)
   })
 
   it('应该能够更新光标位置 - 单行文本', () => {
@@ -121,9 +112,6 @@ describe('useEditorState', () => {
 
   it('应该能够处理混合内容的状态变化', () => {
     // 设置只读状态
-    editorState.setReadOnly(true)
-    expect(editorState.isReadOnly.value).toBe(true)
-
     // 修改内容
     editorState.onContentChange('New content')
     expect(editorState.fileContent.value).toBe('New content')
@@ -133,9 +121,6 @@ describe('useEditorState', () => {
     editorState.resetUnsavedChanges()
     expect(editorState.hasUnsavedChanges.value).toBe(false)
 
-    // 取消只读状态
-    editorState.setReadOnly(false)
-    expect(editorState.isReadOnly.value).toBe(false)
   })
 
   it('应该能够处理连续的内容变化', () => {

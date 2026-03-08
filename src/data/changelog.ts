@@ -17,6 +17,21 @@ export interface VersionLog {
 
 export const changelog: VersionLog[] = [
   {
+    version: 'v0.3.4-dev',
+    description: '优化编辑器',
+    changes: [
+      { type: 'improvement', content: '删除游戏目录的只读限制' },
+      { type: 'improvement', content: '优化加载速度' },
+    ]
+  },
+  {
+    version: 'v0.3.3-dev',
+    description: '更改项目地址',
+    changes: [
+      { type: 'improvement', content: '更改项目地址' },
+    ]
+  },
+  {
     version: 'v0.3.2-dev',
     description: '回滚...',
     changes: [

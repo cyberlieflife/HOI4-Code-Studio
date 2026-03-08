@@ -38,7 +38,7 @@ export interface OpenFile {
  * 文件管理 Composable
  * 管理文件的打开、关闭、保存等操作
  */
-export function useFileManager(gameDirectory: string = '') {
+export function useFileManager() {
   const openFiles = ref<OpenFile[]>([])
   const activeFileIndex = ref<number>(-1)
   const currentFile = ref<FileNode | null>(null)
@@ -288,13 +288,6 @@ export function useFileManager(gameDirectory: string = '') {
     }
   }
   
-  /**
-   * 检查文件是否为只读（游戏目录文件）
-   */
-  function isFileReadOnly(filePath: string): boolean {
-    return !!gameDirectory && filePath.startsWith(gameDirectory)
-  }
-  
   return {
     openFiles,
     activeFileIndex,
@@ -307,7 +300,6 @@ export function useFileManager(gameDirectory: string = '') {
     closeOtherFiles,
     saveFile,
     updateCurrentFile,
-    updateFileState,
-    isFileReadOnly
+    updateFileState
   }
 }

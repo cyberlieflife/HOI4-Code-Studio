@@ -30,7 +30,7 @@ describe('useFileManager', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    fileManager = useFileManager('/game/directory')
+    fileManager = useFileManager()
   })
 
   afterEach(() => {
@@ -477,17 +477,6 @@ describe('useFileManager', () => {
     expect(result).toBe(false)
     expect(alertSpy).toHaveBeenCalledWith('保存失败: 保存失败')
     alertSpy.mockRestore()
-  })
-
-  it('应该检查文件是否为只读', () => {
-    expect(fileManager.isFileReadOnly('/game/directory/file.txt')).toBe(true)
-    expect(fileManager.isFileReadOnly('/other/directory/file.txt')).toBe(false)
-    expect(fileManager.isFileReadOnly('')).toBe(false)
-  })
-
-  it('应该处理没有游戏目录的情况', () => {
-    const fileManagerWithoutGameDir = useFileManager()
-    expect(fileManagerWithoutGameDir.isFileReadOnly('/any/path/file.txt')).toBe(false)
   })
 
   it('应该更新文件状态', () => {

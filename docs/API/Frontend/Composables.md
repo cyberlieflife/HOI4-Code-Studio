@@ -51,8 +51,6 @@
 
 | 参数名 | 类型 | 默认值 | 描述 |
 |--------|------|--------|------|
-| `gameDirectory` | `string` | `''` | 游戏目录路径 |
-
 #### 返回值
 
 | 属性名 | 类型 | 描述 |
@@ -69,7 +67,6 @@
 | `saveFile` | `(content: string) => Promise<boolean>` | 保存文件 |
 | `updateCurrentFile` | `() => OpenFile \| null` | 更新当前文件状态 |
 | `updateFileState` | `(content: string, hasChanges: boolean) => void` | 更新文件内容和状态 |
-| `isFileReadOnly` | `(filePath: string) => boolean` | 检查文件是否为只读 |
 
 #### 类型定义
 
@@ -110,9 +107,8 @@ const {
   openFile,
   switchToFile,
   closeFile,
-  saveFile,
-  isFileReadOnly
-} = useFileManager('/path/to/game/directory')
+  saveFile
+} = useFileManager()
 
 // 打开文件
 const success = await openFile(fileNode, (content) => {
@@ -122,8 +118,6 @@ const success = await openFile(fileNode, (content) => {
 // 保存文件
 const saved = await saveFile(fileContent)
 
-// 检查文件是否只读
-const readOnly = isFileReadOnly(filePath)
 ```
 
 ## 📝 编辑器状态
@@ -140,11 +134,9 @@ const readOnly = isFileReadOnly(filePath)
 | `hasUnsavedChanges` | `Ref<boolean>` | 是否有未保存的更改 |
 | `currentLine` | `Ref<number>` | 当前行号 |
 | `currentColumn` | `Ref<number>` | 当前列号 |
-| `isReadOnly` | `Ref<boolean>` | 是否为只读模式 |
 | `updateCursorPosition` | `(textarea: HTMLTextAreaElement) => void` | 更新光标位置 |
 | `onContentChange` | `(content: string) => void` | 内容变化处理 |
 | `resetUnsavedChanges` | `() => void` | 重置未保存标记 |
-| `setReadOnly` | `(readonly: boolean) => void` | 设置只读状态 |
 
 #### 示例
 

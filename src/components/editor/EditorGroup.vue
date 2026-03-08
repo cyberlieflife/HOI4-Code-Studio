@@ -92,17 +92,6 @@ const paneRefs = ref<Map<string, InstanceType<typeof EditorPane>>>(new Map())
 const autoSaveTimers = ref<Map<string, number>>(new Map())
 const AUTO_SAVE_DELAY = 100 // 0.1秒防抖
 
-// 计算每个窗格是否只读
-function isPaneReadOnly(paneId: string): boolean {
-  const pane = panes.value.find(p => p.id === paneId)
-  if (!pane || pane.activeFileIndex === -1) return false
-  
-  const file = pane.openFiles[pane.activeFileIndex]
-  if (!file) return false
-  
-  return !!props.gameDirectory && file.node.path.startsWith(props.gameDirectory)
-}
-
 // 处理文件切换
 function handleSwitchFile(paneId: string, index: number) {
   const pane = panes.value.find(p => p.id === paneId)
@@ -524,7 +513,6 @@ defineExpose({
           :project-path="projectPath"
           :game-directory="gameDirectory"
           :dependency-roots="props.dependencyRoots"
-          :is-read-only="isPaneReadOnly(pane.id)"
           :disable-error-handling="props.disableErrorHandling"
           @switch-file="handleSwitchFile"
           @close-file="handleCloseFile"

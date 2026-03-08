@@ -21,7 +21,6 @@ const props = defineProps<{
   projectPath: string
   gameDirectory: string
   dependencyRoots?: string[]
-  isReadOnly: boolean
   disableErrorHandling?: boolean
 }>()
 
@@ -587,8 +586,8 @@ defineExpose({
           <button
             @click="handleSaveFile"
             class="px-3 py-1 bg-hoi4-gray hover:bg-hoi4-border rounded text-hoi4-text text-xs transition-colors flex items-center space-x-1"
-            :disabled="!hasUnsavedChanges || isReadOnly"
-            :class="{ 'opacity-50 cursor-not-allowed': !hasUnsavedChanges || isReadOnly }"
+            :disabled="!hasUnsavedChanges"
+            :class="{ 'opacity-50 cursor-not-allowed': !hasUnsavedChanges }"
             title="保存 (Ctrl+S)"
           >
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -683,7 +682,6 @@ defineExpose({
         </div>
         
         <div class="flex items-center space-x-4 text-xs text-hoi4-text-dim">
-          <span v-if="isReadOnly" class="text-red-400 font-semibold">只读</span>
           <span>行: {{ currentLine }}</span>
           <span>列: {{ currentColumn }}</span>
           <span>字符: {{ fileContent.length }}</span>
@@ -767,7 +765,6 @@ defineExpose({
           v-else
           ref="editorRef"
           :content="fileContent"
-          :is-read-only="isReadOnly"
           :file-name="currentFile.node.name"
           :file-path="currentFile.node.path"
           :project-root="projectPath"

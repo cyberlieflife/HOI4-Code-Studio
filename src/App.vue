@@ -1,11 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
-import { useTheme } from './composables/useTheme'
 
 // HOI4 Code Studio - 主应用组件
-
-// 主题系统
-const { loadThemeFromSettings } = useTheme()
 
 // 禁用浏览器默认右键菜单
 function handleContextMenu(event: MouseEvent) {
@@ -14,11 +10,17 @@ function handleContextMenu(event: MouseEvent) {
 }
 
 onMounted(() => {
-  // 延迟加载主题设置，避免阻塞应用启动
+  // 延迟加载主题系统，避免把主题模块放进启动首包
   setTimeout(async () => {
-    await loadThemeFromSettings()
+    try {
+      const { useTheme } = await import('./composables/useTheme')
+      const { loadThemeFromSettings } = useTheme()
+      await loadThemeFromSettings()
+    } catch (error) {
+      console.error('加载主题设置失败:', error)
+    }
   }, 100)
-  
+
   // 添加全局右键菜单禁用
   document.addEventListener('contextmenu', handleContextMenu)
 })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   openFileDialog,
@@ -12,9 +12,9 @@ import {
   type RecentProject,
   type ProjectStats
 } from '../api/tauri'
-import { checkForUpdates } from '../utils/version'
-import ChangelogPanel from '../components/ChangelogPanel.vue'
 import MarkdownIt from 'markdown-it'
+
+const ChangelogPanel = defineAsyncComponent(() => import('../components/ChangelogPanel.vue'))
 
 const router = useRouter()
 const statusMessage = ref('')
@@ -26,7 +26,7 @@ const loadingRecent = ref(true)
 const searchQuery = ref('')
 
 // 当前版本
-const CURRENT_VERSION = 'v0.3.3-dev'
+const CURRENT_VERSION = 'v0.3.4-dev'
 
 // 更新提示
 const showUpdateDialog = ref(false)
@@ -50,6 +50,8 @@ const isFirstTime = ref(false)
 
 // 更新日志面板
 const showChangelogPanel = ref(false)
+
+let recentProjectsRequestId = 0
 
 // 显示状态消息
 function displayStatus(message: string, duration: number = 3000) {
@@ -138,6 +140,7 @@ function closeChangelogPanel() {
 async function checkAppUpdates() {
   try {
     // 使用未认证访问
+    const { checkForUpdates } = await import('../utils/version')
     const result = await checkForUpdates(CURRENT_VERSION, '')
     
     if (result.hasUpdate && result.latestVersion && result.releaseUrl) {
@@ -180,24 +183,54 @@ const filteredProjects = computed(() => {
   })
 })
 
-async function loadRecentProjects() {
-  loadingRecent.value = true
-  const result = await getRecentProjects()
-
-  if (result.success) {
-    projects.value = result.projects
-    const paths = result.projects.map(p => p.path)
-    const statsResult = await getRecentProjectStats(paths)
-    if (statsResult.success) {
-      const next: Record<string, ProjectStats> = {}
-      for (const s of statsResult.stats) {
-        next[s.path] = s
-      }
-      projectStatsByPath.value = next
-    }
+async function loadRecentProjectStats(paths: string[], requestId: number) {
+  if (!paths.length) {
+    projectStatsByPath.value = {}
+    return
   }
 
-  loadingRecent.value = false
+  try {
+    const statsResult = await getRecentProjectStats(paths)
+    if (requestId !== recentProjectsRequestId || !statsResult.success) return
+
+    const next: Record<string, ProjectStats> = {}
+    for (const stat of statsResult.stats) {
+      next[stat.path] = stat
+    }
+    projectStatsByPath.value = next
+  } catch (error) {
+    if (requestId === recentProjectsRequestId) {
+      console.error('加载最近项目统计失败:', error)
+    }
+  }
+}
+
+async function loadRecentProjects() {
+  const requestId = ++recentProjectsRequestId
+  loadingRecent.value = true
+  projectStatsByPath.value = {}
+
+  try {
+    const result = await getRecentProjects()
+    if (requestId !== recentProjectsRequestId) return
+
+    if (!result.success) {
+      projects.value = []
+      loadingRecent.value = false
+      return
+    }
+
+    projects.value = result.projects
+    loadingRecent.value = false
+
+    void loadRecentProjectStats(result.projects.map(project => project.path), requestId)
+  } catch (error) {
+    if (requestId !== recentProjectsRequestId) return
+
+    projects.value = []
+    loadingRecent.value = false
+    console.error('加载最近项目失败:', error)
+  }
 }
 
 async function handleOpenRecentProject(project: RecentProject) {
