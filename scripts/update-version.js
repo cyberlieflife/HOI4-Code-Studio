@@ -24,6 +24,7 @@ const FILES_TO_UPDATE = {
   packageLockJson: path.join(ROOT_DIR, 'package-lock.json'),
   cargoToml: path.join(ROOT_DIR, 'src-tauri', 'Cargo.toml'),
   cargoLock: path.join(ROOT_DIR, 'src-tauri', 'Cargo.lock'),
+  tauriConfig: path.join(ROOT_DIR, 'src-tauri', 'tauri.conf.json'),
   homeVue: path.join(ROOT_DIR, 'src', 'views', 'Home.vue'),
   settingsVue: path.join(ROOT_DIR, 'src', 'views', 'Settings.vue'),
 };
@@ -134,6 +135,24 @@ function updateCargoLock(version) {
 }
 
 /**
+ * 更新 tauri.conf.json
+ */
+function updateTauriConfig(version) {
+  try {
+    const filePath = FILES_TO_UPDATE.tauriConfig;
+    const content = fs.readFileSync(filePath, 'utf8');
+    const config = JSON.parse(content);
+
+    config.version = version;
+
+    fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+    console.log(`✅ 更新 tauri.conf.json: ${version}`);
+  } catch (error) {
+    console.error('❌ 更新 tauri.conf.json 失败:', error.message);
+  }
+}
+
+/**
  * 更新 Vue 文件中的版本号
  */
 function updateVueFile(filePath, version) {
@@ -180,6 +199,7 @@ function main() {
   updatePackageLockJson(version);
   updateCargoToml(version);
   updateCargoLock(version);
+  updateTauriConfig(version);
   updateVueFile(FILES_TO_UPDATE.homeVue, version);
   updateVueFile(FILES_TO_UPDATE.settingsVue, version);
   
