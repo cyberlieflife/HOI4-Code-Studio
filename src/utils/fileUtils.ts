@@ -5,6 +5,9 @@
 
 import type { FileNode } from '../composables/useFileManager'
 
+export const INITIAL_FILE_TREE_DEPTH = 1
+export const DIRECTORY_EXPAND_LOAD_DEPTH = 1
+
 /**
  * 从路径中提取文件名
  * @param p 文件路径

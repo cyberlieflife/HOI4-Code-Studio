@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { buildDirectoryTreeFast, createFile, createFolder, writeFileContent, launchGame, renamePath, deletePath, openFolder } from '../api/tauri'
+import { buildDirectoryTreeFast, createFile, createFolder, writeFileContent, launchGame, renamePath, deletePath, openFolder, loadSettingsSnapshot, type Settings } from '../api/tauri'
 import 'highlight.js/styles/github-dark.css'
 import 'highlight.js/lib/languages/json'
 import 'highlight.js/lib/languages/yaml'
@@ -41,7 +41,7 @@ import { useProjectFileTreeLoader } from '../composables/useProjectFileTreeLoade
 import { useAutoRefreshInterval } from '../composables/useAutoRefreshInterval'
 
 // 新提取的模块
-import { escapeRegExp, isImageFile, isPathUnder, convertRustFileNode } from '../utils/fileUtils'
+import { escapeRegExp, isImageFile, isPathUnder, convertRustFileNode, DIRECTORY_EXPAND_LOAD_DEPTH } from '../utils/fileUtils'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
 import { useContextMenu } from '../composables/useContextMenu'
 import { loadFontConfigFromSettings } from '../composables/useEditorFont'
@@ -53,6 +53,7 @@ import { useSearchNavigation } from '../composables/useSearchNavigation'
 import { useEditorErrorNavigation } from '../composables/useEditorErrorNavigation'
 import PluginIframeHost from '../components/plugins/PluginIframeHost.vue'
 import { useEditorUiState } from '../composables/useEditorUiState'
+import { markStartupStep } from '../utils/startupPerformance'
 
 // Highlight.js 语言定义已移至 useSyntaxHighlight.ts 中
 
@@ -344,6 +345,28 @@ async function handleRefreshIdeas() {
   await refreshIdeas()
 }
 
+async function loadEditorBackgroundData(settingsSnapshot: Settings) {
+  try {
+    await refreshPlugins()
+    await loadDependenciesList()
+    markStartupStep('startup:editor-dependencies-loaded', '编辑器依赖列表加载完成')
+
+    await loadGameDirectory({ refreshRegistries: false, settings: settingsSnapshot })
+    markStartupStep('startup:editor-game-directory-loaded', '编辑器游戏目录加载完成')
+
+    await refreshTags()
+    markStartupStep('startup:editor-tags-loaded', '编辑器标签索引加载完成')
+
+    await refreshIdeas()
+    markStartupStep('startup:editor-ideas-loaded', '编辑器创意索引加载完成')
+
+    markStartupStep('startup:editor-background-ready', '编辑器后台初始化完成')
+    markStartupStep('startup:editor-ready', '编辑器启动流程完成')
+  } catch (error) {
+    logger.error('编辑器后台初始化失败:', error)
+  }
+}
+
 // 依赖项管理函数
 function handleSwitchToDependency(id: string) {
   activeDependencyId.value = id
@@ -389,7 +412,7 @@ async function toggleFolder(node: FileNode) {
   node.expanded = !node.expanded
   if (node.expanded && (!node.children || node.children.length === 0)) {
     try {
-      const result = await buildDirectoryTreeFast(node.path, 2)
+      const result = await buildDirectoryTreeFast(node.path, DIRECTORY_EXPAND_LOAD_DEPTH)
       if (result.success && result.tree) {
         node.children = result.tree.map(convertRustFileNode)
       }
@@ -405,7 +428,7 @@ async function toggleGameFolder(node: FileNode) {
   node.expanded = !node.expanded
   if (node.expanded && (!node.children || node.children.length === 0)) {
     try {
-      const result = await buildDirectoryTreeFast(node.path, 2)
+      const result = await buildDirectoryTreeFast(node.path, DIRECTORY_EXPAND_LOAD_DEPTH)
       if (result.success && result.tree) {
         node.children = result.tree.map(convertRustFileNode)
       }
@@ -1028,32 +1051,33 @@ useKeyboardShortcuts({
 
 // 生命周期
 onMounted(async () => {
-  // 加载主题设置
-  await loadThemeFromSettings()
-  
-  // 加载图标设置
-  await loadIconSetFromSettings()
-  
-  // 加载设置
-  await loadInitialSettings()
+  markStartupStep('startup:editor-mounted', '编辑器页面挂载完成')
+  const settingsSnapshot = await loadSettingsSnapshot()
+  await Promise.all([
+    loadThemeFromSettings(settingsSnapshot),
+    loadIconSetFromSettings(settingsSnapshot),
+    loadInitialSettings(settingsSnapshot)
+  ])
+  markStartupStep('startup:editor-theme-loaded', '编辑器主题加载完成')
+  markStartupStep('startup:editor-icons-loaded', '编辑器图标集加载完成')
+  markStartupStep('startup:editor-settings-loaded', '编辑器基础设置加载完成')
   projectPath.value = route.query.path as string || ''
+  document.addEventListener('click', hideContextMenu)
   if (projectPath.value) {
-    await refreshPlugins()
     dependencyManager.setProjectPath(projectPath.value)
-    await loadProjectInfo()
-    await loadFileTree()
-    await loadGameDirectory()
-    // 加载依赖项列表
-    await loadDependenciesList()
-    // 首次加载 Tags 和 Ideas
-    await refreshTags()
-    await refreshIdeas()
+    await Promise.all([
+      loadProjectInfo(),
+      loadFileTree()
+    ])
+    markStartupStep('startup:editor-project-info-loaded', '编辑器项目信息加载完成')
+    markStartupStep('startup:editor-file-tree-loaded', '编辑器文件树加载完成')
+    markStartupStep('startup:editor-shell-ready', '编辑器首屏骨架就绪')
     // 启动目录树自动刷新
     startFileTreeAutoRefresh()
+    void loadEditorBackgroundData(settingsSnapshot)
   } else {
     loading.value = false
   }
-  document.addEventListener('click', hideContextMenu)
 })
 
 // 组件卸载时清理

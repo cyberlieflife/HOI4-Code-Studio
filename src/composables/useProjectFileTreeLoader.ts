@@ -6,7 +6,7 @@ import {
   mergeExpandedChildren,
   restoreExpandedState
 } from '../utils/fileTreeState'
-import { convertRustFileNode } from '../utils/fileUtils'
+import { convertRustFileNode, INITIAL_FILE_TREE_DEPTH } from '../utils/fileUtils'
 import { logger } from '../utils/logger'
 
 interface RootSyncOptions {
@@ -33,7 +33,7 @@ export function useProjectFileTreeLoader(options: ProjectFileTreeLoaderOptions) 
     const expandedPaths = collectExpandedPaths(oldTree)
 
     try {
-      const result = await buildDirectoryTreeFast(options.projectPath.value, 3)
+      const result = await buildDirectoryTreeFast(options.projectPath.value, INITIAL_FILE_TREE_DEPTH)
       if (result.success && result.tree) {
         const newTree = result.tree.map(convertRustFileNode)
         mergeExpandedChildren(oldTree, newTree, expandedPaths)

@@ -5,14 +5,16 @@ import {
   openFileDialog,
   openProject,
   initializeProject,
-  loadSettings,
+  loadSettingsSnapshot,
   openUrl,
   getRecentProjects,
   getRecentProjectStats,
+  type Settings,
   type RecentProject,
   type ProjectStats
 } from '../api/tauri'
 import MarkdownIt from 'markdown-it'
+import { markStartupStep } from '../utils/startupPerformance'
 
 const ChangelogPanel = defineAsyncComponent(() => import('../components/ChangelogPanel.vue'))
 
@@ -222,6 +224,7 @@ async function loadRecentProjects() {
 
     projects.value = result.projects
     loadingRecent.value = false
+    markStartupStep('startup:home-recent-projects-loaded', '首页最近项目加载完成')
 
     void loadRecentProjectStats(result.projects.map(project => project.path), requestId)
   } catch (error) {
@@ -286,11 +289,8 @@ function formatBytes(bytes: number) {
 }
 
 // 检查游戏目录设置
-async function checkGameDirectory() {
-  const settings = await loadSettings()
-  
-  if (settings.success && settings.data) {
-    const data = settings.data as any
+async function checkGameDirectory(data: Settings) {
+  if (Object.keys(data).length > 0) {
     const gameDir = data.gameDirectory || ''
     
     // 检查是否是首次启动（通过检查是否有任何配置）
@@ -329,31 +329,30 @@ function goToSettings() {
 
 // 组件挂载后显示欢迎消息并检查更新
 onMounted(() => {
+  markStartupStep('startup:home-mounted', '首页挂载完成')
   setTimeout(() => {
     displayStatus('欢迎使用 Hearts of Iron IV GUI Mod Editor', 3000)
   }, 500)
   
   // 延迟执行耗时操作，避免阻塞UI渲染
   setTimeout(async () => {
-    // 检查游戏目录设置
-    await checkGameDirectory()
-    
-    // 检查是否启用了自动更新检测
-    const settings = await loadSettings()
-    if (settings.success && settings.data) {
-      const data = settings.data as any
-      const shouldCheckUpdates = data.checkForUpdates !== false
-      
-      if (shouldCheckUpdates) {
-        // 延迟检查更新，避免影响启动体验
-        setTimeout(() => {
-          checkAppUpdates()
-        }, 1000)
-      }
+    const settingsSnapshot = await loadSettingsSnapshot()
+    await checkGameDirectory(settingsSnapshot)
+
+    const shouldCheckUpdates = settingsSnapshot.checkForUpdates !== false
+    if (shouldCheckUpdates) {
+      // 延迟检查更新，避免影响启动体验
+      setTimeout(() => {
+        checkAppUpdates()
+      }, 1000)
     }
   }, 100)
 
   loadRecentProjects()
+
+  setTimeout(() => {
+    markStartupStep('startup:home-ready', '首页首屏可交互')
+  }, 0)
 })
 </script>
 

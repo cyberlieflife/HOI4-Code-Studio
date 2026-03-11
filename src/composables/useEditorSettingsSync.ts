@@ -1,9 +1,9 @@
 import { ref, watch, type Ref } from 'vue'
-import { buildDirectoryTreeFast, loadSettings, saveSettings } from '../api/tauri'
+import { buildDirectoryTreeFast, loadSettings, saveSettings, type Settings } from '../api/tauri'
 import type { Dependency } from '../types/dependency'
 import type { FileNode } from './useFileManager'
 import { ensureIdeaRegistry } from './useIdeaRegistry'
-import { convertRustFileNode } from '../utils/fileUtils'
+import { convertRustFileNode, INITIAL_FILE_TREE_DEPTH } from '../utils/fileUtils'
 import { logger } from '../utils/logger'
 
 interface RootSyncOptions {
@@ -18,6 +18,11 @@ interface EditorSettingsSyncOptions {
   refreshTags: () => Promise<unknown>
   loadFontConfigFromSettings: (settings: Record<string, unknown>) => void
   syncRoots: (options: RootSyncOptions) => void
+}
+
+interface LoadGameDirectoryOptions {
+  refreshRegistries?: boolean
+  settings?: Settings
 }
 
 export function useEditorSettingsSync(options: EditorSettingsSyncOptions) {
@@ -36,7 +41,7 @@ export function useEditorSettingsSync(options: EditorSettingsSyncOptions) {
 
     isLoadingGameTree.value = true
     try {
-      const result = await buildDirectoryTreeFast(gameDirectory.value, 3)
+      const result = await buildDirectoryTreeFast(gameDirectory.value, INITIAL_FILE_TREE_DEPTH)
       if (result.success && result.tree) {
         gameFileTree.value = result.tree.map(convertRustFileNode)
       }
@@ -47,25 +52,35 @@ export function useEditorSettingsSync(options: EditorSettingsSyncOptions) {
     }
   }
 
-  async function loadInitialSettings() {
-    const settingsResult = await loadSettings()
-    if (settingsResult.success && settingsResult.data) {
-      const data = settingsResult.data as Record<string, unknown>
-      autoSave.value = data.autoSave !== false
-      disableErrorHandling.value = data.disableErrorHandling === true
-      options.loadFontConfigFromSettings(data)
-    }
+  async function loadInitialSettings(settings?: Settings) {
+    const data = settings ?? await (async () => {
+      const settingsResult = await loadSettings()
+      if (!settingsResult.success || !settingsResult.data) return null
+      return settingsResult.data as Settings
+    })()
+
+    if (!data) return
+
+    autoSave.value = data.autoSave !== false
+    disableErrorHandling.value = data.disableErrorHandling === true
+    options.loadFontConfigFromSettings(data)
   }
 
-  async function loadGameDirectory() {
-    try {
-      const result = await loadSettings()
-      const dependencyPaths = getEnabledDependencyPaths()
+  async function loadGameDirectory(loadOptions: LoadGameDirectoryOptions = {}) {
+    const { refreshRegistries = true, settings } = loadOptions
 
-      if (result.success && result.data && typeof result.data === 'object' && 'gameDirectory' in result.data) {
-        gameDirectory.value = String(result.data.gameDirectory || '')
-        autoSave.value = ('autoSave' in result.data && result.data.autoSave === false) ? false : true
-        disableErrorHandling.value = ('disableErrorHandling' in result.data && result.data.disableErrorHandling === true) ? true : false
+    try {
+      const dependencyPaths = getEnabledDependencyPaths()
+      const data = settings ?? await (async () => {
+        const result = await loadSettings()
+        if (!result.success || !result.data || typeof result.data !== 'object') return null
+        return result.data as Settings
+      })()
+
+      if (data && 'gameDirectory' in data) {
+        gameDirectory.value = String(data.gameDirectory || '')
+        autoSave.value = data.autoSave === false ? false : true
+        disableErrorHandling.value = data.disableErrorHandling === true
 
         options.syncRoots({
           projectPath: options.projectPath.value,
@@ -73,8 +88,10 @@ export function useEditorSettingsSync(options: EditorSettingsSyncOptions) {
           dependencyPaths
         })
         await loadGameFileTree()
-        await options.refreshTags()
-        await ensureIdeaRegistry()
+        if (refreshRegistries) {
+          await options.refreshTags()
+          await ensureIdeaRegistry()
+        }
         return
       }
 
@@ -82,8 +99,10 @@ export function useEditorSettingsSync(options: EditorSettingsSyncOptions) {
         projectPath: options.projectPath.value,
         dependencyPaths
       })
-      await options.refreshTags()
-      await ensureIdeaRegistry()
+      if (refreshRegistries) {
+        await options.refreshTags()
+        await ensureIdeaRegistry()
+      }
     } catch (error) {
       logger.error('加载游戏目录设置失败:', error)
     }

@@ -2,7 +2,7 @@ import { ref, type Ref } from 'vue'
 import type { Dependency } from '../types/dependency'
 import type { FileNode } from './useFileManager'
 import { buildDirectoryTreeFast } from '../api/tauri'
-import { convertRustFileNode } from '../utils/fileUtils'
+import { convertRustFileNode, INITIAL_FILE_TREE_DEPTH } from '../utils/fileUtils'
 import { logger } from '../utils/logger'
 
 export function useDependencyTreeCache(dependencies: Ref<Dependency[]>) {
@@ -21,7 +21,7 @@ export function useDependencyTreeCache(dependencies: Ref<Dependency[]>) {
     }
 
     try {
-      const result = await buildDirectoryTreeFast(dependency.path, 3)
+      const result = await buildDirectoryTreeFast(dependency.path, INITIAL_FILE_TREE_DEPTH)
       if (result.success && result.tree) {
         const next = new Map(dependencyFileTrees.value)
         next.set(dependencyId, result.tree.map(convertRustFileNode))

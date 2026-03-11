@@ -442,6 +442,166 @@ pub fn get_recent_project_stats(paths: Vec<String>) -> RecentProjectStatsResult 
     }
 }
 
+const RECENT_PROJECT_STATS_CACHE_TTL_SECONDS: i64 = 300;
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct CachedProjectStatsEntry {
+    updated_at: String,
+    stats: ProjectStats,
+}
+
+#[tauri::command]
+pub fn get_recent_project_stats_cached(paths: Vec<String>) -> RecentProjectStatsResult {
+    let mut cache = read_recent_project_stats_cache();
+    let mut stats = Vec::with_capacity(paths.len());
+    let mut stale_paths = Vec::new();
+    let mut cache_changed = false;
+
+    for path in &paths {
+        match cache.get(path) {
+            Some(entry) => {
+                stats.push(entry.stats.clone());
+                if !is_recent_project_stats_cache_fresh(entry) {
+                    stale_paths.push(path.clone());
+                }
+            }
+            None => {
+                let computed = compute_project_stats(path);
+                cache.insert(path.clone(), build_cached_project_stats(&computed));
+                stats.push(computed);
+                cache_changed = true;
+            }
+        }
+    }
+
+    if cache_changed {
+        let _ = write_recent_project_stats_cache(&cache);
+    }
+
+    if !stale_paths.is_empty() {
+        std::thread::spawn(move || {
+            refresh_recent_project_stats_cache(stale_paths);
+        });
+    }
+
+    RecentProjectStatsResult {
+        success: true,
+        stats,
+    }
+}
+
+fn build_cached_project_stats(stats: &ProjectStats) -> CachedProjectStatsEntry {
+    CachedProjectStatsEntry {
+        updated_at: chrono::Utc::now().to_rfc3339(),
+        stats: stats.clone(),
+    }
+}
+
+fn is_recent_project_stats_cache_fresh(entry: &CachedProjectStatsEntry) -> bool {
+    chrono::DateTime::parse_from_rfc3339(&entry.updated_at)
+        .map(|updated_at| {
+            let age = chrono::Utc::now().signed_duration_since(updated_at.with_timezone(&chrono::Utc));
+            age.num_seconds() < RECENT_PROJECT_STATS_CACHE_TTL_SECONDS
+        })
+        .unwrap_or(false)
+}
+
+fn read_recent_project_stats_cache() -> std::collections::HashMap<String, CachedProjectStatsEntry> {
+    use std::fs;
+
+    let cache_path = get_recent_project_stats_cache_path();
+    if !cache_path.exists() {
+        return std::collections::HashMap::new();
+    }
+
+    fs::read_to_string(&cache_path)
+        .ok()
+        .and_then(|content| {
+            serde_json::from_str::<std::collections::HashMap<String, CachedProjectStatsEntry>>(
+                &content,
+            )
+            .ok()
+        })
+        .unwrap_or_default()
+}
+
+fn write_recent_project_stats_cache(
+    cache: &std::collections::HashMap<String, CachedProjectStatsEntry>,
+) -> Result<(), String> {
+    use std::fs;
+
+    let cache_path = get_recent_project_stats_cache_path();
+    if let Some(parent) = cache_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建统计缓存目录失败: {}", e))?;
+    }
+
+    let content = serde_json::to_string_pretty(cache)
+        .map_err(|e| format!("序列化统计缓存失败: {}", e))?;
+
+    fs::write(cache_path, content).map_err(|e| format!("写入统计缓存失败: {}", e))
+}
+
+fn refresh_recent_project_stats_cache(paths: Vec<String>) {
+    let mut cache = read_recent_project_stats_cache();
+    let mut changed = false;
+
+    for path in paths {
+        let stats = compute_project_stats(&path);
+        cache.insert(path, build_cached_project_stats(&stats));
+        changed = true;
+    }
+
+    if changed {
+        let _ = write_recent_project_stats_cache(&cache);
+    }
+}
+
+fn compute_project_stats(path: &str) -> ProjectStats {
+    use std::fs;
+    use std::path::Path;
+    use walkdir::WalkDir;
+
+    let project_path = Path::new(path);
+    let mut file_count: u64 = 0;
+    let mut total_size: u64 = 0;
+
+    if project_path.exists() && project_path.is_dir() {
+        for entry in WalkDir::new(project_path).follow_links(false).into_iter() {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+
+            if !entry.file_type().is_file() {
+                continue;
+            }
+
+            file_count = file_count.saturating_add(1);
+            if let Ok(meta) = entry.metadata() {
+                total_size = total_size.saturating_add(meta.len());
+            }
+        }
+    }
+
+    let version = project_path
+        .join("project.json")
+        .to_str()
+        .and_then(|p| fs::read_to_string(p).ok())
+        .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
+        .and_then(|v| {
+            v.get("version")
+                .and_then(|vv| vv.as_str())
+                .map(|s| s.to_string())
+        });
+
+    ProjectStats {
+        path: path.to_string(),
+        file_count,
+        total_size,
+        version,
+    }
+}
+
 /// 打开文件选择对话框
 #[tauri::command]
 pub async fn open_file_dialog(mode: String) -> FileDialogResult {
@@ -515,6 +675,12 @@ fn get_recent_projects_path() -> std::path::PathBuf {
     use crate::services::ProjectService;
     let service = ProjectService::new();
     service.get_recent_projects_path()
+}
+
+fn get_recent_project_stats_cache_path() -> std::path::PathBuf {
+    use crate::services::ProjectService;
+    let service = ProjectService::new();
+    service.get_recent_project_stats_cache_path()
 }
 
 /// 更新最近项目列表

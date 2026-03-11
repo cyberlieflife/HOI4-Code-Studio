@@ -34,6 +34,20 @@ impl ProjectService {
             })
     }
 
+    /// 获取最近项目统计缓存文件路径
+    pub fn get_recent_project_stats_cache_path(&self) -> PathBuf {
+        let config_path = self.get_config_path();
+        config_path
+            .parent()
+            .map(|p| p.join("recent_project_stats_cache.json"))
+            .unwrap_or_else(|| {
+                let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+                config_dir
+                    .join("HOI4_GUI_Editor")
+                    .join("recent_project_stats_cache.json")
+            })
+    }
+
     /// 获取配置文件路径
     ///
     /// # 返回值

@@ -1223,13 +1223,17 @@ async function setTheme(themeId: string, saveToSettings = true) {
 /**
  * 从设置加载主题
  */
-async function loadThemeFromSettings() {
+async function loadThemeFromSettings(settings?: Record<string, unknown>) {
   try {
     await refreshCustomThemes()
-    const result = await loadSettings()
-    if (result.success && result.data) {
-      const settings = result.data as Record<string, unknown>
-      const savedTheme = settings.theme as string
+    const loadedSettings = settings ?? await (async () => {
+      const result = await loadSettings()
+      if (!result.success || !result.data) return null
+      return result.data as Record<string, unknown>
+    })()
+
+    if (loadedSettings) {
+      const savedTheme = loadedSettings.theme as string
       if (savedTheme && mergedThemes.value.some(t => t.id === savedTheme)) {
         currentThemeId.value = savedTheme
         applyTheme(currentTheme.value)
