@@ -345,6 +345,28 @@ async function handleRefreshIdeas() {
   await refreshIdeas()
 }
 
+async function loadEditorBackgroundData() {
+  try {
+    await refreshPlugins()
+    await loadDependenciesList()
+    markStartupStep('startup:editor-dependencies-loaded', '编辑器依赖列表加载完成')
+
+    await loadGameDirectory({ refreshRegistries: false })
+    markStartupStep('startup:editor-game-directory-loaded', '编辑器游戏目录加载完成')
+
+    await refreshTags()
+    markStartupStep('startup:editor-tags-loaded', '编辑器标签索引加载完成')
+
+    await refreshIdeas()
+    markStartupStep('startup:editor-ideas-loaded', '编辑器创意索引加载完成')
+
+    markStartupStep('startup:editor-background-ready', '编辑器后台初始化完成')
+    markStartupStep('startup:editor-ready', '编辑器启动流程完成')
+  } catch (error) {
+    logger.error('编辑器后台初始化失败:', error)
+  }
+}
+
 // 依赖项管理函数
 function handleSwitchToDependency(id: string) {
   activeDependencyId.value = id
@@ -1042,30 +1064,22 @@ onMounted(async () => {
   await loadInitialSettings()
   markStartupStep('startup:editor-settings-loaded', '编辑器基础设置加载完成')
   projectPath.value = route.query.path as string || ''
+  document.addEventListener('click', hideContextMenu)
   if (projectPath.value) {
-    await refreshPlugins()
     dependencyManager.setProjectPath(projectPath.value)
-    await loadProjectInfo()
+    await Promise.all([
+      loadProjectInfo(),
+      loadFileTree()
+    ])
     markStartupStep('startup:editor-project-info-loaded', '编辑器项目信息加载完成')
-    await loadFileTree()
     markStartupStep('startup:editor-file-tree-loaded', '编辑器文件树加载完成')
-    await loadGameDirectory()
-    markStartupStep('startup:editor-game-directory-loaded', '编辑器游戏目录加载完成')
-    // 加载依赖项列表
-    await loadDependenciesList()
-    markStartupStep('startup:editor-dependencies-loaded', '编辑器依赖列表加载完成')
-    // 首次加载 Tags 和 Ideas
-    await refreshTags()
-    markStartupStep('startup:editor-tags-loaded', '编辑器标签索引加载完成')
-    await refreshIdeas()
-    markStartupStep('startup:editor-ideas-loaded', '编辑器创意索引加载完成')
-    markStartupStep('startup:editor-ready', '编辑器启动流程完成')
+    markStartupStep('startup:editor-shell-ready', '编辑器首屏骨架就绪')
     // 启动目录树自动刷新
     startFileTreeAutoRefresh()
+    void loadEditorBackgroundData()
   } else {
     loading.value = false
   }
-  document.addEventListener('click', hideContextMenu)
 })
 
 // 组件卸载时清理

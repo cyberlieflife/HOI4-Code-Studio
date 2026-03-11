@@ -11,6 +11,7 @@ type StartupMark =
   | 'startup:home-recent-projects-loaded'
   | 'startup:home-ready'
   | 'startup:editor-mounted'
+  | 'startup:editor-shell-ready'
   | 'startup:editor-theme-loaded'
   | 'startup:editor-icons-loaded'
   | 'startup:editor-settings-loaded'
@@ -20,6 +21,7 @@ type StartupMark =
   | 'startup:editor-dependencies-loaded'
   | 'startup:editor-tags-loaded'
   | 'startup:editor-ideas-loaded'
+  | 'startup:editor-background-ready'
   | 'startup:editor-ready'
 
 function canMeasure() {

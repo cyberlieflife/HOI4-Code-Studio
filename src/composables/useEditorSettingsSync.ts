@@ -20,6 +20,10 @@ interface EditorSettingsSyncOptions {
   syncRoots: (options: RootSyncOptions) => void
 }
 
+interface LoadGameDirectoryOptions {
+  refreshRegistries?: boolean
+}
+
 export function useEditorSettingsSync(options: EditorSettingsSyncOptions) {
   const gameDirectory = ref('')
   const gameFileTree = ref<FileNode[]>([])
@@ -57,7 +61,9 @@ export function useEditorSettingsSync(options: EditorSettingsSyncOptions) {
     }
   }
 
-  async function loadGameDirectory() {
+  async function loadGameDirectory(loadOptions: LoadGameDirectoryOptions = {}) {
+    const { refreshRegistries = true } = loadOptions
+
     try {
       const result = await loadSettings()
       const dependencyPaths = getEnabledDependencyPaths()
@@ -73,8 +79,10 @@ export function useEditorSettingsSync(options: EditorSettingsSyncOptions) {
           dependencyPaths
         })
         await loadGameFileTree()
-        await options.refreshTags()
-        await ensureIdeaRegistry()
+        if (refreshRegistries) {
+          await options.refreshTags()
+          await ensureIdeaRegistry()
+        }
         return
       }
 
@@ -82,8 +90,10 @@ export function useEditorSettingsSync(options: EditorSettingsSyncOptions) {
         projectPath: options.projectPath.value,
         dependencyPaths
       })
-      await options.refreshTags()
-      await ensureIdeaRegistry()
+      if (refreshRegistries) {
+        await options.refreshTags()
+        await ensureIdeaRegistry()
+      }
     } catch (error) {
       logger.error('加载游戏目录设置失败:', error)
     }
