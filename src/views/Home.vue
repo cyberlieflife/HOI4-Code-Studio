@@ -5,10 +5,11 @@ import {
   openFileDialog,
   openProject,
   initializeProject,
-  loadSettings,
+  loadSettingsSnapshot,
   openUrl,
   getRecentProjects,
   getRecentProjectStats,
+  type Settings,
   type RecentProject,
   type ProjectStats
 } from '../api/tauri'
@@ -288,11 +289,8 @@ function formatBytes(bytes: number) {
 }
 
 // 检查游戏目录设置
-async function checkGameDirectory() {
-  const settings = await loadSettings()
-  
-  if (settings.success && settings.data) {
-    const data = settings.data as any
+async function checkGameDirectory(data: Settings) {
+  if (Object.keys(data).length > 0) {
     const gameDir = data.gameDirectory || ''
     
     // 检查是否是首次启动（通过检查是否有任何配置）
@@ -338,21 +336,15 @@ onMounted(() => {
   
   // 延迟执行耗时操作，避免阻塞UI渲染
   setTimeout(async () => {
-    // 检查游戏目录设置
-    await checkGameDirectory()
-    
-    // 检查是否启用了自动更新检测
-    const settings = await loadSettings()
-    if (settings.success && settings.data) {
-      const data = settings.data as any
-      const shouldCheckUpdates = data.checkForUpdates !== false
-      
-      if (shouldCheckUpdates) {
-        // 延迟检查更新，避免影响启动体验
-        setTimeout(() => {
-          checkAppUpdates()
-        }, 1000)
-      }
+    const settingsSnapshot = await loadSettingsSnapshot()
+    await checkGameDirectory(settingsSnapshot)
+
+    const shouldCheckUpdates = settingsSnapshot.checkForUpdates !== false
+    if (shouldCheckUpdates) {
+      // 延迟检查更新，避免影响启动体验
+      setTimeout(() => {
+        checkAppUpdates()
+      }, 1000)
     }
   }, 100)
 

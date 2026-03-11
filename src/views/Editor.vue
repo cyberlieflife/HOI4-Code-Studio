@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { buildDirectoryTreeFast, createFile, createFolder, writeFileContent, launchGame, renamePath, deletePath, openFolder } from '../api/tauri'
+import { buildDirectoryTreeFast, createFile, createFolder, writeFileContent, launchGame, renamePath, deletePath, openFolder, loadSettingsSnapshot, type Settings } from '../api/tauri'
 import 'highlight.js/styles/github-dark.css'
 import 'highlight.js/lib/languages/json'
 import 'highlight.js/lib/languages/yaml'
@@ -345,13 +345,13 @@ async function handleRefreshIdeas() {
   await refreshIdeas()
 }
 
-async function loadEditorBackgroundData() {
+async function loadEditorBackgroundData(settingsSnapshot: Settings) {
   try {
     await refreshPlugins()
     await loadDependenciesList()
     markStartupStep('startup:editor-dependencies-loaded', '编辑器依赖列表加载完成')
 
-    await loadGameDirectory({ refreshRegistries: false })
+    await loadGameDirectory({ refreshRegistries: false, settings: settingsSnapshot })
     markStartupStep('startup:editor-game-directory-loaded', '编辑器游戏目录加载完成')
 
     await refreshTags()
@@ -1052,16 +1052,14 @@ useKeyboardShortcuts({
 // 生命周期
 onMounted(async () => {
   markStartupStep('startup:editor-mounted', '编辑器页面挂载完成')
-  // 加载主题设置
-  await loadThemeFromSettings()
+  const settingsSnapshot = await loadSettingsSnapshot()
+  await Promise.all([
+    loadThemeFromSettings(settingsSnapshot),
+    loadIconSetFromSettings(settingsSnapshot),
+    loadInitialSettings(settingsSnapshot)
+  ])
   markStartupStep('startup:editor-theme-loaded', '编辑器主题加载完成')
-  
-  // 加载图标设置
-  await loadIconSetFromSettings()
   markStartupStep('startup:editor-icons-loaded', '编辑器图标集加载完成')
-  
-  // 加载设置
-  await loadInitialSettings()
   markStartupStep('startup:editor-settings-loaded', '编辑器基础设置加载完成')
   projectPath.value = route.query.path as string || ''
   document.addEventListener('click', hideContextMenu)
@@ -1076,7 +1074,7 @@ onMounted(async () => {
     markStartupStep('startup:editor-shell-ready', '编辑器首屏骨架就绪')
     // 启动目录树自动刷新
     startFileTreeAutoRefresh()
-    void loadEditorBackgroundData()
+    void loadEditorBackgroundData(settingsSnapshot)
   } else {
     loading.value = false
   }

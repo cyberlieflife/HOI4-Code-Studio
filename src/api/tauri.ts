@@ -496,11 +496,25 @@ export async function loadSettings(): Promise<JsonResult> {
  */
 export interface Settings {
   gameDirectory?: string
+  autoSave?: boolean
+  disableErrorHandling?: boolean
+  theme?: string
+  iconSet?: string
+  checkForUpdates?: boolean
+  lastProjectPath?: string
   [key: string]: unknown
 }
 
 export async function saveSettings(settings: Settings): Promise<JsonResult> {
   return await invoke('save_settings', { settings })
+}
+
+export async function loadSettingsSnapshot(): Promise<Settings> {
+  const result = await loadSettings()
+  if (!result.success || !result.data || typeof result.data !== 'object') {
+    return {}
+  }
+  return result.data as Settings
 }
 
 /**

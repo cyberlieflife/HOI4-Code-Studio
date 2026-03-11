@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from 'vue'
-import { buildDirectoryTreeFast, loadSettings, saveSettings } from '../api/tauri'
+import { buildDirectoryTreeFast, loadSettings, saveSettings, type Settings } from '../api/tauri'
 import type { Dependency } from '../types/dependency'
 import type { FileNode } from './useFileManager'
 import { ensureIdeaRegistry } from './useIdeaRegistry'
@@ -22,6 +22,7 @@ interface EditorSettingsSyncOptions {
 
 interface LoadGameDirectoryOptions {
   refreshRegistries?: boolean
+  settings?: Settings
 }
 
 export function useEditorSettingsSync(options: EditorSettingsSyncOptions) {
@@ -51,27 +52,35 @@ export function useEditorSettingsSync(options: EditorSettingsSyncOptions) {
     }
   }
 
-  async function loadInitialSettings() {
-    const settingsResult = await loadSettings()
-    if (settingsResult.success && settingsResult.data) {
-      const data = settingsResult.data as Record<string, unknown>
-      autoSave.value = data.autoSave !== false
-      disableErrorHandling.value = data.disableErrorHandling === true
-      options.loadFontConfigFromSettings(data)
-    }
+  async function loadInitialSettings(settings?: Settings) {
+    const data = settings ?? await (async () => {
+      const settingsResult = await loadSettings()
+      if (!settingsResult.success || !settingsResult.data) return null
+      return settingsResult.data as Settings
+    })()
+
+    if (!data) return
+
+    autoSave.value = data.autoSave !== false
+    disableErrorHandling.value = data.disableErrorHandling === true
+    options.loadFontConfigFromSettings(data)
   }
 
   async function loadGameDirectory(loadOptions: LoadGameDirectoryOptions = {}) {
-    const { refreshRegistries = true } = loadOptions
+    const { refreshRegistries = true, settings } = loadOptions
 
     try {
-      const result = await loadSettings()
       const dependencyPaths = getEnabledDependencyPaths()
+      const data = settings ?? await (async () => {
+        const result = await loadSettings()
+        if (!result.success || !result.data || typeof result.data !== 'object') return null
+        return result.data as Settings
+      })()
 
-      if (result.success && result.data && typeof result.data === 'object' && 'gameDirectory' in result.data) {
-        gameDirectory.value = String(result.data.gameDirectory || '')
-        autoSave.value = ('autoSave' in result.data && result.data.autoSave === false) ? false : true
-        disableErrorHandling.value = ('disableErrorHandling' in result.data && result.data.disableErrorHandling === true) ? true : false
+      if (data && 'gameDirectory' in data) {
+        gameDirectory.value = String(data.gameDirectory || '')
+        autoSave.value = data.autoSave === false ? false : true
+        disableErrorHandling.value = data.disableErrorHandling === true
 
         options.syncRoots({
           projectPath: options.projectPath.value,

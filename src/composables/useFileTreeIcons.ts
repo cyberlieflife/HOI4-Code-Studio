@@ -896,12 +896,16 @@ async function setIconSet(iconSetId: string, saveToSettings = true) {
 /**
  * 从设置加载图标集
  */
-async function loadIconSetFromSettings() {
+async function loadIconSetFromSettings(settings?: Record<string, unknown>) {
   try {
-    const result = await loadSettings()
-    if (result.success && result.data) {
-      const settings = result.data as Record<string, unknown>
-      const savedIconSet = settings.iconSet as string
+    const loadedSettings = settings ?? await (async () => {
+      const result = await loadSettings()
+      if (!result.success || !result.data) return null
+      return result.data as Record<string, unknown>
+    })()
+
+    if (loadedSettings) {
+      const savedIconSet = loadedSettings.iconSet as string
       if (savedIconSet && iconSets.some(set => set.id === savedIconSet)) {
         currentIconSetId.value = savedIconSet
       } else {
