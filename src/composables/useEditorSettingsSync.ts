@@ -3,7 +3,7 @@ import { buildDirectoryTreeFast, loadSettings, saveSettings, type Settings } fro
 import type { Dependency } from '../types/dependency'
 import type { FileNode } from './useFileManager'
 import { ensureIdeaRegistry } from './useIdeaRegistry'
-import { convertRustFileNode } from '../utils/fileUtils'
+import { convertRustFileNode, INITIAL_FILE_TREE_DEPTH } from '../utils/fileUtils'
 import { logger } from '../utils/logger'
 
 interface RootSyncOptions {
@@ -41,7 +41,7 @@ export function useEditorSettingsSync(options: EditorSettingsSyncOptions) {
 
     isLoadingGameTree.value = true
     try {
-      const result = await buildDirectoryTreeFast(gameDirectory.value, 3)
+      const result = await buildDirectoryTreeFast(gameDirectory.value, INITIAL_FILE_TREE_DEPTH)
       if (result.success && result.tree) {
         gameFileTree.value = result.tree.map(convertRustFileNode)
       }

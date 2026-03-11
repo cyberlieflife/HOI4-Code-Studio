@@ -41,7 +41,7 @@ import { useProjectFileTreeLoader } from '../composables/useProjectFileTreeLoade
 import { useAutoRefreshInterval } from '../composables/useAutoRefreshInterval'
 
 // 新提取的模块
-import { escapeRegExp, isImageFile, isPathUnder, convertRustFileNode } from '../utils/fileUtils'
+import { escapeRegExp, isImageFile, isPathUnder, convertRustFileNode, DIRECTORY_EXPAND_LOAD_DEPTH } from '../utils/fileUtils'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
 import { useContextMenu } from '../composables/useContextMenu'
 import { loadFontConfigFromSettings } from '../composables/useEditorFont'
@@ -412,7 +412,7 @@ async function toggleFolder(node: FileNode) {
   node.expanded = !node.expanded
   if (node.expanded && (!node.children || node.children.length === 0)) {
     try {
-      const result = await buildDirectoryTreeFast(node.path, 2)
+      const result = await buildDirectoryTreeFast(node.path, DIRECTORY_EXPAND_LOAD_DEPTH)
       if (result.success && result.tree) {
         node.children = result.tree.map(convertRustFileNode)
       }
@@ -428,7 +428,7 @@ async function toggleGameFolder(node: FileNode) {
   node.expanded = !node.expanded
   if (node.expanded && (!node.children || node.children.length === 0)) {
     try {
-      const result = await buildDirectoryTreeFast(node.path, 2)
+      const result = await buildDirectoryTreeFast(node.path, DIRECTORY_EXPAND_LOAD_DEPTH)
       if (result.success && result.tree) {
         node.children = result.tree.map(convertRustFileNode)
       }
