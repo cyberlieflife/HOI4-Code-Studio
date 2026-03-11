@@ -104,6 +104,7 @@ pub fn run() {
             commands::open_project,
             commands::get_recent_projects,
             commands::get_recent_project_stats,
+            commands::get_recent_project_stats_cached,
             commands::open_file_dialog,
             commands::exit_application,
             commands::open_settings,

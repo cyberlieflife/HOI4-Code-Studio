@@ -37,7 +37,7 @@ pub struct RecentProjectsResult {
 }
 
 /// 项目统计信息
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectStats {
     pub path: String,

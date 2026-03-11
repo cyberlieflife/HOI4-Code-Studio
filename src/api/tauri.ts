@@ -351,7 +351,7 @@ export async function getRecentProjects(): Promise<RecentProjectsResult> {
 }
 
 export async function getRecentProjectStats(paths: string[]): Promise<RecentProjectStatsResult> {
-  return await invoke('get_recent_project_stats', { paths })
+  return await invoke('get_recent_project_stats_cached', { paths })
 }
 
 /**
