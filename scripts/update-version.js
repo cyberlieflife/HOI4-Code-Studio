@@ -134,23 +134,23 @@ function updateCargoLock(version) {
   }
 }
 
-/**
- * 更新 tauri.conf.json
- */
-function updateTauriConfig(version) {
-  try {
-    const filePath = FILES_TO_UPDATE.tauriConfig;
-    const content = fs.readFileSync(filePath, 'utf8');
-    const config = JSON.parse(content);
+// /**
+//  * 更新 tauri.conf.json
+//  */
+// function updateTauriConfig(version) {
+//   try {
+//     const filePath = FILES_TO_UPDATE.tauriConfig;
+//     const content = fs.readFileSync(filePath, 'utf8');
+//     const config = JSON.parse(content);
 
-    config.version = version;
+//     config.version = version;
 
-    fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n', 'utf8');
-    console.log(`✅ 更新 tauri.conf.json: ${version}`);
-  } catch (error) {
-    console.error('❌ 更新 tauri.conf.json 失败:', error.message);
-  }
-}
+//     fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+//     console.log(`✅ 更新 tauri.conf.json: ${version}`);
+//   } catch (error) {
+//     console.error('❌ 更新 tauri.conf.json 失败:', error.message);
+//   }
+// }
 
 /**
  * 更新 Vue 文件中的版本号
