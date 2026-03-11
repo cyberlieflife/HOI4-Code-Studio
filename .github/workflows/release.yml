@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'Dev_*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build-and-release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate release notes
+        id: notes
+        shell: pwsh
+        run: node scripts/generate-release-notes.js --tag "${{ github.ref_name }}" --output release-notes.md --github-output $env:GITHUB_OUTPUT
+
+      - name: Run tests
+        run: npm run test:run
+
+      - name: Build application
+        run: npm run tauri build
+
+      - name: Prepare release asset
+        shell: pwsh
+        run: |
+          $assetPath = "src-tauri/target/release/hoi4-code-studio.exe"
+          if (-not (Test-Path $assetPath)) {
+            throw "未找到发布产物: $assetPath"
+          }
+          Copy-Item $assetPath "hoi4-code-studio.exe" -Force
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ steps.notes.outputs.release_name }}
+          body_path: release-notes.md
+          files: hoi4-code-studio.exe
+          fail_on_unmatched_files: true

@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "version:update": "node scripts/update-version.js",
+    "release:notes": "node scripts/generate-release-notes.js",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
