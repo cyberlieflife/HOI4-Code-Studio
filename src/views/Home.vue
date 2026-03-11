@@ -26,7 +26,7 @@ const loadingRecent = ref(true)
 const searchQuery = ref('')
 
 // 当前版本
-const CURRENT_VERSION = 'v0.3.4-dev'
+const CURRENT_VERSION = 'v0.3.5-dev'
 
 // 更新提示
 const showUpdateDialog = ref(false)
