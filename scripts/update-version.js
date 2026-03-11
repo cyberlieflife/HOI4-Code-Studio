@@ -199,7 +199,7 @@ function main() {
   updatePackageLockJson(version);
   updateCargoToml(version);
   updateCargoLock(version);
-  updateTauriConfig(version);
+  // updateTauriConfig(version);
   updateVueFile(FILES_TO_UPDATE.homeVue, version);
   updateVueFile(FILES_TO_UPDATE.settingsVue, version);
   
