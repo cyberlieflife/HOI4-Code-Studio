@@ -13,6 +13,7 @@ import {
   type ProjectStats
 } from '../api/tauri'
 import MarkdownIt from 'markdown-it'
+import { markStartupStep } from '../utils/startupPerformance'
 
 const ChangelogPanel = defineAsyncComponent(() => import('../components/ChangelogPanel.vue'))
 
@@ -222,6 +223,7 @@ async function loadRecentProjects() {
 
     projects.value = result.projects
     loadingRecent.value = false
+    markStartupStep('startup:home-recent-projects-loaded', '首页最近项目加载完成')
 
     void loadRecentProjectStats(result.projects.map(project => project.path), requestId)
   } catch (error) {
@@ -329,6 +331,7 @@ function goToSettings() {
 
 // 组件挂载后显示欢迎消息并检查更新
 onMounted(() => {
+  markStartupStep('startup:home-mounted', '首页挂载完成')
   setTimeout(() => {
     displayStatus('欢迎使用 Hearts of Iron IV GUI Mod Editor', 3000)
   }, 500)
@@ -354,6 +357,10 @@ onMounted(() => {
   }, 100)
 
   loadRecentProjects()
+
+  setTimeout(() => {
+    markStartupStep('startup:home-ready', '首页首屏可交互')
+  }, 0)
 })
 </script>
 

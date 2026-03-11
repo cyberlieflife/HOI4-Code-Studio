@@ -53,6 +53,7 @@ import { useSearchNavigation } from '../composables/useSearchNavigation'
 import { useEditorErrorNavigation } from '../composables/useEditorErrorNavigation'
 import PluginIframeHost from '../components/plugins/PluginIframeHost.vue'
 import { useEditorUiState } from '../composables/useEditorUiState'
+import { markStartupStep } from '../utils/startupPerformance'
 
 // Highlight.js 语言定义已移至 useSyntaxHighlight.ts 中
 
@@ -1028,26 +1029,37 @@ useKeyboardShortcuts({
 
 // 生命周期
 onMounted(async () => {
+  markStartupStep('startup:editor-mounted', '编辑器页面挂载完成')
   // 加载主题设置
   await loadThemeFromSettings()
+  markStartupStep('startup:editor-theme-loaded', '编辑器主题加载完成')
   
   // 加载图标设置
   await loadIconSetFromSettings()
+  markStartupStep('startup:editor-icons-loaded', '编辑器图标集加载完成')
   
   // 加载设置
   await loadInitialSettings()
+  markStartupStep('startup:editor-settings-loaded', '编辑器基础设置加载完成')
   projectPath.value = route.query.path as string || ''
   if (projectPath.value) {
     await refreshPlugins()
     dependencyManager.setProjectPath(projectPath.value)
     await loadProjectInfo()
+    markStartupStep('startup:editor-project-info-loaded', '编辑器项目信息加载完成')
     await loadFileTree()
+    markStartupStep('startup:editor-file-tree-loaded', '编辑器文件树加载完成')
     await loadGameDirectory()
+    markStartupStep('startup:editor-game-directory-loaded', '编辑器游戏目录加载完成')
     // 加载依赖项列表
     await loadDependenciesList()
+    markStartupStep('startup:editor-dependencies-loaded', '编辑器依赖列表加载完成')
     // 首次加载 Tags 和 Ideas
     await refreshTags()
+    markStartupStep('startup:editor-tags-loaded', '编辑器标签索引加载完成')
     await refreshIdeas()
+    markStartupStep('startup:editor-ideas-loaded', '编辑器创意索引加载完成')
+    markStartupStep('startup:editor-ready', '编辑器启动流程完成')
     // 启动目录树自动刷新
     startFileTreeAutoRefresh()
   } else {
