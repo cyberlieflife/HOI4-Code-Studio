@@ -253,7 +253,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useMapEngine } from '../../composables/useMapEngine'
-import { loadSettings, type ProvinceDefinition } from '../../api/tauri'
+import { loadSettings, type ProvinceDefinition, type StateDefinition } from '../../api/tauri'
 import { logMapEvent, measureMapAsync, measureMapSync } from '../../utils/mapPerformance'
 
 const props = defineProps<{
@@ -319,6 +319,10 @@ const isHighlightEnabled = ref(true) // 默认开启高亮
 const highlightMode = ref<'tile' | 'province'>('tile') // 高亮模式：地块或省份
 const hoverProvinceId = ref<number | null>(null)
 const hoverOutline = ref<Uint32Array | null>(null)
+const outlineCache = new Map<string, Uint32Array>()
+let hoverLookupTimer: number | null = null
+let hoverLookupSequence = 0
+let lastHoverLookupKey = ''
 
 // 渲染缓存与分块 (LOD & LRU)
 const TILE_SIZE = 512
@@ -408,13 +412,31 @@ interface ProvinceHoverInfo extends ProvinceDefinition {
 
 type HoverInfo = StateHoverInfo | ProvinceHoverInfo
 
+const definitionById = computed(() => {
+  const map = new Map<number, ProvinceDefinition>()
+  for (const definition of definitions.value) {
+    map.set(definition.id, definition)
+  }
+  return map
+})
+
+const stateByProvinceId = computed(() => {
+  const map = new Map<number, StateDefinition>()
+  for (const state of states.value) {
+    for (const provinceId of state.provinces) {
+      map.set(provinceId, state)
+    }
+  }
+  return map
+})
+
 const hoverInfo = computed<HoverInfo | null>(() => {
   if (!hoverProvinceId.value || !definitions.value) return null
   
-  const def = definitions.value.find(d => d.id === hoverProvinceId.value)
+  const def = definitionById.value.get(hoverProvinceId.value)
   if (!def) return null
 
-  const state = states.value.find(s => s.provinces.includes(def.id))
+  const state = stateByProvinceId.value.get(def.id)
 
   // 根据高亮模式（highlightMode）而非视图模式（currentMode）来决定预览框内容
   if (highlightMode.value === 'province') {
@@ -495,25 +517,44 @@ onUnmounted(() => {
   }
 
   // 释放 ImageBitmap 资源
+  if (hoverLookupTimer !== null) {
+    clearTimeout(hoverLookupTimer)
+    hoverLookupTimer = null
+  }
+
   clearTileCache()
   clearMinimapCache()
+  clearOutlineCache()
 })
 
 watch(hoverProvinceId, async (newId) => {
   if (newId && isHighlightEnabled.value) {
     try {
-      let points: Uint32Array | undefined;
+      let cacheKey: string | null = null
+      let points: Uint32Array | undefined
       if (highlightMode.value === 'tile') {
-        points = await getOutline(newId)
+        cacheKey = `tile:${newId}`
+        points = outlineCache.get(cacheKey)
+        if (!points) {
+          points = await getOutline(newId)
+        }
       } else {
         // 查找所属的州
-        const state = states.value.find(s => s.provinces.includes(newId))
+        const state = stateByProvinceId.value.get(newId)
         if (state) {
-          points = await getStateOutline(state.id)
+          cacheKey = `state:${state.id}`
+          points = outlineCache.get(cacheKey)
+          if (!points) {
+            points = await getStateOutline(state.id)
+          }
         }
       }
       
       // 防止竞态条件
+      if (cacheKey && points) {
+        outlineCache.set(cacheKey, points)
+      }
+
       if (hoverProvinceId.value === newId) {
         hoverOutline.value = points ?? null
         requestRender()
@@ -641,6 +682,50 @@ async function setMode(mode: MapMode) {
   })
 }
 
+async function runHoverProvinceLookup() {
+  if (!mapData.value || isDragging.value) return
+
+  const { width, height } = mapData.value!
+  const x = Math.floor((mousePos.value.x - translateX.value) / scale.value)
+  const y = Math.floor((mousePos.value.y - translateY.value) / scale.value)
+
+  mouseMapPos.value = { x, y }
+
+  if (x < 0 || x >= width || y < 0 || y >= height) {
+    lastHoverLookupKey = ''
+    hoverLookupSequence += 1
+    if (hoverProvinceId.value !== null) {
+      hoverProvinceId.value = null
+    }
+    return
+  }
+
+  const lookupKey = `${x}:${y}`
+  if (lookupKey === lastHoverLookupKey) return
+  lastHoverLookupKey = lookupKey
+
+  const requestId = ++hoverLookupSequence
+
+  try {
+    const id = await measureMapAsync('viewer.updateHoverProvince.getProvinceId', async () => (
+      await getProvinceId(x, y)
+    ))
+
+    if (requestId !== hoverLookupSequence || lookupKey !== lastHoverLookupKey) {
+      return
+    }
+
+    if (hoverProvinceId.value !== id) {
+      hoverProvinceId.value = id
+    }
+  } catch (e) {
+    if (requestId === hoverLookupSequence) {
+      lastHoverLookupKey = ''
+    }
+    console.error(e)
+  }
+}
+
 /**
  * 重置地图缓存
  */
@@ -648,6 +733,11 @@ async function resetMapCache() {
   // 清理旧缓存
   clearTileCache()
   clearMinimapCache()
+  clearOutlineCache()
+  lastHoverLookupKey = ''
+  hoverLookupSequence += 1
+  hoverProvinceId.value = null
+  hoverOutline.value = null
   updateCanvasSize()
   requestRender()
 }
@@ -668,6 +758,10 @@ function clearMinimapCache() {
     bitmap.close()
   }
   minimapCache.clear()
+}
+
+function clearOutlineCache() {
+  outlineCache.clear()
 }
 
 function requestRender() {
@@ -1024,6 +1118,10 @@ function handleWheel(e: WheelEvent) {
 function handleMouseDown(e: MouseEvent) {
   if (e.button !== 0) return
   isDragging.value = true
+  if (hoverLookupTimer !== null) {
+    clearTimeout(hoverLookupTimer)
+    hoverLookupTimer = null
+  }
   dragStart.value = {
     x: e.clientX,
     y: e.clientY,
@@ -1049,7 +1147,7 @@ function handleMouseMove(e: MouseEvent) {
     translateY.value = dragStart.value.ty + dy
     requestRender()
   } else {
-    updateHoverProvince()
+    scheduleHoverProvinceUpdate()
   }
 }
 
@@ -1058,16 +1156,28 @@ function handleMouseUp() {
   if (containerRef.value) containerRef.value.style.cursor = 'crosshair'
 }
 
+function scheduleHoverProvinceUpdate() {
+  if (hoverLookupTimer !== null) return
+
+  hoverLookupTimer = window.setTimeout(() => {
+    hoverLookupTimer = null
+    void updateHoverProvince()
+  }, 24)
+}
+
 async function updateHoverProvince() {
+  await runHoverProvinceLookup()
+  return
+
   if (!mapData.value) return
 
-  const { width, height } = mapData.value
+  const { width, height } = mapData.value!
   const x = Math.floor((mousePos.value.x - translateX.value) / scale.value)
   const y = Math.floor((mousePos.value.y - translateY.value) / scale.value)
 
   mouseMapPos.value = { x, y }
 
-  if (x >= 0 && x < width && y >= 0 && y < height) {
+  if (x < 0 || x >= width || y < 0 || y >= height) {
     // 异步获取省份 ID
     try {
       const id = await measureMapAsync('viewer.updateHoverProvince.getProvinceId', async () => (
