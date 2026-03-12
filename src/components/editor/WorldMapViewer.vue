@@ -324,6 +324,7 @@ const hoverOutline = ref<Uint32Array | null>(null)
 const TILE_SIZE = 512
 const MAX_CACHE_SIZE = 50 // 限制最大缓存切片数，控制内存
 const tileCache = new Map<string, ImageBitmap>()
+const minimapCache = new Map<string, ImageBitmap>()
 const tileUsage = new Map<string, number>() // LRU 追踪
 let isRendering = false
 let isUnmounted = false
@@ -494,10 +495,8 @@ onUnmounted(() => {
   }
 
   // 释放 ImageBitmap 资源
-  for (const bitmap of tileCache.values()) {
-    bitmap.close()
-  }
-  tileCache.clear()
+  clearTileCache()
+  clearMinimapCache()
 })
 
 watch(hoverProvinceId, async (newId) => {
@@ -634,8 +633,8 @@ async function setMode(mode: MapMode) {
   loadingProgress.value = 0
   currentMode.value = mode
   updateProgress('切换视图', '清理缓存...', 50)
-  await resetMapCache()
-  await drawMinimap()
+  requestRender()
+  void drawMinimap()
   updateProgress('就绪', '完成', 100)
   setTimeout(() => { isLoading.value = false }, 300)
   logMapEvent('viewer.setMode:done', { mode })
@@ -647,11 +646,8 @@ async function setMode(mode: MapMode) {
  */
 async function resetMapCache() {
   // 清理旧缓存
-  for (const bitmap of tileCache.values()) {
-    bitmap.close()
-  }
-  tileCache.clear()
-  
+  clearTileCache()
+  clearMinimapCache()
   updateCanvasSize()
   requestRender()
 }
@@ -659,6 +655,21 @@ async function resetMapCache() {
 /**
  * 请求渲染一帧
  */
+function clearTileCache() {
+  for (const bitmap of tileCache.values()) {
+    bitmap.close()
+  }
+  tileCache.clear()
+  tileUsage.clear()
+}
+
+function clearMinimapCache() {
+  for (const bitmap of minimapCache.values()) {
+    bitmap.close()
+  }
+  minimapCache.clear()
+}
+
 function requestRender() {
   if (isRendering || isUnmounted) return
   isRendering = true
@@ -957,12 +968,19 @@ async function drawMinimap() {
   const canvas = minimapCanvasRef.value
   const displayWidth = MINIMAP_SIZE
   const displayHeight = Math.floor(mapData.value.height * (MINIMAP_SIZE / mapData.value.width))
+  const cacheKey = `${props.projectPath}:${currentMode.value}:${displayWidth}:${displayHeight}`
   
   canvas.width = displayWidth
   canvas.height = displayHeight
   
   const ctx = canvas.getContext('2d', { alpha: false })
   if (!ctx) return
+
+  const cachedBitmap = minimapCache.get(cacheKey)
+  if (cachedBitmap) {
+    ctx.drawImage(cachedBitmap, 0, 0)
+    return
+  }
 
   try {
     // 从后端获取预览图
@@ -973,6 +991,8 @@ async function drawMinimap() {
     
     const imageData = new ImageData(new Uint8ClampedArray(rgba), displayWidth, displayHeight)
     ctx.putImageData(imageData, 0, 0)
+    const bitmap = await createImageBitmap(imageData)
+    minimapCache.set(cacheKey, bitmap)
   } catch (e) {
     console.error('Failed to draw minimap:', e)
   }

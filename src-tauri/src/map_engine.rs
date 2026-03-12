@@ -8,7 +8,7 @@ use memmap2::Mmap;
 use once_cell::sync::Lazy;
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 static RE_STATE_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"id\s*=\s*(\d+)").unwrap());
@@ -54,11 +54,11 @@ pub struct MapContext {
     pub country_same_color_border_points: Vec<u32>,
 }
 
-pub struct MapState(pub Mutex<Option<MapContext>>);
+pub struct MapState(pub RwLock<Option<Arc<MapContext>>>);
 
 impl Default for MapState {
     fn default() -> Self {
-        MapState(Mutex::new(None))
+        MapState(RwLock::new(None))
     }
 }
 
@@ -1057,8 +1057,8 @@ pub fn initialize_map_context(
     let mut states_list = states.clone();
     states_list.sort_by_key(|state| state.id);
 
-    let mut lock = state.0.lock().map_err(|_| "Failed to lock state")?;
-    *lock = Some(MapContext {
+    let mut lock = state.0.write().map_err(|_| "Failed to lock state")?;
+    *lock = Some(Arc::new(MapContext {
         width,
         height,
         province_ids,
@@ -1075,7 +1075,7 @@ pub fn initialize_map_context(
         province_outlines,
         state_outlines,
         country_same_color_border_points,
-    });
+    }));
 
     log_map_perf("rust.initialize_map_context.total", started_at);
     Ok(MapInitializationData {
@@ -1094,10 +1094,16 @@ pub fn get_province_outline(
     state: tauri::State<MapState>,
     province_id: u32,
 ) -> Result<Vec<u8>, String> {
-    let context_guard = state.0.lock().map_err(|_| "Failed to lock map state")?;
-    let context = context_guard
-        .as_ref()
-        .ok_or("Map context not initialized")?;
+    let context = {
+        let context_guard = state
+            .0
+            .read()
+            .map_err(|_| "Failed to lock map state")?;
+        context_guard
+            .as_ref()
+            .cloned()
+            .ok_or("Map context not initialized")?
+    };
 
     if let Some(points) = context.province_outlines.get(&province_id) {
         // 直接返回原始内存字节数据，前端将其视为 Uint32Array
@@ -1112,10 +1118,16 @@ pub fn get_province_outline(
 
 #[tauri::command]
 pub fn get_state_outline(state: tauri::State<MapState>, state_id: u32) -> Result<Vec<u8>, String> {
-    let context_guard = state.0.lock().map_err(|_| "Failed to lock map state")?;
-    let context = context_guard
-        .as_ref()
-        .ok_or("Map context not initialized")?;
+    let context = {
+        let context_guard = state
+            .0
+            .read()
+            .map_err(|_| "Failed to lock map state")?;
+        context_guard
+            .as_ref()
+            .cloned()
+            .ok_or("Map context not initialized")?
+    };
 
     if let Some(points) = context.state_outlines.get(&state_id) {
         let byte_ptr = points.as_ptr() as *const u8;
@@ -1230,8 +1242,10 @@ fn apply_country_same_color_borders_to_tile(
 
 #[tauri::command]
 pub fn get_map_metadata(state: tauri::State<MapState>) -> Result<MapMetadata, String> {
-    let lock = state.0.lock().map_err(|_| "Failed to lock state")?;
-    let ctx = lock.as_ref().ok_or("Map not initialized")?;
+    let ctx = {
+        let lock = state.0.read().map_err(|_| "Failed to lock state")?;
+        lock.as_ref().cloned().ok_or("Map not initialized")?
+    };
 
     Ok(MapMetadata {
         width: ctx.width,
@@ -1248,8 +1262,10 @@ pub fn get_map_preview(
     mode: String,
 ) -> Result<Vec<u8>, String> {
     let started_at = Instant::now();
-    let lock = state.0.lock().map_err(|_| "Failed to lock state")?;
-    let ctx = lock.as_ref().ok_or("Map not initialized")?;
+    let ctx = {
+        let lock = state.0.read().map_err(|_| "Failed to lock state")?;
+        lock.as_ref().cloned().ok_or("Map not initialized")?
+    };
 
     let map_width = ctx.width;
     let map_height = ctx.height;
@@ -1323,8 +1339,10 @@ pub fn get_province_at_point(
     y: u32,
 ) -> Result<Option<u32>, String> {
     let started_at = Instant::now();
-    let lock = state.0.lock().map_err(|_| "Failed to lock state")?;
-    let ctx = lock.as_ref().ok_or("Map not initialized")?;
+    let ctx = {
+        let lock = state.0.read().map_err(|_| "Failed to lock state")?;
+        lock.as_ref().cloned().ok_or("Map not initialized")?
+    };
 
     if x >= ctx.width || y >= ctx.height {
         return Ok(None);
@@ -1350,8 +1368,10 @@ pub fn get_map_tile_direct(
     mode: String,
 ) -> Result<Vec<u8>, String> {
     let started_at = Instant::now();
-    let lock = state.0.lock().map_err(|_| "Failed to lock state")?;
-    let ctx = lock.as_ref().ok_or("Map not initialized")?;
+    let ctx = {
+        let lock = state.0.read().map_err(|_| "Failed to lock state")?;
+        lock.as_ref().cloned().ok_or("Map not initialized")?
+    };
 
     let tile_size = 512;
     let scale = zoom.max(1);
