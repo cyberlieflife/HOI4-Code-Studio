@@ -253,7 +253,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useMapEngine } from '../../composables/useMapEngine'
-import { loadSettings, type ProvinceDefinition } from '../../api/tauri'
+import { loadSettings, type ProvinceDefinition, type StateDefinition } from '../../api/tauri'
+import { logMapEvent, measureMapAsync, measureMapSync } from '../../utils/mapPerformance'
 
 const props = defineProps<{
   projectPath: string
@@ -318,11 +319,16 @@ const isHighlightEnabled = ref(true) // 默认开启高亮
 const highlightMode = ref<'tile' | 'province'>('tile') // 高亮模式：地块或省份
 const hoverProvinceId = ref<number | null>(null)
 const hoverOutline = ref<Uint32Array | null>(null)
+const outlineCache = new Map<string, Uint32Array>()
+let hoverLookupTimer: number | null = null
+let hoverLookupSequence = 0
+let lastHoverLookupKey = ''
 
 // 渲染缓存与分块 (LOD & LRU)
 const TILE_SIZE = 512
 const MAX_CACHE_SIZE = 50 // 限制最大缓存切片数，控制内存
 const tileCache = new Map<string, ImageBitmap>()
+const minimapCache = new Map<string, ImageBitmap>()
 const tileUsage = new Map<string, number>() // LRU 追踪
 let isRendering = false
 let isUnmounted = false
@@ -406,13 +412,31 @@ interface ProvinceHoverInfo extends ProvinceDefinition {
 
 type HoverInfo = StateHoverInfo | ProvinceHoverInfo
 
+const definitionById = computed(() => {
+  const map = new Map<number, ProvinceDefinition>()
+  for (const definition of definitions.value) {
+    map.set(definition.id, definition)
+  }
+  return map
+})
+
+const stateByProvinceId = computed(() => {
+  const map = new Map<number, StateDefinition>()
+  for (const state of states.value) {
+    for (const provinceId of state.provinces) {
+      map.set(provinceId, state)
+    }
+  }
+  return map
+})
+
 const hoverInfo = computed<HoverInfo | null>(() => {
   if (!hoverProvinceId.value || !definitions.value) return null
   
-  const def = definitions.value.find(d => d.id === hoverProvinceId.value)
+  const def = definitionById.value.get(hoverProvinceId.value)
   if (!def) return null
 
-  const state = states.value.find(s => s.provinces.includes(def.id))
+  const state = stateByProvinceId.value.get(def.id)
 
   // 根据高亮模式（highlightMode）而非视图模式（currentMode）来决定预览框内容
   if (highlightMode.value === 'province') {
@@ -493,27 +517,44 @@ onUnmounted(() => {
   }
 
   // 释放 ImageBitmap 资源
-  for (const bitmap of tileCache.values()) {
-    bitmap.close()
+  if (hoverLookupTimer !== null) {
+    clearTimeout(hoverLookupTimer)
+    hoverLookupTimer = null
   }
-  tileCache.clear()
+
+  clearTileCache()
+  clearMinimapCache()
+  clearOutlineCache()
 })
 
 watch(hoverProvinceId, async (newId) => {
   if (newId && isHighlightEnabled.value) {
     try {
-      let points: Uint32Array | undefined;
+      let cacheKey: string | null = null
+      let points: Uint32Array | undefined
       if (highlightMode.value === 'tile') {
-        points = await getOutline(newId)
+        cacheKey = `tile:${newId}`
+        points = outlineCache.get(cacheKey)
+        if (!points) {
+          points = await getOutline(newId)
+        }
       } else {
         // 查找所属的州
-        const state = states.value.find(s => s.provinces.includes(newId))
+        const state = stateByProvinceId.value.get(newId)
         if (state) {
-          points = await getStateOutline(state.id)
+          cacheKey = `state:${state.id}`
+          points = outlineCache.get(cacheKey)
+          if (!points) {
+            points = await getStateOutline(state.id)
+          }
         }
       }
       
       // 防止竞态条件
+      if (cacheKey && points) {
+        outlineCache.set(cacheKey, points)
+      }
+
       if (hoverProvinceId.value === newId) {
         hoverOutline.value = points ?? null
         requestRender()
@@ -581,6 +622,8 @@ function updateProgress(status: string, detail: string, target: number) {
 }
 
 async function refreshMap() {
+  await measureMapAsync('viewer.refreshMap', async () => {
+    logMapEvent('viewer.refreshMap:start', { projectPath: props.projectPath })
   loadingProgress.value = 0
   updateProgress('加载地图资源', '读取 provinces.bmp...', 30)
   
@@ -591,12 +634,25 @@ async function refreshMap() {
   loadingTimer.value = progressTimer as any
 
   try {
-    await initMap(props.projectPath)
+    await measureMapAsync('viewer.refreshMap.initMap', async () => {
+      await initMap(props.projectPath)
+    })
     updateProgress('准备渲染', '初始化切片缓存...', 60)
-    await resetMapCache()
+    await measureMapAsync('viewer.refreshMap.resetMapCache', async () => {
+      await resetMapCache()
+    })
     updateProgress('构建导航器', '生成缩略图...', 90)
-    await drawMinimap()
+    void measureMapAsync(`viewer.refreshMap.drawMinimap(${currentMode.value})`, async () => {
+      await drawMinimap()
+    }).catch((error) => {
+      console.error('Failed to draw minimap:', error)
+    })
     updateProgress('就绪', '完成', 100)
+    logMapEvent('viewer.refreshMap:done', {
+      width: mapData.value?.width,
+      height: mapData.value?.height,
+      mode: currentMode.value
+    })
   } catch (e) {
     loadingStatus.value = '加载失败'
     loadingDetail.value = String(e)
@@ -608,18 +664,66 @@ async function refreshMap() {
       if (loadingProgress.value >= 100) isLoading.value = false
     }, 500)
   }
+  })
 }
 
 // 切换模式
 async function setMode(mode: MapMode) {
+  await measureMapAsync(`viewer.setMode(${mode})`, async () => {
   isLoading.value = true
   loadingProgress.value = 0
   currentMode.value = mode
   updateProgress('切换视图', '清理缓存...', 50)
-  await resetMapCache()
-  await drawMinimap()
+  requestRender()
+  void drawMinimap()
   updateProgress('就绪', '完成', 100)
   setTimeout(() => { isLoading.value = false }, 300)
+  logMapEvent('viewer.setMode:done', { mode })
+  })
+}
+
+async function runHoverProvinceLookup() {
+  if (!mapData.value || isDragging.value) return
+
+  const { width, height } = mapData.value!
+  const x = Math.floor((mousePos.value.x - translateX.value) / scale.value)
+  const y = Math.floor((mousePos.value.y - translateY.value) / scale.value)
+
+  mouseMapPos.value = { x, y }
+
+  if (x < 0 || x >= width || y < 0 || y >= height) {
+    lastHoverLookupKey = ''
+    hoverLookupSequence += 1
+    if (hoverProvinceId.value !== null) {
+      hoverProvinceId.value = null
+    }
+    return
+  }
+
+  const lookupKey = `${x}:${y}`
+  if (lookupKey === lastHoverLookupKey) return
+  lastHoverLookupKey = lookupKey
+
+  const requestId = ++hoverLookupSequence
+
+  try {
+    const id = await measureMapAsync('viewer.updateHoverProvince.getProvinceId', async () => (
+      await getProvinceId(x, y)
+    ))
+
+    if (requestId !== hoverLookupSequence || lookupKey !== lastHoverLookupKey) {
+      return
+    }
+
+    if (hoverProvinceId.value !== id) {
+      hoverProvinceId.value = id
+    }
+  } catch (e) {
+    if (requestId === hoverLookupSequence) {
+      lastHoverLookupKey = ''
+    }
+    console.error(e)
+  }
 }
 
 /**
@@ -627,11 +731,13 @@ async function setMode(mode: MapMode) {
  */
 async function resetMapCache() {
   // 清理旧缓存
-  for (const bitmap of tileCache.values()) {
-    bitmap.close()
-  }
-  tileCache.clear()
-  
+  clearTileCache()
+  clearMinimapCache()
+  clearOutlineCache()
+  lastHoverLookupKey = ''
+  hoverLookupSequence += 1
+  hoverProvinceId.value = null
+  hoverOutline.value = null
   updateCanvasSize()
   requestRender()
 }
@@ -639,13 +745,34 @@ async function resetMapCache() {
 /**
  * 请求渲染一帧
  */
+function clearTileCache() {
+  for (const bitmap of tileCache.values()) {
+    bitmap.close()
+  }
+  tileCache.clear()
+  tileUsage.clear()
+}
+
+function clearMinimapCache() {
+  for (const bitmap of minimapCache.values()) {
+    bitmap.close()
+  }
+  minimapCache.clear()
+}
+
+function clearOutlineCache() {
+  outlineCache.clear()
+}
+
 function requestRender() {
   if (isRendering || isUnmounted) return
   isRendering = true
   renderRafId = requestAnimationFrame(() => {
     if (isUnmounted) return
-    drawMap()
-    drawOverlay()
+    measureMapSync('viewer.requestRender.frame', () => {
+      drawMap()
+      drawOverlay()
+    })
     isRendering = false
     renderRafId = null
   })
@@ -888,7 +1015,9 @@ async function loadTiles(tiles: Array<{tx: number, ty: number, factor: number}>)
 
 async function fetchTile(tx: number, ty: number, zoom: number): Promise<ImageBitmap | null> {
    try {
-    const rgba = await renderTile(tx, ty, zoom, currentMode.value)
+    const rgba = await measureMapAsync(`viewer.fetchTile(${currentMode.value})`, async () => (
+      await renderTile(tx, ty, zoom, currentMode.value)
+    ))
     if (!rgba || rgba.length === 0) return null
     const imageData = new ImageData(new Uint8ClampedArray(rgba), 512, 512)
     return await createImageBitmap(imageData)
@@ -933,6 +1062,7 @@ async function drawMinimap() {
   const canvas = minimapCanvasRef.value
   const displayWidth = MINIMAP_SIZE
   const displayHeight = Math.floor(mapData.value.height * (MINIMAP_SIZE / mapData.value.width))
+  const cacheKey = `${props.projectPath}:${currentMode.value}:${displayWidth}:${displayHeight}`
   
   canvas.width = displayWidth
   canvas.height = displayHeight
@@ -940,13 +1070,23 @@ async function drawMinimap() {
   const ctx = canvas.getContext('2d', { alpha: false })
   if (!ctx) return
 
+  const cachedBitmap = minimapCache.get(cacheKey)
+  if (cachedBitmap) {
+    ctx.drawImage(cachedBitmap, 0, 0)
+    return
+  }
+
   try {
     // 从后端获取预览图
-    const rgba = await getPreview(displayWidth, displayHeight, currentMode.value)
+    const rgba = await measureMapAsync(`viewer.drawMinimap(${currentMode.value})`, async () => (
+      await getPreview(displayWidth, displayHeight, currentMode.value)
+    ))
     if (!rgba) return
     
     const imageData = new ImageData(new Uint8ClampedArray(rgba), displayWidth, displayHeight)
     ctx.putImageData(imageData, 0, 0)
+    const bitmap = await createImageBitmap(imageData)
+    minimapCache.set(cacheKey, bitmap)
   } catch (e) {
     console.error('Failed to draw minimap:', e)
   }
@@ -978,6 +1118,10 @@ function handleWheel(e: WheelEvent) {
 function handleMouseDown(e: MouseEvent) {
   if (e.button !== 0) return
   isDragging.value = true
+  if (hoverLookupTimer !== null) {
+    clearTimeout(hoverLookupTimer)
+    hoverLookupTimer = null
+  }
   dragStart.value = {
     x: e.clientX,
     y: e.clientY,
@@ -1003,7 +1147,7 @@ function handleMouseMove(e: MouseEvent) {
     translateY.value = dragStart.value.ty + dy
     requestRender()
   } else {
-    updateHoverProvince()
+    scheduleHoverProvinceUpdate()
   }
 }
 
@@ -1012,19 +1156,33 @@ function handleMouseUp() {
   if (containerRef.value) containerRef.value.style.cursor = 'crosshair'
 }
 
+function scheduleHoverProvinceUpdate() {
+  if (hoverLookupTimer !== null) return
+
+  hoverLookupTimer = window.setTimeout(() => {
+    hoverLookupTimer = null
+    void updateHoverProvince()
+  }, 24)
+}
+
 async function updateHoverProvince() {
+  await runHoverProvinceLookup()
+  return
+
   if (!mapData.value) return
 
-  const { width, height } = mapData.value
+  const { width, height } = mapData.value!
   const x = Math.floor((mousePos.value.x - translateX.value) / scale.value)
   const y = Math.floor((mousePos.value.y - translateY.value) / scale.value)
 
   mouseMapPos.value = { x, y }
 
-  if (x >= 0 && x < width && y >= 0 && y < height) {
+  if (x < 0 || x >= width || y < 0 || y >= height) {
     // 异步获取省份 ID
     try {
-      const id = await getProvinceId(x, y)
+      const id = await measureMapAsync('viewer.updateHoverProvince.getProvinceId', async () => (
+        await getProvinceId(x, y)
+      ))
       hoverProvinceId.value = id
     } catch (e) {
       console.error(e)
