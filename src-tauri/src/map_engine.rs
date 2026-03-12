@@ -663,6 +663,13 @@ pub struct StateDefinition {
     pub claims: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MapInitializationData {
+    pub metadata: MapMetadata,
+    pub definitions: Vec<ProvinceDefinition>,
+    pub states: Vec<StateDefinition>,
+}
+
 /// 解析州文件 (history/states/*.txt)
 pub fn parse_state_file(path: &Path) -> Result<StateDefinition, String> {
     let content = read_file_with_encoding(path)?;
@@ -750,7 +757,7 @@ pub fn initialize_map_context(
     definitions_path: String,
     states_path: String,
     country_colors_path: String,
-) -> Result<String, String> {
+) -> Result<MapInitializationData, String> {
     let started_at = Instant::now();
     // 1. Load Definitions
     let definitions_started_at = Instant::now();
@@ -1044,6 +1051,12 @@ pub fn initialize_map_context(
     log_map_perf("rust.initialize_map_context.outlines", outlines_started_at);
 
     // 7. Store in State
+    let province_count = province_ids.len();
+    let mut definitions_list: Vec<_> = definitions.values().cloned().collect();
+    definitions_list.sort_by_key(|definition| definition.id);
+    let mut states_list = states.clone();
+    states_list.sort_by_key(|state| state.id);
+
     let mut lock = state.0.lock().map_err(|_| "Failed to lock state")?;
     *lock = Some(MapContext {
         width,
@@ -1065,7 +1078,15 @@ pub fn initialize_map_context(
     });
 
     log_map_perf("rust.initialize_map_context.total", started_at);
-    Ok(format!("Map initialized: {}x{}", width, height))
+    Ok(MapInitializationData {
+        metadata: MapMetadata {
+            width,
+            height,
+            province_count,
+        },
+        definitions: definitions_list,
+        states: states_list,
+    })
 }
 
 #[tauri::command]

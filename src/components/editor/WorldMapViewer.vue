@@ -602,8 +602,10 @@ async function refreshMap() {
       await resetMapCache()
     })
     updateProgress('构建导航器', '生成缩略图...', 90)
-    await measureMapAsync(`viewer.refreshMap.drawMinimap(${currentMode.value})`, async () => {
+    void measureMapAsync(`viewer.refreshMap.drawMinimap(${currentMode.value})`, async () => {
       await drawMinimap()
+    }).catch((error) => {
+      console.error('Failed to draw minimap:', error)
     })
     updateProgress('就绪', '完成', 100)
     logMapEvent('viewer.refreshMap:done', {

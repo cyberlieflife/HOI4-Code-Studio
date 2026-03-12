@@ -1243,7 +1243,7 @@ export async function initializeMapContext(
   definitionsPath: string,
   statesPath: string,
   countryColorsPath: string
-): Promise<string> {
+): Promise<MapInitializationData> {
   return await invoke('initialize_map_context', {
     mapPath,
     definitionsPath,
@@ -1266,6 +1266,12 @@ export interface MapMetadata {
   width: number
   height: number
   province_count: number
+}
+
+export interface MapInitializationData {
+  metadata: MapMetadata
+  definitions: ProvinceDefinition[]
+  states: StateDefinition[]
 }
 
 export async function getMapMetadata(): Promise<MapMetadata> {

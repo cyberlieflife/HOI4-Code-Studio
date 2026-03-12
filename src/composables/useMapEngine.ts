@@ -1,15 +1,12 @@
 import { ref } from 'vue'
 import {
   loadDefaultMap,
-  loadMapDefinitions,
-  loadAllStates,
   type ProvinceDefinition,
   type DefaultMap,
   type StateDefinition,
   type RGBColor,
   initializeMapContext,
   getMapTileDirect,
-  getMapMetadata,
   getMapPreview,
   getProvinceAtPoint,
   getProvinceOutline,
@@ -73,7 +70,7 @@ export function useMapEngine() {
         countryColorsPath
       })
 
-      await measureMapAsync('frontend.initializeMapContext', async () => (
+      const initData = await measureMapAsync('frontend.initializeMapContext', async () => (
         await initializeMapContext(
           provincesPath,
           definitionsPath,
@@ -82,25 +79,13 @@ export function useMapEngine() {
         )
       ))
 
-      const metadata = await measureMapAsync('frontend.getMapMetadata', async () => (
-        await getMapMetadata()
-      ))
-      mapData.value = metadata
-
-      const defRes = await measureMapAsync('frontend.loadMapDefinitions', async () => (
-        await loadMapDefinitions(definitionsPath)
-      ))
-      if (defRes.success && defRes.data) {
-        definitions.value = defRes.data
-      }
-
-      states.value = await measureMapAsync('frontend.loadAllStates', async () => (
-        await loadAllStates(statesPath)
-      ))
+      mapData.value = initData.metadata
+      definitions.value = initData.definitions
+      states.value = initData.states
 
       logMapEvent('initMap:done', {
-        width: metadata.width,
-        height: metadata.height,
+        width: initData.metadata.width,
+        height: initData.metadata.height,
         definitions: definitions.value.length,
         states: states.value.length
       })
