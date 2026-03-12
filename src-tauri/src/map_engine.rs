@@ -9,6 +9,7 @@ use once_cell::sync::Lazy;
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::time::Instant;
 
 static RE_STATE_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"id\s*=\s*(\d+)").unwrap());
 static RE_STATE_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r#"name\s*=\s*"([^"]*)""#).unwrap());
@@ -59,6 +60,16 @@ impl Default for MapState {
     fn default() -> Self {
         MapState(Mutex::new(None))
     }
+}
+
+#[inline]
+fn log_map_perf(label: &str, started_at: Instant) {
+    #[cfg(debug_assertions)]
+    println!(
+        "[map] {}: {:.2}ms",
+        label,
+        started_at.elapsed().as_secs_f64() * 1000.0
+    );
 }
 
 /// 省份定义结构
@@ -712,6 +723,7 @@ pub fn parse_state_file(path: &Path) -> Result<StateDefinition, String> {
 /// 批量解析州目录 (并行版)
 #[tauri::command]
 pub fn load_all_states(states_dir: String) -> Vec<StateDefinition> {
+    let started_at = Instant::now();
     let path = Path::new(&states_dir);
     if !path.exists() || !path.is_dir() {
         return Vec::new();
@@ -721,11 +733,14 @@ pub fn load_all_states(states_dir: String) -> Vec<StateDefinition> {
         .map(|rd| rd.flatten().map(|e| e.path()).collect())
         .unwrap_or_else(|_| Vec::new());
 
-    entries
+    let states: Vec<_> = entries
         .par_iter()
         .filter(|p| p.is_file() && p.extension().map_or(false, |ext| ext == "txt"))
         .filter_map(|p| parse_state_file(p).ok())
-        .collect()
+        .collect();
+
+    log_map_perf("rust.load_all_states", started_at);
+    states
 }
 
 #[tauri::command]
@@ -736,7 +751,9 @@ pub fn initialize_map_context(
     states_path: String,
     country_colors_path: String,
 ) -> Result<String, String> {
+    let started_at = Instant::now();
     // 1. Load Definitions
+    let definitions_started_at = Instant::now();
     let definitions_vec = parse_definition_csv(Path::new(&definitions_path))
         .map_err(|e| format!("无法加载省份定义文件 ({}): {}", definitions_path, e))?;
     let mut definitions = HashMap::with_capacity(definitions_vec.len());
@@ -745,8 +762,10 @@ pub fn initialize_map_context(
         color_to_id.insert((def.r, def.g, def.b), def.id);
         definitions.insert(def.id, def);
     }
+    log_map_perf("rust.initialize_map_context.definitions", definitions_started_at);
 
     // 2. Load Provinces BMP (Ultra-Fast Native BMP Parsing with Mmap)
+    let bmp_started_at = Instant::now();
     let map_file = fs::File::open(Path::new(&map_path))
         .map_err(|e| format!("无法打开地图位图 ({}): {}", map_path, e))?;
     let mmap = unsafe { Mmap::map(&map_file).map_err(|e| format!("内存映射失败: {}", e))? };
@@ -788,13 +807,20 @@ pub fn initialize_map_context(
                 row[x] = color_lut[color_idx];
             }
         });
+    log_map_perf("rust.initialize_map_context.bmp", bmp_started_at);
 
     // 3. Load Country Colors
+    let country_colors_started_at = Instant::now();
     let country_colors: HashMap<String, RGBColor> = load_country_colors(country_colors_path)
         .into_iter()
         .collect();
+    log_map_perf(
+        "rust.initialize_map_context.country_colors",
+        country_colors_started_at,
+    );
 
     // 4. Load States & Owners
+    let states_started_at = Instant::now();
     let states = load_all_states(states_path);
     let mut state_owners = HashMap::with_capacity(definitions.len());
     let mut province_to_state = HashMap::with_capacity(definitions.len());
@@ -826,8 +852,10 @@ pub fn initialize_map_context(
             province_to_state.insert(p_id, state.id);
         }
     }
+    log_map_perf("rust.initialize_map_context.states", states_started_at);
 
     // 5. Generate Look-Up Tables (LUTs) for high-performance rendering
+    let lut_started_at = Instant::now();
     let max_id = definitions.keys().max().copied().unwrap_or(0);
     let lut_size = (max_id + 1) as usize;
 
@@ -895,8 +923,10 @@ pub fn initialize_map_context(
                 )
             },
         );
+    log_map_perf("rust.initialize_map_context.lut", lut_started_at);
 
     // Calculate province bounds (Parallel optimization using Vec instead of HashMap)
+    let bounds_started_at = Instant::now();
     let stats = province_ids
         .par_iter()
         .enumerate()
@@ -946,8 +976,10 @@ pub fn initialize_map_context(
             );
         }
     }
+    log_map_perf("rust.initialize_map_context.bounds", bounds_started_at);
 
     // 6. 预计算省份和州轮廓 (极致性能优化)
+    let outlines_started_at = Instant::now();
     let all_edges = detect_edges(width, height, &province_ids);
     let mut province_outlines: HashMap<u32, Vec<u32>> = HashMap::with_capacity(lut_size);
     let mut state_outlines: HashMap<u32, Vec<u32>> = HashMap::with_capacity(states.len());
@@ -1009,6 +1041,7 @@ pub fn initialize_map_context(
     });
     country_same_color_border_points.sort_unstable();
     country_same_color_border_points.dedup();
+    log_map_perf("rust.initialize_map_context.outlines", outlines_started_at);
 
     // 7. Store in State
     let mut lock = state.0.lock().map_err(|_| "Failed to lock state")?;
@@ -1031,6 +1064,7 @@ pub fn initialize_map_context(
         country_same_color_border_points,
     });
 
+    log_map_perf("rust.initialize_map_context.total", started_at);
     Ok(format!("Map initialized: {}x{}", width, height))
 }
 
@@ -1192,6 +1226,7 @@ pub fn get_map_preview(
     target_height: u32,
     mode: String,
 ) -> Result<Vec<u8>, String> {
+    let started_at = Instant::now();
     let lock = state.0.lock().map_err(|_| "Failed to lock state")?;
     let ctx = lock.as_ref().ok_or("Map not initialized")?;
 
@@ -1256,6 +1291,7 @@ pub fn get_map_preview(
         );
     }
 
+    log_map_perf("rust.get_map_preview", started_at);
     Ok(pixels)
 }
 
@@ -1265,6 +1301,7 @@ pub fn get_province_at_point(
     x: u32,
     y: u32,
 ) -> Result<Option<u32>, String> {
+    let started_at = Instant::now();
     let lock = state.0.lock().map_err(|_| "Failed to lock state")?;
     let ctx = lock.as_ref().ok_or("Map not initialized")?;
 
@@ -1274,8 +1311,11 @@ pub fn get_province_at_point(
 
     let idx = (y * ctx.width + x) as usize;
     if idx < ctx.province_ids.len() {
-        Ok(Some(ctx.province_ids[idx]))
+        let result = Some(ctx.province_ids[idx]);
+        log_map_perf("rust.get_province_at_point", started_at);
+        Ok(result)
     } else {
+        log_map_perf("rust.get_province_at_point", started_at);
         Ok(None)
     }
 }
@@ -1288,6 +1328,7 @@ pub fn get_map_tile_direct(
     zoom: u32,
     mode: String,
 ) -> Result<Vec<u8>, String> {
+    let started_at = Instant::now();
     let lock = state.0.lock().map_err(|_| "Failed to lock state")?;
     let ctx = lock.as_ref().ok_or("Map not initialized")?;
 
@@ -1363,5 +1404,6 @@ pub fn get_map_tile_direct(
         );
     }
 
+    log_map_perf("rust.get_map_tile_direct", started_at);
     Ok(pixels)
 }

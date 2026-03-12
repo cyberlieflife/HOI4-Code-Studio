@@ -254,6 +254,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useMapEngine } from '../../composables/useMapEngine'
 import { loadSettings, type ProvinceDefinition } from '../../api/tauri'
+import { logMapEvent, measureMapAsync, measureMapSync } from '../../utils/mapPerformance'
 
 const props = defineProps<{
   projectPath: string
@@ -581,6 +582,8 @@ function updateProgress(status: string, detail: string, target: number) {
 }
 
 async function refreshMap() {
+  await measureMapAsync('viewer.refreshMap', async () => {
+    logMapEvent('viewer.refreshMap:start', { projectPath: props.projectPath })
   loadingProgress.value = 0
   updateProgress('加载地图资源', '读取 provinces.bmp...', 30)
   
@@ -591,12 +594,23 @@ async function refreshMap() {
   loadingTimer.value = progressTimer as any
 
   try {
-    await initMap(props.projectPath)
+    await measureMapAsync('viewer.refreshMap.initMap', async () => {
+      await initMap(props.projectPath)
+    })
     updateProgress('准备渲染', '初始化切片缓存...', 60)
-    await resetMapCache()
+    await measureMapAsync('viewer.refreshMap.resetMapCache', async () => {
+      await resetMapCache()
+    })
     updateProgress('构建导航器', '生成缩略图...', 90)
-    await drawMinimap()
+    await measureMapAsync(`viewer.refreshMap.drawMinimap(${currentMode.value})`, async () => {
+      await drawMinimap()
+    })
     updateProgress('就绪', '完成', 100)
+    logMapEvent('viewer.refreshMap:done', {
+      width: mapData.value?.width,
+      height: mapData.value?.height,
+      mode: currentMode.value
+    })
   } catch (e) {
     loadingStatus.value = '加载失败'
     loadingDetail.value = String(e)
@@ -608,10 +622,12 @@ async function refreshMap() {
       if (loadingProgress.value >= 100) isLoading.value = false
     }, 500)
   }
+  })
 }
 
 // 切换模式
 async function setMode(mode: MapMode) {
+  await measureMapAsync(`viewer.setMode(${mode})`, async () => {
   isLoading.value = true
   loadingProgress.value = 0
   currentMode.value = mode
@@ -620,6 +636,8 @@ async function setMode(mode: MapMode) {
   await drawMinimap()
   updateProgress('就绪', '完成', 100)
   setTimeout(() => { isLoading.value = false }, 300)
+  logMapEvent('viewer.setMode:done', { mode })
+  })
 }
 
 /**
@@ -644,8 +662,10 @@ function requestRender() {
   isRendering = true
   renderRafId = requestAnimationFrame(() => {
     if (isUnmounted) return
-    drawMap()
-    drawOverlay()
+    measureMapSync('viewer.requestRender.frame', () => {
+      drawMap()
+      drawOverlay()
+    })
     isRendering = false
     renderRafId = null
   })
@@ -888,7 +908,9 @@ async function loadTiles(tiles: Array<{tx: number, ty: number, factor: number}>)
 
 async function fetchTile(tx: number, ty: number, zoom: number): Promise<ImageBitmap | null> {
    try {
-    const rgba = await renderTile(tx, ty, zoom, currentMode.value)
+    const rgba = await measureMapAsync(`viewer.fetchTile(${currentMode.value})`, async () => (
+      await renderTile(tx, ty, zoom, currentMode.value)
+    ))
     if (!rgba || rgba.length === 0) return null
     const imageData = new ImageData(new Uint8ClampedArray(rgba), 512, 512)
     return await createImageBitmap(imageData)
@@ -942,7 +964,9 @@ async function drawMinimap() {
 
   try {
     // 从后端获取预览图
-    const rgba = await getPreview(displayWidth, displayHeight, currentMode.value)
+    const rgba = await measureMapAsync(`viewer.drawMinimap(${currentMode.value})`, async () => (
+      await getPreview(displayWidth, displayHeight, currentMode.value)
+    ))
     if (!rgba) return
     
     const imageData = new ImageData(new Uint8ClampedArray(rgba), displayWidth, displayHeight)
@@ -1024,7 +1048,9 @@ async function updateHoverProvince() {
   if (x >= 0 && x < width && y >= 0 && y < height) {
     // 异步获取省份 ID
     try {
-      const id = await getProvinceId(x, y)
+      const id = await measureMapAsync('viewer.updateHoverProvince.getProvinceId', async () => (
+        await getProvinceId(x, y)
+      ))
       hoverProvinceId.value = id
     } catch (e) {
       console.error(e)
