@@ -17,6 +17,13 @@ export interface VersionLog {
 
 export const changelog: VersionLog[] = [
   {
+    version: 'v0.3.7-dev',
+    description: '优化',
+    changes: [
+      { type: 'improvement', content: '优化Map预览与切换视图的速度' },
+    ]
+  },
+  {
     version: 'v0.3.6-dev',
     description: '优化',
     changes: [
