@@ -9,11 +9,22 @@ export function useKeyboardShortcuts(handlers: {
   undo?: () => void
   redo?: () => void
   search?: () => void
+  copy?: () => boolean | void
+  cut?: () => boolean | void
+  paste?: () => boolean | void
   nextError?: () => void
   previousError?: () => void
   toggleTheme?: () => void
   toggleIconPanel?: () => void
 }) {
+  function shouldHandleClipboardShortcut(handler?: () => boolean | void) {
+    if (!handler) {
+      return false
+    }
+
+    return handler() !== false
+  }
+
   function handleKeyDown(e: KeyboardEvent) {
     // Ctrl+S 保存
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -37,6 +48,24 @@ export function useKeyboardShortcuts(handlers: {
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'f') {
       e.preventDefault()
       handlers.search?.()
+    }
+
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'c') {
+      if (shouldHandleClipboardShortcut(handlers.copy)) {
+        e.preventDefault()
+      }
+    }
+
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'x') {
+      if (shouldHandleClipboardShortcut(handlers.cut)) {
+        e.preventDefault()
+      }
+    }
+
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'v') {
+      if (shouldHandleClipboardShortcut(handlers.paste)) {
+        e.preventDefault()
+      }
     }
 
     // Ctrl+Shift+T 切换主题面板

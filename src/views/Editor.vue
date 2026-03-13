@@ -62,6 +62,7 @@ const route = useRoute()
 
 // 基础状态
 const projectPath = ref('')
+const fileTreeContainerRef = ref<HTMLElement | null>(null)
 const selectedNode = ref<FileNode | null>(null)
 const selectedTreePaths = ref<string[]>([])
 const selectionAnchorPath = ref<string | null>(null)
@@ -459,6 +460,14 @@ async function refreshActiveFileTree() {
   await loadFileTree()
 }
 
+function focusFileTree() {
+  fileTreeContainerRef.value?.focus()
+}
+
+function isFileTreeFocused() {
+  return document.activeElement === fileTreeContainerRef.value
+}
+
 async function pasteTreeClipboard() {
   if (!treeClipboard.value) {
     return
@@ -738,6 +747,7 @@ async function handlePreviewGui(paneId: string) {
 
 // 右键菜单包装函数（处理 selectedNode 高亮）
 function handleShowTreeContextMenu(event: MouseEvent, node: FileNode | null = null) {
+  focusFileTree()
   if (node && !selectedTreePaths.value.includes(node.path)) {
     selectSingleTreeNode(node)
   } else if (node) {
@@ -1249,6 +1259,33 @@ useKeyboardShortcuts({
   },
   undo: () => {},
   redo: () => {},
+  copy: () => {
+    if (!isFileTreeFocused() || selectedTreePaths.value.length === 0) {
+      return false
+    }
+    treeClipboard.value = {
+      action: 'copy',
+      paths: [...selectedTreePaths.value]
+    }
+    return true
+  },
+  cut: () => {
+    if (!isFileTreeFocused() || selectedTreePaths.value.length === 0) {
+      return false
+    }
+    treeClipboard.value = {
+      action: 'cut',
+      paths: [...selectedTreePaths.value]
+    }
+    return true
+  },
+  paste: () => {
+    if (!isFileTreeFocused() || !treeClipboard.value) {
+      return false
+    }
+    void pasteTreeClipboard()
+    return true
+  },
   search: () => {
     // 打开右侧边栏并切换到搜索标签页
     rightPanelExpanded.value = true
@@ -1340,7 +1377,13 @@ onUnmounted(() => {
         />
         
         <!-- 文件树内容 -->
-        <div class="flex-1 overflow-y-auto p-2" @contextmenu.prevent="handleShowTreeContextMenu($event, null)">
+        <div
+          ref="fileTreeContainerRef"
+          class="flex-1 overflow-y-auto p-2 focus:outline-none"
+          tabindex="0"
+          @mousedown="focusFileTree"
+          @contextmenu.prevent="handleShowTreeContextMenu($event, null)"
+        >
           <h3 class="text-hoi4-text font-bold mb-2 text-sm">
             {{ leftPanelActiveTab === 'project' ? '项目文件' : leftPanelActiveTab === 'dependencies' ? '依赖项文件' : '插件' }}
           </h3>

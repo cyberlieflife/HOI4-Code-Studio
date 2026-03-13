@@ -10,6 +10,9 @@ describe('useKeyboardShortcuts', () => {
     undo?: () => void
     redo?: () => void
     search?: () => void
+    copy?: () => boolean | void
+    cut?: () => boolean | void
+    paste?: () => boolean | void
     nextError?: () => void
     previousError?: () => void
     toggleTheme?: () => void
@@ -26,6 +29,9 @@ describe('useKeyboardShortcuts', () => {
       undo: vi.fn(),
       redo: vi.fn(),
       search: vi.fn(),
+      copy: vi.fn(() => true),
+      cut: vi.fn(() => true),
+      paste: vi.fn(() => true),
       nextError: vi.fn(),
       previousError: vi.fn(),
       toggleTheme: vi.fn(),
