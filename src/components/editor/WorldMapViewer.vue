@@ -258,6 +258,8 @@ import { logMapEvent, measureMapAsync, measureMapSync } from '../../utils/mapPer
 
 const props = defineProps<{
   projectPath: string
+  gameDirectory?: string
+  dependencyRoots?: string[]
 }>()
 
 // 加载全局设置
@@ -635,7 +637,7 @@ async function refreshMap() {
 
   try {
     await measureMapAsync('viewer.refreshMap.initMap', async () => {
-      await initMap(props.projectPath)
+      await initMap(props.projectPath, props.gameDirectory, props.dependencyRoots || [])
     })
     updateProgress('准备渲染', '初始化切片缓存...', 60)
     await measureMapAsync('viewer.refreshMap.resetMapCache', async () => {

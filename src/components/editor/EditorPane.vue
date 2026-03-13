@@ -696,6 +696,8 @@ defineExpose({
         v-if="hasMapLoaded"
         v-show="isCurrentFileWorldMap"
         :project-path="projectPath"
+        :game-directory="gameDirectory"
+        :dependency-roots="dependencyRoots"
       />
 
       <!-- 其他预览器 (使用 v-if 以节省资源) -->

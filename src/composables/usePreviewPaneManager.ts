@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import type { OpenFile } from './useFileManager'
+import type { FileNode, OpenFile } from './useFileManager'
 
 export type PreviewKind =
   | 'event'
@@ -17,6 +17,7 @@ export interface PaneLike {
 
 export interface EditorGroupLike {
   panes: PaneLike[]
+  activePaneId?: string
   setActivePane: (paneId: string) => void
   splitPane: (paneId: string, fileIndex?: number) => boolean
 }
@@ -102,7 +103,98 @@ function createPreviewFile(currentFile: OpenFile, kind: PreviewKind): OpenFile {
   return previewFile
 }
 
+function createStandalonePreviewFile(
+  node: FileNode,
+  kind: PreviewKind,
+  sourceFilePath = node.path
+): OpenFile {
+  const definition = previewDefinitions[kind]
+  const previewFile: OpenFile = {
+    node: {
+      ...node,
+      isDirectory: false,
+      name: `${node.name}${definition.titleSuffix}`
+    },
+    content: '',
+    hasUnsavedChanges: false,
+    cursorLine: 1,
+    cursorColumn: 1,
+    isPreview: true,
+    sourceFilePath
+  }
+
+  definition.applyFlags(previewFile)
+  return previewFile
+}
+
 export function usePreviewPaneManager(editorGroupRef: Ref<EditorGroupLike | null>) {
+  function findExistingPreview(sourceFilePath: string, kind: PreviewKind) {
+    const editorGroup = editorGroupRef.value
+    if (!editorGroup) return null
+
+    for (const pane of editorGroup.panes) {
+      const fileIndex = pane.openFiles.findIndex((file) => {
+        if (!file.isPreview || file.sourceFilePath !== sourceFilePath) {
+          return false
+        }
+
+        if (kind === 'map') {
+          return file.isWorldMap === true
+        }
+
+        return false
+      })
+
+      if (fileIndex !== -1) {
+        return { pane, fileIndex }
+      }
+    }
+
+    return null
+  }
+
+  function resolveBasePane(preferredPaneId?: string): PaneLike | null {
+    const editorGroup = editorGroupRef.value
+    if (!editorGroup) return null
+
+    if (preferredPaneId) {
+      const preferredPane = editorGroup.panes.find((pane) => pane.id === preferredPaneId)
+      if (preferredPane) return preferredPane
+    }
+
+    if (editorGroup.activePaneId) {
+      const activePane = editorGroup.panes.find((pane) => pane.id === editorGroup.activePaneId)
+      if (activePane) return activePane
+    }
+
+    return editorGroup.panes[0] || null
+  }
+
+  function resolveTargetPane(basePane: PaneLike): PaneLike | null {
+    const editorGroup = editorGroupRef.value
+    if (!editorGroup) return null
+
+    if (editorGroup.panes.length >= 2) {
+      const previewPane = editorGroup.panes.find((pane) =>
+        pane.openFiles.some((file) => isPreviewHost(file))
+      )
+      if (previewPane) {
+        return previewPane
+      }
+    }
+
+    if (basePane.openFiles.length === 0) {
+      return basePane
+    }
+
+    const splitSuccess = editorGroup.splitPane(basePane.id)
+    if (!splitSuccess) {
+      return basePane
+    }
+
+    return editorGroup.panes[editorGroup.panes.length - 1] || null
+  }
+
   async function openPreview(paneId: string, kind: PreviewKind) {
     const editorGroup = editorGroupRef.value
     if (!editorGroup) return
@@ -133,6 +225,36 @@ export function usePreviewPaneManager(editorGroupRef: Ref<EditorGroupLike | null
     editorGroup.setActivePane(targetPane.id)
   }
 
+  async function openProjectMapPreview(projectPath: string) {
+    const editorGroup = editorGroupRef.value
+    if (!editorGroup) return
+
+    const normalizedProjectPath = projectPath.replace(/[\\/]+$/, '')
+    const sourceFilePath = `${normalizedProjectPath}/map`
+    const existingPreview = findExistingPreview(sourceFilePath, 'map')
+    if (existingPreview) {
+      existingPreview.pane.activeFileIndex = existingPreview.fileIndex
+      editorGroup.setActivePane(existingPreview.pane.id)
+      return
+    }
+
+    const basePane = resolveBasePane()
+    if (!basePane) return
+
+    const targetPane = resolveTargetPane(basePane)
+    if (!targetPane) return
+
+    const previewNode: FileNode = {
+      name: 'map',
+      path: sourceFilePath,
+      isDirectory: false
+    }
+
+    targetPane.openFiles.push(createStandalonePreviewFile(previewNode, 'map', sourceFilePath))
+    targetPane.activeFileIndex = targetPane.openFiles.length - 1
+    editorGroup.setActivePane(targetPane.id)
+  }
+
   function syncPreviewContent(paneId: string, content: string) {
     const editorGroup = editorGroupRef.value
     if (!editorGroup) return
@@ -155,6 +277,7 @@ export function usePreviewPaneManager(editorGroupRef: Ref<EditorGroupLike | null
 
   return {
     openPreview,
+    openProjectMapPreview,
     syncPreviewContent
   }
 }
