@@ -65,6 +65,7 @@ const projectPath = ref('')
 const selectedNode = ref<FileNode | null>(null)
 const selectedTreePaths = ref<string[]>([])
 const selectionAnchorPath = ref<string | null>(null)
+const treeClipboard = ref<{ action: 'copy' | 'cut'; paths: string[] } | null>(null)
 const txtErrors = ref<{line: number, msg: string, type: string}[]>([])
 const isLaunchingGame = ref(false)
 
@@ -389,6 +390,34 @@ function setTreeSelection(paths: string[], preferredNode: FileNode | null = null
 function selectSingleTreeNode(node: FileNode) {
   setTreeSelection([node.path], node)
   selectionAnchorPath.value = node.path
+}
+
+function getTreeContextTargetPaths() {
+  if (treeContextMenuNode.value) {
+    if (selectedTreePaths.value.includes(treeContextMenuNode.value.path)) {
+      return [...selectedTreePaths.value]
+    }
+    return [treeContextMenuNode.value.path]
+  }
+
+  if (selectedTreePaths.value.length > 0) {
+    return [...selectedTreePaths.value]
+  }
+
+  return []
+}
+
+function storeTreeClipboard(action: 'copy' | 'cut') {
+  const targetPaths = getTreeContextTargetPaths()
+  if (targetPaths.length === 0) {
+    return false
+  }
+
+  treeClipboard.value = {
+    action,
+    paths: targetPaths
+  }
+  return true
 }
 
 function handleTreeNodeSelect(event: MouseEvent, node: FileNode) {
@@ -799,6 +828,8 @@ async function handleContextMenuAction(action: string, payload?: any) {
         logger.error('删除失败:', error)
         alert(`删除失败: ${error}`)
       }
+    } else if (action === 'copy') {
+      storeTreeClipboard('copy')
     } else if (action === 'copyPath') {
       if (treeContextMenuNode.value) {
         navigator.clipboard.writeText(treeContextMenuNode.value.path).catch(err => {
