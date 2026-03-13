@@ -63,6 +63,8 @@ const route = useRoute()
 // 基础状态
 const projectPath = ref('')
 const selectedNode = ref<FileNode | null>(null)
+const selectedTreePaths = ref<string[]>([])
+const selectionAnchorPath = ref<string | null>(null)
 const txtErrors = ref<{line: number, msg: string, type: string}[]>([])
 const isLaunchingGame = ref(false)
 
@@ -328,6 +330,98 @@ const hasActiveDependencyTree = computed(() => hasDependencyTree(activeDependenc
 
 const activeDependencyTree = computed(() => getDependencyTree(activeDependencyId.value))
 
+const currentTreeRoots = computed(() => {
+  if (leftPanelActiveTab.value === 'dependencies' && activeDependencyId.value) {
+    return activeDependencyTree.value
+  }
+
+  if (leftPanelActiveTab.value === 'project') {
+    return fileTree.value
+  }
+
+  return []
+})
+
+function flattenVisibleTree(nodes: FileNode[]): FileNode[] {
+  const flattened: FileNode[] = []
+
+  for (const node of nodes) {
+    flattened.push(node)
+    if (node.isDirectory && node.expanded && node.children?.length) {
+      flattened.push(...flattenVisibleTree(node.children))
+    }
+  }
+
+  return flattened
+}
+
+const visibleTreeNodes = computed(() => flattenVisibleTree(currentTreeRoots.value))
+
+function findNodeByPath(nodes: FileNode[], path: string): FileNode | null {
+  for (const node of nodes) {
+    if (node.path === path) {
+      return node
+    }
+
+    if (node.children?.length) {
+      const matchedNode = findNodeByPath(node.children, path)
+      if (matchedNode) {
+        return matchedNode
+      }
+    }
+  }
+
+  return null
+}
+
+function setTreeSelection(paths: string[], preferredNode: FileNode | null = null) {
+  selectedTreePaths.value = Array.from(new Set(paths))
+
+  if (preferredNode && selectedTreePaths.value.includes(preferredNode.path)) {
+    selectedNode.value = preferredNode
+    return
+  }
+
+  const fallbackPath = selectedTreePaths.value[selectedTreePaths.value.length - 1]
+  selectedNode.value = fallbackPath ? findNodeByPath(currentTreeRoots.value, fallbackPath) : null
+}
+
+function selectSingleTreeNode(node: FileNode) {
+  setTreeSelection([node.path], node)
+  selectionAnchorPath.value = node.path
+}
+
+function handleTreeNodeSelect(event: MouseEvent, node: FileNode) {
+  const isCtrlSelection = event.ctrlKey || event.metaKey
+  const isShiftSelection = event.shiftKey
+
+  if (isShiftSelection && selectionAnchorPath.value) {
+    const visiblePaths = visibleTreeNodes.value.map(item => item.path)
+    const anchorIndex = visiblePaths.indexOf(selectionAnchorPath.value)
+    const currentIndex = visiblePaths.indexOf(node.path)
+
+    if (anchorIndex !== -1 && currentIndex !== -1) {
+      const [start, end] = anchorIndex < currentIndex
+        ? [anchorIndex, currentIndex]
+        : [currentIndex, anchorIndex]
+      setTreeSelection(visiblePaths.slice(start, end + 1), node)
+      return
+    }
+  }
+
+  if (isCtrlSelection) {
+    if (selectedTreePaths.value.includes(node.path)) {
+      setTreeSelection(selectedTreePaths.value.filter(path => path !== node.path))
+    } else {
+      setTreeSelection([...selectedTreePaths.value, node.path], node)
+    }
+    selectionAnchorPath.value = node.path
+    return
+  }
+
+  selectSingleTreeNode(node)
+}
+
 const {
   start: startFileTreeAutoRefresh,
   stop: stopFileTreeAutoRefresh
@@ -408,7 +502,7 @@ async function handleToggleDependency(id: string) {
 // 切换文件夹
 async function toggleFolder(node: FileNode) {
   if (!node.isDirectory) return
-  selectedNode.value = node
+  selectSingleTreeNode(node)
   node.expanded = !node.expanded
   if (node.expanded && (!node.children || node.children.length === 0)) {
     try {
@@ -442,7 +536,7 @@ async function toggleGameFolder(node: FileNode) {
 async function handleOpenFile(node: FileNode, paneId?: string, jumpInfo?: any) {
   if (node.isDirectory) return
   
-  selectedNode.value = node
+  selectSingleTreeNode(node)
   const targetPaneId = paneId || editorGroupRef.value?.activePaneId
   if (!targetPaneId) return
   
@@ -543,11 +637,12 @@ async function handlePreviewGui(paneId: string) {
 
 // 右键菜单包装函数（处理 selectedNode 高亮）
 function handleShowTreeContextMenu(event: MouseEvent, node: FileNode | null = null) {
-  showTreeContextMenu(event, node)
-  // 强制高亮选中的节点
-  if (node) {
+  if (node && !selectedTreePaths.value.includes(node.path)) {
+    selectSingleTreeNode(node)
+  } else if (node) {
     selectedNode.value = node
   }
+  showTreeContextMenu(event, node)
 }
 
 function isProjectMapFolder(node: FileNode | null) {
@@ -1154,7 +1249,8 @@ onUnmounted(() => {
                   :key="node.path"
                   :node="node"
                   :level="0"
-                  :selected-path="selectedNode?.path"
+                  :selected-paths="selectedTreePaths"
+                  @select="handleTreeNodeSelect"
                   @toggle="toggleFolder"
                   @open-file="handleOpenFile"
                   @contextmenu="(e, n) => handleShowTreeContextMenu(e, n)"
@@ -1176,7 +1272,8 @@ onUnmounted(() => {
                   :key="node.path"
                   :node="node"
                   :level="0"
-                  :selected-path="selectedNode?.path"
+                  :selected-paths="selectedTreePaths"
+                  @select="handleTreeNodeSelect"
                   @toggle="toggleFolder"
                   @open-file="handleOpenFile"
                   @contextmenu="(e, n) => handleShowTreeContextMenu(e, n)"

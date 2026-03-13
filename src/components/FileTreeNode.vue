@@ -13,16 +13,23 @@ interface FileNode {
 const props = defineProps<{
   node: FileNode
   level: number
-  selectedPath?: string | null
+  selectedPaths?: string[]
 }>()
 
 const emit = defineEmits<{
+  select: [event: MouseEvent, node: FileNode]
   toggle: [node: FileNode]
   openFile: [node: FileNode]
   contextmenu: [event: MouseEvent, node: FileNode]
 }>()
 
-function handleClick() {
+function handleClick(event: MouseEvent) {
+  emit('select', event, props.node)
+
+  if (event.ctrlKey || event.metaKey || event.shiftKey) {
+    return
+  }
+
   if (props.node.isDirectory) {
     emit('toggle', props.node)
   } else {
@@ -33,13 +40,17 @@ function handleClick() {
 function getFileIconDisplay(node: FileNode) {
   return getFileIcon(node.name, node.isDirectory, node.expanded)
 }
+
+function isSelected(path: string) {
+  return props.selectedPaths?.includes(path) ?? false
+}
 </script>
 
 <template>
   <div>
     <div
       class="flex items-center px-2 py-1 rounded cursor-pointer text-sm file-tree-node transition-colors"
-      :class="[selectedPath === node.path ? 'bg-hoi4-selected text-white' : 'hover:bg-hoi4-accent/50']"
+      :class="[isSelected(node.path) ? 'bg-hoi4-selected text-white' : 'hover:bg-hoi4-accent/50']"
       :style="{ paddingLeft: (level * 16 + 8) + 'px' }"
       @click="handleClick"
       @contextmenu.stop.prevent="(e) => emit('contextmenu', e, props.node)"
@@ -64,7 +75,8 @@ function getFileIconDisplay(node: FileNode) {
         :key="child.path"
         :node="child"
         :level="level + 1"
-        :selected-path="selectedPath"
+        :selected-paths="selectedPaths"
+        @select="(e, n) => emit('select', e, n)"
         @toggle="(n) => emit('toggle', n)"
         @open-file="(n) => emit('openFile', n)"
         @contextmenu="(e, n) => emit('contextmenu', e, n)"
