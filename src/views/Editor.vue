@@ -39,6 +39,7 @@ import { useProjectBootstrap } from '../composables/useProjectBootstrap'
 import { useEditorSettingsSync } from '../composables/useEditorSettingsSync'
 import { useProjectFileTreeLoader } from '../composables/useProjectFileTreeLoader'
 import { useAutoRefreshInterval } from '../composables/useAutoRefreshInterval'
+import { collectExpandedPaths, mergeExpandedChildren, restoreExpandedState } from '../utils/fileTreeState'
 
 // 新提取的模块
 import { escapeRegExp, isImageFile, isPathUnder, convertRustFileNode, DIRECTORY_EXPAND_LOAD_DEPTH } from '../utils/fileUtils'
@@ -460,6 +461,33 @@ async function refreshActiveFileTree() {
   await loadFileTree()
 }
 
+function normalizeTreePath(path: string) {
+  return path.replace(/\\/g, '/').replace(/\/+$/, '')
+}
+
+async function reloadActiveTreeDirectory(directoryPath: string) {
+  const targetNode = findNodeByPath(currentTreeRoots.value, directoryPath)
+  if (!targetNode || !targetNode.isDirectory) {
+    return
+  }
+
+  try {
+    const result = await buildDirectoryTreeFast(directoryPath, DIRECTORY_EXPAND_LOAD_DEPTH)
+    if (!result.success || !result.tree) {
+      return
+    }
+
+    const oldChildren = targetNode.children ?? []
+    const expandedPaths = collectExpandedPaths(oldChildren)
+    const nextChildren = result.tree.map(convertRustFileNode)
+    mergeExpandedChildren(oldChildren, nextChildren, expandedPaths)
+    restoreExpandedState(nextChildren, expandedPaths)
+    targetNode.children = nextChildren
+  } catch (error) {
+    logger.error('刷新目标目录失败:', error)
+  }
+}
+
 function focusFileTree() {
   fileTreeContainerRef.value?.focus()
 }
@@ -499,6 +527,15 @@ async function pasteTreeClipboard() {
   }
 
   await refreshActiveFileTree()
+
+  const activeRootPath = getActiveTreeRootPath()
+  if (
+    activeRootPath &&
+    normalizeTreePath(targetDirectory) !== normalizeTreePath(activeRootPath) &&
+    isPathUnder(targetDirectory, activeRootPath)
+  ) {
+    await reloadActiveTreeDirectory(targetDirectory)
+  }
 }
 
 function handleTreeNodeSelect(event: MouseEvent, node: FileNode) {

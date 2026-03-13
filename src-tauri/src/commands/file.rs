@@ -394,6 +394,8 @@ fn build_paste_operations(
     source_paths: &[String],
     target_dir: &std::path::Path,
 ) -> Result<Vec<(std::path::PathBuf, std::path::PathBuf)>, String> {
+    use std::collections::HashSet;
+
     if source_paths.is_empty() {
         return Err("没有可粘贴的文件或文件夹".to_string());
     }
@@ -403,6 +405,7 @@ fn build_paste_operations(
     }
 
     let mut operations = Vec::new();
+    let mut reserved_targets = HashSet::new();
 
     for source_path in source_paths {
         let source = std::path::PathBuf::from(source_path);
@@ -410,27 +413,107 @@ fn build_paste_operations(
             return Err(format!("源路径不存在: {}", source_path));
         }
 
-        let file_name = source
-            .file_name()
-            .ok_or_else(|| format!("无法解析路径名称: {}", source_path))?;
-        let target = target_dir.join(file_name);
-
-        if target.exists() {
-            return Err(format!("目标路径已存在: {}", target.display()));
-        }
-
-        if source == target {
-            return Err("不能粘贴到相同路径".to_string());
-        }
+        let target = build_available_paste_target(&source, target_dir, &reserved_targets)?;
 
         if source.is_dir() && target.starts_with(&source) {
             return Err(format!("不能将目录粘贴到自身内部: {}", source.display()));
         }
 
+        reserved_targets.insert(target.clone());
         operations.push((source, target));
     }
 
     Ok(operations)
+}
+
+fn build_available_paste_target(
+    source: &std::path::Path,
+    target_dir: &std::path::Path,
+    reserved_targets: &std::collections::HashSet<std::path::PathBuf>,
+) -> Result<std::path::PathBuf, String> {
+    let file_name = source
+        .file_name()
+        .ok_or_else(|| format!("无法解析路径名称: {}", source.display()))?;
+    let default_target = target_dir.join(file_name);
+
+    if source != default_target
+        && !default_target.exists()
+        && !reserved_targets.contains(&default_target)
+    {
+        return Ok(default_target);
+    }
+
+    let (base_name, extension) = split_duplicate_name_parts(source, target_dir)?;
+    let mut index = 1usize;
+
+    loop {
+        let candidate_name = if extension.is_empty() {
+            format!("{base_name}({index})")
+        } else {
+            format!("{base_name}({index}).{extension}")
+        };
+        let candidate = target_dir.join(candidate_name);
+
+        if candidate != source && !candidate.exists() && !reserved_targets.contains(&candidate) {
+            return Ok(candidate);
+        }
+
+        index += 1;
+    }
+}
+
+fn split_duplicate_name_parts(
+    source: &std::path::Path,
+    target_dir: &std::path::Path,
+) -> Result<(String, String), String> {
+    if source.is_dir() {
+        let directory_name = source
+            .file_name()
+            .ok_or_else(|| format!("无法解析目录名称: {}", source.display()))?
+            .to_string_lossy()
+            .to_string();
+        let normalized_name = if source.parent() == Some(target_dir) {
+            strip_duplicate_suffix(&directory_name).to_string()
+        } else {
+            directory_name
+        };
+        return Ok((normalized_name, String::new()));
+    }
+
+    let file_stem = source
+        .file_stem()
+        .ok_or_else(|| format!("无法解析文件名称: {}", source.display()))?
+        .to_string_lossy()
+        .to_string();
+    let extension = source
+        .extension()
+        .map(|value| value.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let normalized_stem = if source.parent() == Some(target_dir) {
+        strip_duplicate_suffix(&file_stem).to_string()
+    } else {
+        file_stem
+    };
+
+    Ok((normalized_stem, extension))
+}
+
+fn strip_duplicate_suffix(name: &str) -> &str {
+    if !name.ends_with(')') {
+        return name;
+    }
+
+    let Some(start) = name.rfind('(') else {
+        return name;
+    };
+
+    let digits = &name[start + 1..name.len() - 1];
+    if digits.is_empty() || !digits.chars().all(|ch| ch.is_ascii_digit()) {
+        return name;
+    }
+
+    &name[..start]
 }
 
 fn copy_path_recursive(source: &std::path::Path, target: &std::path::Path) -> std::io::Result<()> {
@@ -910,6 +993,67 @@ mod tests {
         assert_eq!(
             fs::read_to_string(target_root.join("move.txt")).expect("移动后应能读取文件"),
             "move"
+        );
+    }
+
+    #[test]
+    fn copy_paths_should_append_incrementing_suffix_when_target_exists() {
+        let temp_dir = tempfile::tempdir().expect("应能创建临时目录");
+        let target_root = temp_dir.path().join("target");
+        fs::create_dir_all(&target_root).expect("应能创建目标目录");
+
+        let original_file = target_root.join("test.txt");
+        let first_duplicate = target_root.join("test(1).txt");
+        fs::write(&original_file, "original").expect("应能写入原始文件");
+        fs::write(&first_duplicate, "duplicate").expect("应能写入首个重名文件");
+
+        let result = copy_paths(
+            vec![original_file.to_string_lossy().to_string()],
+            target_root.to_string_lossy().to_string(),
+        );
+
+        assert_eq!(result["success"].as_bool(), Some(true));
+        assert_eq!(
+            fs::read_to_string(target_root.join("test(2).txt")).expect("应能生成递增副本"),
+            "original"
+        );
+        assert_eq!(
+            fs::read_to_string(&original_file).expect("原始文件应保留"),
+            "original"
+        );
+    }
+
+    #[test]
+    fn move_paths_should_append_suffix_for_duplicate_directories() {
+        let temp_dir = tempfile::tempdir().expect("应能创建临时目录");
+        let source_root = temp_dir.path().join("source");
+        let target_root = temp_dir.path().join("target");
+        fs::create_dir_all(&source_root).expect("应能创建源目录");
+        fs::create_dir_all(&target_root).expect("应能创建目标目录");
+
+        let source_folder = source_root.join("events");
+        fs::create_dir_all(&source_folder).expect("应能创建源文件夹");
+        fs::write(source_folder.join("a.txt"), "from-source").expect("应能写入源文件");
+
+        let existing_folder = target_root.join("events");
+        fs::create_dir_all(&existing_folder).expect("应能创建已存在的目标文件夹");
+        fs::write(existing_folder.join("a.txt"), "existing").expect("应能写入目标文件");
+
+        let result = move_paths(
+            vec![source_folder.to_string_lossy().to_string()],
+            target_root.to_string_lossy().to_string(),
+        );
+
+        assert_eq!(result["success"].as_bool(), Some(true));
+        assert!(!source_folder.exists());
+        assert_eq!(
+            fs::read_to_string(target_root.join("events(1)").join("a.txt"))
+                .expect("应能读取重命名后的目录内容"),
+            "from-source"
+        );
+        assert_eq!(
+            fs::read_to_string(existing_folder.join("a.txt")).expect("已存在目录内容应保留"),
+            "existing"
         );
     }
 }
