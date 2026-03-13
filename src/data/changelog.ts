@@ -20,6 +20,13 @@ export const changelog: VersionLog[] = [
     version: 'v0.3.8-dev',
     description: '文件树更新，地图预览更新',
     changes: [
+      { type: 'improvement', content: '优化粘贴功能' },
+    ]
+  },
+  {
+    version: 'v0.3.8-dev',
+    description: '文件树更新，地图预览更新',
+    changes: [
       { type: 'feature', content: '在Map文件夹右键菜单支持Map预览功能' },
       { type: 'feature', content: '支持文件夹/文件的复制操作' },
       { type: 'feature', content: '支持文件夹/文件的粘贴操作' },

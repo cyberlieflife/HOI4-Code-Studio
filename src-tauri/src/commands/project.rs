@@ -500,7 +500,8 @@ fn build_cached_project_stats(stats: &ProjectStats) -> CachedProjectStatsEntry {
 fn is_recent_project_stats_cache_fresh(entry: &CachedProjectStatsEntry) -> bool {
     chrono::DateTime::parse_from_rfc3339(&entry.updated_at)
         .map(|updated_at| {
-            let age = chrono::Utc::now().signed_duration_since(updated_at.with_timezone(&chrono::Utc));
+            let age =
+                chrono::Utc::now().signed_duration_since(updated_at.with_timezone(&chrono::Utc));
             age.num_seconds() < RECENT_PROJECT_STATS_CACHE_TTL_SECONDS
         })
         .unwrap_or(false)
@@ -535,8 +536,8 @@ fn write_recent_project_stats_cache(
         fs::create_dir_all(parent).map_err(|e| format!("创建统计缓存目录失败: {}", e))?;
     }
 
-    let content = serde_json::to_string_pretty(cache)
-        .map_err(|e| format!("序列化统计缓存失败: {}", e))?;
+    let content =
+        serde_json::to_string_pretty(cache).map_err(|e| format!("序列化统计缓存失败: {}", e))?;
 
     fs::write(cache_path, content).map_err(|e| format!("写入统计缓存失败: {}", e))
 }
