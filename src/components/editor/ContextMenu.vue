@@ -141,14 +141,14 @@ function hideMoveMenu() {
       class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg }"
     >
-      📄 新建文件
+      新建文件
     </button>
     <button
       @click="handleAction('createFolder')"
       class="w-full px-4 py-2 text-left text-sm border-t whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
     >
-      📁 新建文件夹
+      新建文件夹
     </button>
     <div class="h-px w-full my-1" :style="{ backgroundColor: currentTheme.colors.border }"></div>
     <button
@@ -156,14 +156,14 @@ function hideMoveMenu() {
       class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg }"
     >
-      ✏️ 重命名
+      重命名
     </button>
     <button
       @click="handleAction('delete')"
       class="w-full px-4 py-2 text-left text-sm border-t whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
     >
-      🗑️ 删除
+      删除
     </button>
     <button
       v-if="treeNodePath"
@@ -194,7 +194,7 @@ function hideMoveMenu() {
       class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg }"
     >
-      📋 复制路径
+      复制路径
     </button>
     <button
       v-if="isProjectMapDirectory"
@@ -209,7 +209,7 @@ function hideMoveMenu() {
       class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg }"
     >
-      📂 在资源管理器中显示
+      在资源管理器中显示
     </button>
   </div>
 
@@ -232,7 +232,7 @@ function hideMoveMenu() {
       class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg }"
     >
-      ➡️ 向右分割
+      向右分割
     </button>
     <!-- 移动到其他窗格菜单 -->
     <div 
@@ -246,7 +246,7 @@ function hideMoveMenu() {
         :class="{ 'border-t': canSplit }"
         :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
       >
-        <span>📤 移动到</span>
+        <span>移动到</span>
         <span>▶</span>
       </button>
       <!-- 二级菜单 -->
@@ -307,7 +307,7 @@ function hideMoveMenu() {
       class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg }"
     >
-      ■  全选
+      全选
     </button>
     <div class="h-px w-full my-1" :style="{ backgroundColor: currentTheme.colors.border }"></div>
     <button
@@ -315,21 +315,21 @@ function hideMoveMenu() {
       class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg }"
     >
-      📋 复制
+      复制
     </button>
     <button
       @click="handleAction('cut')"
       class="w-full px-4 py-2 text-left text-sm border-t whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
     >
-      ✂️ 剪切
+      剪切
     </button>
     <button
       @click="handleAction('paste')"
       class="w-full px-4 py-2 text-left text-sm border-t whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
     >
-      📄 粘贴
+      粘贴
     </button>
     <div v-if="hasAnyTemplateAvailable" class="h-px w-full my-1" :style="{ backgroundColor: currentTheme.colors.border }"></div>
     <div 
@@ -342,7 +342,7 @@ function hideMoveMenu() {
         class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item flex items-center justify-between"
         :style="{ color: currentTheme.colors.fg }"
       >
-        <span>📝 插入模板</span>
+        <span>插入模板</span>
         <span>▶</span>
       </button>
       <!-- 二级菜单 -->
@@ -363,7 +363,7 @@ function hideMoveMenu() {
           class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
           :style="{ color: currentTheme.colors.fg }"
         >
-          💡 插入Idea模板
+          插入Idea模板
         </button>
         <button
           v-if="isInHistoryCountries"
@@ -372,7 +372,7 @@ function hideMoveMenu() {
           :class="{ 'border-t': isInCommonIdeas }"
           :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
         >
-          🏷️ 插入Tag初始态定义模板
+          插入Tag初始态定义模板
         </button>
         <button
           v-if="isInCommonBop"
@@ -381,7 +381,7 @@ function hideMoveMenu() {
           :class="{ 'border-t': isInCommonIdeas || isInHistoryCountries }"
           :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
         >
-          ⚖️ 插入权力平衡模板
+          插入权力平衡模板
         </button>
       </div>
     </div>
