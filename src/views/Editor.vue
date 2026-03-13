@@ -830,6 +830,8 @@ async function handleContextMenuAction(action: string, payload?: any) {
       }
     } else if (action === 'copy') {
       storeTreeClipboard('copy')
+    } else if (action === 'cut') {
+      storeTreeClipboard('cut')
     } else if (action === 'copyPath') {
       if (treeContextMenuNode.value) {
         navigator.clipboard.writeText(treeContextMenuNode.value.path).catch(err => {

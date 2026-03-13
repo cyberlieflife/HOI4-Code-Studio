@@ -173,6 +173,14 @@ function hideMoveMenu() {
       馃搵 澶嶅埗
     </button>
     <button
+      v-if="treeNodePath"
+      @click="handleAction('cut')"
+      class="w-full px-4 py-2 text-left text-sm border-t whitespace-nowrap transition-colors context-menu-item"
+      :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
+    >
+      鉁傦笍 鍓垏
+    </button>
+    <button
       @click="handleAction('copyPath')"
       class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg }"
