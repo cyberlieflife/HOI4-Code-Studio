@@ -6,7 +6,7 @@ type CreateDialogType = 'file' | 'folder'
 type CreateDialogMode = 'create' | 'rename'
 
 export function useEditorUiState() {
-  const rightPanelExpanded = ref(true)
+  const rightPanelExpanded = ref(false)
 
   const createDialogVisible = ref(false)
   const createDialogType = ref<CreateDialogType>('file')
