@@ -1,11 +1,10 @@
 import { ref } from 'vue'
 import {
-  loadDefaultMap,
   type ProvinceDefinition,
   type DefaultMap,
   type StateDefinition,
   type RGBColor,
-  initializeMapContext,
+  initializeMapContextWithFallback,
   getMapTileDirect,
   getMapPreview,
   getProvinceAtPoint,
@@ -27,7 +26,11 @@ export function useMapEngine() {
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
-  async function initMap(projectPath: string) {
+  async function initMap(
+    projectPath: string,
+    gameDirectory?: string,
+    dependencyRoots: string[] = []
+  ) {
     if (!projectPath) {
       error.value = '未指定项目路径'
       return
@@ -42,43 +45,15 @@ export function useMapEngine() {
     try {
       logMapEvent('initMap:start', { projectPath: rootPath })
 
-      const dmRes = await measureMapAsync('frontend.loadDefaultMap', async () => (
-        await loadDefaultMap(`${rootPath}/map/default.map`)
-      ))
-      if (!dmRes.success || !dmRes.data) {
-        throw new Error(dmRes.message)
-      }
-      defaultMap.value = dmRes.data
-
-      const resolvePath = (relPath: string) => {
-        const cleanRel = relPath.replace(/^[/\\]/, '')
-        if (!cleanRel.includes('/') && !cleanRel.includes('\\')) {
-          return `${rootPath}/map/${cleanRel}`
-        }
-        return `${rootPath}/${cleanRel}`
-      }
-
-      const provincesPath = resolvePath(defaultMap.value.provinces)
-      const definitionsPath = resolvePath(defaultMap.value.definitions)
-      const statesPath = `${rootPath}/history/states`
-      const countryColorsPath = `${rootPath}/common/countries/colors.txt`
-
-      console.log('Initializing map with paths:', {
-        provincesPath,
-        definitionsPath,
-        statesPath,
-        countryColorsPath
-      })
-
-      const initData = await measureMapAsync('frontend.initializeMapContext', async () => (
-        await initializeMapContext(
-          provincesPath,
-          definitionsPath,
-          statesPath,
-          countryColorsPath
+      const initData = await measureMapAsync('frontend.initializeMapContextWithFallback', async () => (
+        await initializeMapContextWithFallback(
+          rootPath,
+          gameDirectory,
+          dependencyRoots
         )
       ))
 
+      defaultMap.value = initData.defaultMap ?? null
       mapData.value = initData.metadata
       definitions.value = initData.definitions
       states.value = initData.states

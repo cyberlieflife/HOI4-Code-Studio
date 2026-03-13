@@ -167,6 +167,7 @@ pub fn run() {
             map_engine::load_country_colors,
             map_engine::get_province_owner_color_map,
             map_engine::initialize_map_context,
+            map_engine::initialize_map_context_with_fallback,
             map_engine::get_map_tile_direct,
             map_engine::get_province_at_point,
             map_engine::get_map_metadata,

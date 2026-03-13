@@ -1252,6 +1252,18 @@ export async function initializeMapContext(
   })
 }
 
+export async function initializeMapContextWithFallback(
+  projectRoot: string,
+  gameDirectory?: string,
+  dependencyRoots?: string[]
+): Promise<MapInitializationData> {
+  return await invoke('initialize_map_context_with_fallback', {
+    projectRoot,
+    gameDirectory,
+    dependencyRoots
+  })
+}
+
 export async function getMapTileDirect(
   x: number,
   y: number,
@@ -1272,6 +1284,7 @@ export interface MapInitializationData {
   metadata: MapMetadata
   definitions: ProvinceDefinition[]
   states: StateDefinition[]
+  defaultMap?: DefaultMap
 }
 
 export async function getMapMetadata(): Promise<MapMetadata> {

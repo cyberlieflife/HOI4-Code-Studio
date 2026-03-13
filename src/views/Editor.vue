@@ -215,7 +215,7 @@ async function handlePerformReplace(replaceText: string) {
 // Refs
 const editorGroupRef = ref<InstanceType<typeof EditorGroup> | null>(null)
 
-const { openPreview, syncPreviewContent } = usePreviewPaneManager(editorGroupRef)
+const { openPreview, openProjectMapPreview, syncPreviewContent } = usePreviewPaneManager(editorGroupRef)
 const {
   jumpToError,
   jumpToNextError,
@@ -550,6 +550,13 @@ function handleShowTreeContextMenu(event: MouseEvent, node: FileNode | null = nu
   }
 }
 
+function isProjectMapFolder(node: FileNode | null) {
+  if (!node || !node.isDirectory) return false
+
+  const normalizePath = (path: string) => path.replace(/\\/g, '/').replace(/\/+$/, '')
+  return normalizePath(node.path) === `${normalizePath(projectPath.value)}/map`
+}
+
 async function closeOpenedFilesUnderPath(basePath: string) {
   if (!editorGroupRef.value) return
 
@@ -724,6 +731,9 @@ async function handleContextMenuAction(action: string, payload?: any) {
           openFolder(targetPath)
         }
       }
+    } else if (action === 'previewMap') {
+      if (!isProjectMapFolder(treeContextMenuNode.value)) return
+      await openProjectMapPreview(projectPath.value)
     }
   }
   hideContextMenu()
@@ -1284,6 +1294,9 @@ onUnmounted(() => {
       :y="contextMenuY"
       :menu-type="contextMenuType"
       :can-split="(editorGroupRef?.panes.length || 0) < 3"
+      :tree-node-path="treeContextMenuNode?.path"
+      :tree-node-is-directory="treeContextMenuNode?.isDirectory"
+      :project-root="projectPath"
       :available-panes="availablePanesForMove"
       @action="handleContextMenuAction"
       @close="hideContextMenu"

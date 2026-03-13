@@ -1,13 +1,12 @@
 #![deny(clippy::unwrap_used)]
-use regex::Regex;
-use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::Path;
-
 use memmap2::Mmap;
 use once_cell::sync::Lazy;
 use rayon::prelude::*;
-use std::collections::HashMap;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
@@ -668,6 +667,8 @@ pub struct MapInitializationData {
     pub metadata: MapMetadata,
     pub definitions: Vec<ProvinceDefinition>,
     pub states: Vec<StateDefinition>,
+    #[serde(rename = "defaultMap")]
+    pub default_map: Option<DefaultMap>,
 }
 
 /// 解析州文件 (history/states/*.txt)
@@ -750,6 +751,532 @@ pub fn load_all_states(states_dir: String) -> Vec<StateDefinition> {
     states
 }
 
+fn normalize_root_path(path: &str) -> String {
+    path.replace('\\', "/").trim_end_matches('/').to_string()
+}
+
+fn normalize_relative_path(path: &str) -> String {
+    path.trim()
+        .trim_matches('"')
+        .trim_start_matches(['/', '\\'])
+        .replace('\\', "/")
+}
+
+fn normalize_map_relative_path(path: &str) -> String {
+    let normalized = normalize_relative_path(path);
+    if normalized.contains('/') {
+        normalized
+    } else {
+        format!("map/{}", normalized)
+    }
+}
+
+fn build_search_roots(
+    project_root: &str,
+    dependency_roots: &[String],
+    game_directory: Option<&str>,
+) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    let mut seen = HashSet::new();
+
+    let mut push_root = |raw: &str| {
+        let normalized = normalize_root_path(raw);
+        if normalized.is_empty() || !seen.insert(normalized.clone()) {
+            return;
+        }
+        roots.push(PathBuf::from(normalized));
+    };
+
+    push_root(project_root);
+    for dependency_root in dependency_roots {
+        push_root(dependency_root);
+    }
+    if let Some(game_directory) = game_directory {
+        push_root(game_directory);
+    }
+
+    roots
+}
+
+fn resolve_existing_path(relative_path: &str, roots: &[PathBuf]) -> Option<PathBuf> {
+    let normalized = normalize_relative_path(relative_path);
+    for root in roots {
+        let candidate = root.join(&normalized);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn descriptor_replaces_map(project_root: &Path) -> bool {
+    let descriptor_path = project_root.join("descriptor.mod");
+    if !descriptor_path.exists() {
+        return false;
+    }
+
+    let content = match read_file_with_encoding(&descriptor_path) {
+        Ok(content) => content,
+        Err(_) => return false,
+    };
+
+    for raw_line in content.lines() {
+        let line = raw_line.split('#').next().unwrap_or("").trim();
+        if !line.starts_with("replace_path") {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split('=').collect();
+        if parts.len() != 2 {
+            continue;
+        }
+
+        let value = parts[1]
+            .trim()
+            .trim_matches('"')
+            .trim_matches(['/', '\\'])
+            .to_lowercase();
+        if value == "map" {
+            return true;
+        }
+    }
+
+    false
+}
+
+/*
+fn load_merged_states_from_roots(roots: &[PathBuf]) -> Vec<StateDefinition> {
+    let mut states_by_id = HashMap::new();
+
+    /*
+    // 低优先级先写入，高优先级再覆盖，保证项目文件最终生效。
+    */
+    for root in roots.iter().rev() {
+    // 低优先级先写入，高优先级再覆盖，保证项目文件最终生效。
+    for root in roots.iter().rev() {
+    for root in roots.iter().rev() {
+        let states_dir = root.join("history/states");
+        if !states_dir.exists() {
+            continue;
+        }
+
+        for state in load_all_states(states_dir.to_string_lossy().to_string()) {
+            states_by_id.insert(state.id, state);
+        }
+    }
+
+    let mut states: Vec<_> = states_by_id.into_values().collect();
+    states.sort_by_key(|state| state.id);
+    states
+}
+
+fn load_merged_country_colors_from_roots(roots: &[PathBuf]) -> HashMap<String, RGBColor> {
+    let mut colors = HashMap::new();
+
+    /*
+    // 颜色表允许分散在多个层级中，后写入的高优先级内容覆盖前面的定义。
+    */
+    for root in roots.iter().rev() {
+    // 颜色表允许分散在多个层级中，后写入的高优先级内容覆盖前面的定义。
+    for root in roots.iter().rev() {
+    for root in roots.iter().rev() {
+        let path = root.join("common/countries/colors.txt");
+        if !path.exists() {
+            continue;
+        }
+
+        for (tag, color) in load_country_colors(path.to_string_lossy().to_string()) {
+            colors.insert(tag, color);
+        }
+    }
+
+    colors
+}
+
+*/
+
+fn load_merged_states_from_roots(roots: &[PathBuf]) -> Vec<StateDefinition> {
+    let mut states_by_id = HashMap::new();
+
+    for root in roots.iter().rev() {
+        let states_dir = root.join("history/states");
+        if !states_dir.exists() {
+            continue;
+        }
+
+        for state in load_all_states(states_dir.to_string_lossy().to_string()) {
+            states_by_id.insert(state.id, state);
+        }
+    }
+
+    let mut states: Vec<_> = states_by_id.into_values().collect();
+    states.sort_by_key(|state| state.id);
+    states
+}
+
+fn load_merged_country_colors_from_roots(roots: &[PathBuf]) -> HashMap<String, RGBColor> {
+    let mut colors = HashMap::new();
+
+    for root in roots.iter().rev() {
+        let path = root.join("common/countries/colors.txt");
+        if !path.exists() {
+            continue;
+        }
+
+        for (tag, color) in load_country_colors(path.to_string_lossy().to_string()) {
+            colors.insert(tag, color);
+        }
+    }
+
+    colors
+}
+
+fn build_map_context(
+    state: tauri::State<MapState>,
+    map_path: &Path,
+    definitions_path: &Path,
+    states: Vec<StateDefinition>,
+    country_colors: HashMap<String, RGBColor>,
+    default_map: Option<DefaultMap>,
+) -> Result<MapInitializationData, String> {
+    let started_at = Instant::now();
+    // 1. Load Definitions
+    let definitions_started_at = Instant::now();
+    let definitions_vec = parse_definition_csv(definitions_path).map_err(|e| {
+        format!(
+            "鏃犳硶鍔犺浇鐪佷唤瀹氫箟鏂囦欢 ({}): {}",
+            definitions_path.display(),
+            e
+        )
+    })?;
+    let mut definitions = HashMap::with_capacity(definitions_vec.len());
+    for def in definitions_vec {
+        definitions.insert(def.id, def);
+    }
+    log_map_perf(
+        "rust.initialize_map_context.definitions",
+        definitions_started_at,
+    );
+
+    // 2. Load Provinces BMP (Ultra-Fast Native BMP Parsing with Mmap)
+    let bmp_started_at = Instant::now();
+    /*
+    let map_file = fs::File::open(map_path)
+        .map_err(|e| format!("鏃犳硶鎵撳紑鍦板浘浣嶅浘 ({}): {}", map_path.display(), e))?;
+    let mmap = unsafe { Mmap::map(&map_file).map_err(|e| format!("鍐呭瓨鏄犲皠澶辫触: {}", e))? };
+
+    if mmap.len() < 54 || &mmap[0..2] != b"BM" {
+        return Err("涓嶆槸鏈夋晥鐨?BMP 鏂囦欢".to_string());
+    }
+
+    */
+    let map_file = fs::File::open(map_path).map_err(|e| {
+        format!(
+            "Failed to open provinces bitmap ({}): {}",
+            map_path.display(),
+            e
+        )
+    })?;
+    let mmap =
+        unsafe { Mmap::map(&map_file).map_err(|e| format!("Failed to memory-map bitmap: {}", e))? };
+
+    if mmap.len() < 54 || &mmap[0..2] != b"BM" {
+        return Err("Not a valid BMP file".to_string());
+    }
+
+    let pixel_offset = u32::from_le_bytes(mmap[10..14].try_into().unwrap_or([0; 4])) as usize;
+    let width = i32::from_le_bytes(mmap[18..22].try_into().unwrap_or([0; 4])) as u32;
+    let height = i32::from_le_bytes(mmap[22..26].try_into().unwrap_or([0; 4])) as u32;
+    let bpp = u16::from_le_bytes(mmap[28..30].try_into().unwrap_or([0; 2]));
+
+    if bpp != 24 {
+        return Err(format!("浠呮敮鎸?24-bit BMP锛屽綋鍓嶄负 {}-bit", bpp));
+    }
+
+    let row_size = ((width * 3 + 3) & !3) as usize;
+
+    let mut color_lut = vec![0u32; 1 << 24];
+    for def in definitions.values() {
+        let color_idx = ((def.r as usize) << 16) | ((def.g as usize) << 8) | (def.b as usize);
+        color_lut[color_idx] = def.id;
+    }
+
+    let mut province_ids = vec![0u32; (width * height) as usize];
+    province_ids
+        .par_chunks_mut(width as usize)
+        .enumerate()
+        .for_each(|(y_inv, row)| {
+            let y = height - 1 - y_inv as u32;
+            let row_start = pixel_offset + y as usize * row_size;
+            let row_data = &mmap[row_start..row_start + (width * 3) as usize];
+            for (x, chunk) in row_data.chunks_exact(3).enumerate() {
+                let color_idx =
+                    ((chunk[2] as usize) << 16) | ((chunk[1] as usize) << 8) | (chunk[0] as usize);
+                row[x] = color_lut[color_idx];
+            }
+        });
+    log_map_perf("rust.initialize_map_context.bmp", bmp_started_at);
+
+    let country_colors_started_at = Instant::now();
+    log_map_perf(
+        "rust.initialize_map_context.country_colors",
+        country_colors_started_at,
+    );
+
+    let states_started_at = Instant::now();
+    let mut state_owners = HashMap::with_capacity(definitions.len());
+    let mut province_to_state = HashMap::with_capacity(definitions.len());
+    let mut state_to_provinces = HashMap::with_capacity(states.len());
+
+    let province_to_state_color: HashMap<u32, [u8; 3]> = states
+        .par_iter()
+        .flat_map(|state| {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            use std::hash::{Hash, Hasher};
+            state.id.hash(&mut hasher);
+            let hash = hasher.finish();
+            let r = ((hash & 0xFF) as u8 % 180) + 40;
+            let g = (((hash >> 8) & 0xFF) as u8 % 180) + 40;
+            let b = (((hash >> 16) & 0xFF) as u8 % 180) + 40;
+            state
+                .provinces
+                .iter()
+                .map(move |&p_id| (p_id, [r, g, b]))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+
+    for state in &states {
+        state_to_provinces.insert(state.id, state.provinces.clone());
+        for &p_id in &state.provinces {
+            state_owners.insert(p_id, state.owner.clone());
+            province_to_state.insert(p_id, state.id);
+        }
+    }
+    log_map_perf("rust.initialize_map_context.states", states_started_at);
+
+    let lut_started_at = Instant::now();
+    let max_id = definitions.keys().max().copied().unwrap_or(0);
+    let lut_size = (max_id + 1) as usize;
+
+    let (province_color_lut, (state_color_lut, (country_color_lut, terrain_color_lut))) =
+        rayon::join(
+            || {
+                let mut lut = vec![[0, 0, 0]; lut_size];
+                for def in definitions.values() {
+                    if def.id < lut_size as u32 {
+                        lut[def.id as usize] = [def.r, def.g, def.b];
+                    }
+                }
+                lut
+            },
+            || {
+                rayon::join(
+                    || {
+                        let mut lut = vec![[60, 60, 60]; lut_size];
+                        for (&p_id, &color) in &province_to_state_color {
+                            if p_id < lut_size as u32 {
+                                lut[p_id as usize] = color;
+                            }
+                        }
+                        lut
+                    },
+                    || {
+                        rayon::join(
+                            || {
+                                let mut lut = vec![[40, 40, 40]; lut_size];
+                                for (&p_id, owner) in &state_owners {
+                                    if p_id < lut_size as u32 {
+                                        if let Some(c) = country_colors.get(owner) {
+                                            lut[p_id as usize] = [c.r, c.g, c.b];
+                                        } else {
+                                            lut[p_id as usize] = [128, 128, 128];
+                                        }
+                                    }
+                                }
+                                lut
+                            },
+                            || {
+                                let mut lut = vec![[100, 100, 100]; lut_size];
+                                for def in definitions.values() {
+                                    if def.id < lut_size as u32 {
+                                        lut[def.id as usize] = match def.terrain.as_str() {
+                                            "plains" => [247, 166, 86],
+                                            "forest" => [85, 139, 47],
+                                            "hills" => [255, 215, 0],
+                                            "mountain" => [139, 69, 19],
+                                            "urban" => [128, 128, 128],
+                                            "jungle" => [34, 139, 34],
+                                            "marsh" => [47, 79, 79],
+                                            "desert" => [244, 164, 96],
+                                            "water" | "ocean" => [65, 105, 225],
+                                            "lakes" => [65, 155, 225],
+                                            _ => [200, 200, 200],
+                                        };
+                                    }
+                                }
+                                lut
+                            },
+                        )
+                    },
+                )
+            },
+        );
+    log_map_perf("rust.initialize_map_context.lut", lut_started_at);
+
+    let bounds_started_at = Instant::now();
+    let stats = province_ids
+        .par_iter()
+        .enumerate()
+        .fold(
+            || vec![(u32::MAX, u32::MAX, 0u32, 0u32, 0u32); lut_size],
+            |mut local_stats, (idx, &id)| {
+                if id > 0 && id <= max_id {
+                    let x = (idx as u32) % width;
+                    let y = (idx as u32) / width;
+                    let s = &mut local_stats[id as usize];
+                    s.0 = s.0.min(x);
+                    s.1 = s.1.min(y);
+                    s.2 = s.2.max(x);
+                    s.3 = s.3.max(y);
+                    s.4 += 1;
+                }
+                local_stats
+            },
+        )
+        .reduce(
+            || vec![(u32::MAX, u32::MAX, 0u32, 0u32, 0u32); lut_size],
+            |mut a, b| {
+                for i in 0..a.len() {
+                    if b[i].4 > 0 {
+                        a[i].0 = a[i].0.min(b[i].0);
+                        a[i].1 = a[i].1.min(b[i].1);
+                        a[i].2 = a[i].2.max(b[i].2);
+                        a[i].3 = a[i].3.max(b[i].3);
+                        a[i].4 += b[i].4;
+                    }
+                }
+                a
+            },
+        );
+
+    let mut province_bounds = HashMap::with_capacity(lut_size);
+    for (id, s) in stats.into_iter().enumerate() {
+        if s.4 > 0 {
+            province_bounds.insert(
+                id as u32,
+                BoundingBox {
+                    min_x: s.0,
+                    min_y: s.1,
+                    max_x: s.2,
+                    max_y: s.3,
+                },
+            );
+        }
+    }
+    log_map_perf("rust.initialize_map_context.bounds", bounds_started_at);
+
+    let outlines_started_at = Instant::now();
+    let all_edges = detect_edges(width, height, &province_ids);
+    let mut province_outlines: HashMap<u32, Vec<u32>> = HashMap::with_capacity(lut_size);
+    let mut state_outlines: HashMap<u32, Vec<u32>> = HashMap::with_capacity(states.len());
+    let mut country_same_color_border_points = Vec::new();
+
+    for edge in all_edges {
+        let packed_points = edge.points;
+
+        if edge.from_id != 0 {
+            province_outlines
+                .entry(edge.from_id)
+                .or_default()
+                .extend(&packed_points);
+        }
+        if edge.to_id != 0 {
+            province_outlines
+                .entry(edge.to_id)
+                .or_default()
+                .extend(&packed_points);
+        }
+
+        let from_state = province_to_state.get(&edge.from_id).copied();
+        let to_state = province_to_state.get(&edge.to_id).copied();
+
+        if from_state != to_state {
+            if let Some(fs) = from_state {
+                state_outlines.entry(fs).or_default().extend(&packed_points);
+            }
+            if let Some(ts) = to_state {
+                state_outlines.entry(ts).or_default().extend(&packed_points);
+            }
+        }
+
+        if edge.from_id != 0 && edge.to_id != 0 {
+            let from_owner = state_owners.get(&edge.from_id);
+            let to_owner = state_owners.get(&edge.to_id);
+            let from_color = country_color_lut.get(edge.from_id as usize);
+            let to_color = country_color_lut.get(edge.to_id as usize);
+
+            if let (Some(from_owner), Some(to_owner), Some(from_color), Some(to_color)) =
+                (from_owner, to_owner, from_color, to_color)
+            {
+                if from_owner != to_owner && from_color == to_color {
+                    country_same_color_border_points.extend(&packed_points);
+                }
+            }
+        }
+    }
+
+    province_outlines.par_iter_mut().for_each(|(_, points)| {
+        points.sort_unstable();
+        points.dedup();
+    });
+    state_outlines.par_iter_mut().for_each(|(_, points)| {
+        points.sort_unstable();
+        points.dedup();
+    });
+    country_same_color_border_points.sort_unstable();
+    country_same_color_border_points.dedup();
+    log_map_perf("rust.initialize_map_context.outlines", outlines_started_at);
+
+    let province_count = province_ids.len();
+    let mut definitions_list: Vec<_> = definitions.values().cloned().collect();
+    definitions_list.sort_by_key(|definition| definition.id);
+    let mut states_list = states.clone();
+    states_list.sort_by_key(|state| state.id);
+
+    let mut lock = state.0.write().map_err(|_| "Failed to lock state")?;
+    *lock = Some(Arc::new(MapContext {
+        width,
+        height,
+        province_ids,
+        definitions,
+        country_colors,
+        state_owners,
+        province_to_state,
+        state_to_provinces,
+        province_color_lut,
+        state_color_lut,
+        country_color_lut,
+        terrain_color_lut,
+        province_bounds,
+        province_outlines,
+        state_outlines,
+        country_same_color_border_points,
+    }));
+
+    log_map_perf("rust.initialize_map_context.total", started_at);
+    Ok(MapInitializationData {
+        metadata: MapMetadata {
+            width,
+            height,
+            province_count,
+        },
+        definitions: definitions_list,
+        states: states_list,
+        default_map,
+    })
+}
+
 #[tauri::command]
 pub fn initialize_map_context(
     state: tauri::State<MapState>,
@@ -769,7 +1296,10 @@ pub fn initialize_map_context(
         color_to_id.insert((def.r, def.g, def.b), def.id);
         definitions.insert(def.id, def);
     }
-    log_map_perf("rust.initialize_map_context.definitions", definitions_started_at);
+    log_map_perf(
+        "rust.initialize_map_context.definitions",
+        definitions_started_at,
+    );
 
     // 2. Load Provinces BMP (Ultra-Fast Native BMP Parsing with Mmap)
     let bmp_started_at = Instant::now();
@@ -1086,7 +1616,68 @@ pub fn initialize_map_context(
         },
         definitions: definitions_list,
         states: states_list,
+        default_map: None,
     })
+}
+
+#[tauri::command]
+pub fn initialize_map_context_with_fallback(
+    state: tauri::State<MapState>,
+    project_root: String,
+    game_directory: Option<String>,
+    dependency_roots: Option<Vec<String>>,
+) -> Result<MapInitializationData, String> {
+    let dependency_roots = dependency_roots.unwrap_or_default();
+    let search_roots =
+        build_search_roots(&project_root, &dependency_roots, game_directory.as_deref());
+    if search_roots.is_empty() {
+        return Err("鏈壘鍒板彲鐢ㄧ殑鍦板浘鎼滅储鏍圭洰褰?".to_string());
+    }
+
+    let project_root_path = PathBuf::from(normalize_root_path(&project_root));
+    let map_roots = if descriptor_replaces_map(&project_root_path) {
+        vec![project_root_path]
+    } else {
+        search_roots.clone()
+    };
+
+    let default_map_path = resolve_existing_path("map/default.map", &map_roots)
+        .ok_or_else(|| "鏃犳硶鍦ㄩ」鐩€佷緷璧栨垨鍘熺増涓壘鍒?map/default.map".to_string())?;
+    let default_map = parse_default_map(&default_map_path).map_err(|e| {
+        format!(
+            "鏃犳硶瑙ｆ瀽 default.map ({}): {}",
+            default_map_path.display(),
+            e
+        )
+    })?;
+
+    let definitions_path = resolve_existing_path(
+        &normalize_map_relative_path(&default_map.definitions),
+        &map_roots,
+    )
+    .ok_or_else(|| {
+        format!(
+            "鏃犳硶鎵惧埌鍦板浘瀹氫箟鏂囦欢: {}",
+            default_map.definitions
+        )
+    })?;
+    let provinces_path = resolve_existing_path(
+        &normalize_map_relative_path(&default_map.provinces),
+        &map_roots,
+    )
+    .ok_or_else(|| format!("鏃犳硶鎵惧埌鍦板浘浣嶅浘鏂囦欢: {}", default_map.provinces))?;
+
+    let states = load_merged_states_from_roots(&search_roots);
+    let country_colors = load_merged_country_colors_from_roots(&search_roots);
+
+    build_map_context(
+        state,
+        &provinces_path,
+        &definitions_path,
+        states,
+        country_colors,
+        Some(default_map),
+    )
 }
 
 #[tauri::command]
@@ -1095,10 +1686,7 @@ pub fn get_province_outline(
     province_id: u32,
 ) -> Result<Vec<u8>, String> {
     let context = {
-        let context_guard = state
-            .0
-            .read()
-            .map_err(|_| "Failed to lock map state")?;
+        let context_guard = state.0.read().map_err(|_| "Failed to lock map state")?;
         context_guard
             .as_ref()
             .cloned()
@@ -1119,10 +1707,7 @@ pub fn get_province_outline(
 #[tauri::command]
 pub fn get_state_outline(state: tauri::State<MapState>, state_id: u32) -> Result<Vec<u8>, String> {
     let context = {
-        let context_guard = state
-            .0
-            .read()
-            .map_err(|_| "Failed to lock map state")?;
+        let context_guard = state.0.read().map_err(|_| "Failed to lock map state")?;
         context_guard
             .as_ref()
             .cloned()

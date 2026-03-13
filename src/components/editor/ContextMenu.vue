@@ -9,6 +9,9 @@ const props = defineProps<{
   menuType: 'file' | 'tree' | 'pane' | 'editor'
   canSplit?: boolean
   currentFilePath?: string
+  treeNodePath?: string
+  treeNodeIsDirectory?: boolean
+  projectRoot?: string
   availablePanes?: Array<{id: string, name: string}>
 }>()
 
@@ -54,6 +57,18 @@ const showSubmenuOnLeft = computed(() => {
   const submenuWidth = 180
   const padding = 20
   return props.x + 200 + submenuWidth > window.innerWidth - padding
+})
+
+function normalizePath(path?: string) {
+  return (path || '').replace(/\\/g, '/').replace(/\/+$/, '')
+}
+
+const isProjectMapDirectory = computed(() => {
+  if (!props.treeNodeIsDirectory || !props.treeNodePath || !props.projectRoot) {
+    return false
+  }
+
+  return normalizePath(props.treeNodePath) === `${normalizePath(props.projectRoot)}/map`
 })
 
 function handleAction(action: string, payload?: any) {
@@ -155,6 +170,14 @@ function hideMoveMenu() {
       :style="{ color: currentTheme.colors.fg }"
     >
       📋 复制路径
+    </button>
+    <button
+      v-if="isProjectMapDirectory"
+      @click="handleAction('previewMap')"
+      class="w-full px-4 py-2 text-left text-sm border-t whitespace-nowrap transition-colors context-menu-item"
+      :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
+    >
+      地图预览
     </button>
     <button
       @click="handleAction('showInExplorer')"
