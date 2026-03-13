@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { buildDirectoryTreeFast, createFile, createFolder, writeFileContent, launchGame, renamePath, deletePath, openFolder, loadSettingsSnapshot, type Settings } from '../api/tauri'
+import { buildDirectoryTreeFast, createFile, createFolder, copyPaths, movePaths, writeFileContent, launchGame, renamePath, deletePath, openFolder, loadSettingsSnapshot, type Settings } from '../api/tauri'
 import 'highlight.js/styles/github-dark.css'
 import 'highlight.js/lib/languages/json'
 import 'highlight.js/lib/languages/yaml'
@@ -62,7 +62,11 @@ const route = useRoute()
 
 // 基础状态
 const projectPath = ref('')
+const fileTreeContainerRef = ref<HTMLElement | null>(null)
 const selectedNode = ref<FileNode | null>(null)
+const selectedTreePaths = ref<string[]>([])
+const selectionAnchorPath = ref<string | null>(null)
+const treeClipboard = ref<{ action: 'copy' | 'cut'; paths: string[] } | null>(null)
 const txtErrors = ref<{line: number, msg: string, type: string}[]>([])
 const isLaunchingGame = ref(false)
 
@@ -328,6 +332,206 @@ const hasActiveDependencyTree = computed(() => hasDependencyTree(activeDependenc
 
 const activeDependencyTree = computed(() => getDependencyTree(activeDependencyId.value))
 
+const currentTreeRoots = computed(() => {
+  if (leftPanelActiveTab.value === 'dependencies' && activeDependencyId.value) {
+    return activeDependencyTree.value
+  }
+
+  if (leftPanelActiveTab.value === 'project') {
+    return fileTree.value
+  }
+
+  return []
+})
+
+function flattenVisibleTree(nodes: FileNode[]): FileNode[] {
+  const flattened: FileNode[] = []
+
+  for (const node of nodes) {
+    flattened.push(node)
+    if (node.isDirectory && node.expanded && node.children?.length) {
+      flattened.push(...flattenVisibleTree(node.children))
+    }
+  }
+
+  return flattened
+}
+
+const visibleTreeNodes = computed(() => flattenVisibleTree(currentTreeRoots.value))
+
+function findNodeByPath(nodes: FileNode[], path: string): FileNode | null {
+  for (const node of nodes) {
+    if (node.path === path) {
+      return node
+    }
+
+    if (node.children?.length) {
+      const matchedNode = findNodeByPath(node.children, path)
+      if (matchedNode) {
+        return matchedNode
+      }
+    }
+  }
+
+  return null
+}
+
+function setTreeSelection(paths: string[], preferredNode: FileNode | null = null) {
+  selectedTreePaths.value = Array.from(new Set(paths))
+
+  if (preferredNode && selectedTreePaths.value.includes(preferredNode.path)) {
+    selectedNode.value = preferredNode
+    return
+  }
+
+  const fallbackPath = selectedTreePaths.value[selectedTreePaths.value.length - 1]
+  selectedNode.value = fallbackPath ? findNodeByPath(currentTreeRoots.value, fallbackPath) : null
+}
+
+function selectSingleTreeNode(node: FileNode) {
+  setTreeSelection([node.path], node)
+  selectionAnchorPath.value = node.path
+}
+
+function getTreeContextTargetPaths() {
+  if (treeContextMenuNode.value) {
+    if (selectedTreePaths.value.includes(treeContextMenuNode.value.path)) {
+      return [...selectedTreePaths.value]
+    }
+    return [treeContextMenuNode.value.path]
+  }
+
+  if (selectedTreePaths.value.length > 0) {
+    return [...selectedTreePaths.value]
+  }
+
+  return []
+}
+
+function storeTreeClipboard(action: 'copy' | 'cut') {
+  const targetPaths = getTreeContextTargetPaths()
+  if (targetPaths.length === 0) {
+    return false
+  }
+
+  treeClipboard.value = {
+    action,
+    paths: targetPaths
+  }
+  return true
+}
+
+function getParentPath(path: string) {
+  const lastSeparatorIndex = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  return lastSeparatorIndex > 0 ? path.substring(0, lastSeparatorIndex) : path
+}
+
+function getActiveTreeRootPath() {
+  if (leftPanelActiveTab.value === 'dependencies' && activeDependencyId.value) {
+    return dependencies.value.find(dep => dep.id === activeDependencyId.value)?.path ?? ''
+  }
+
+  return projectPath.value
+}
+
+function getTreePasteTargetDirectory() {
+  if (treeContextMenuNode.value) {
+    return treeContextMenuNode.value.isDirectory
+      ? treeContextMenuNode.value.path
+      : getParentPath(treeContextMenuNode.value.path)
+  }
+
+  if (selectedNode.value) {
+    return selectedNode.value.isDirectory
+      ? selectedNode.value.path
+      : getParentPath(selectedNode.value.path)
+  }
+
+  return getActiveTreeRootPath()
+}
+
+async function refreshActiveFileTree() {
+  if (leftPanelActiveTab.value === 'dependencies' && activeDependencyId.value) {
+    invalidateDependencyFileTree(activeDependencyId.value)
+    await loadDependencyFileTree(activeDependencyId.value)
+    return
+  }
+
+  await loadFileTree()
+}
+
+function focusFileTree() {
+  fileTreeContainerRef.value?.focus()
+}
+
+function isFileTreeFocused() {
+  return document.activeElement === fileTreeContainerRef.value
+}
+
+async function pasteTreeClipboard() {
+  if (!treeClipboard.value) {
+    return
+  }
+
+  const targetDirectory = getTreePasteTargetDirectory()
+  if (!targetDirectory) {
+    alert('未找到可用的粘贴目标目录')
+    return
+  }
+
+  const { action, paths } = treeClipboard.value
+  const result = action === 'copy'
+    ? await copyPaths(paths, targetDirectory)
+    : await movePaths(paths, targetDirectory)
+
+  if (!result.success) {
+    alert(result.message || '粘贴失败')
+    return
+  }
+
+  if (action === 'cut') {
+    for (const sourcePath of paths) {
+      await closeOpenedFilesUnderPath(sourcePath)
+    }
+    treeClipboard.value = null
+    setTreeSelection([], null)
+    selectionAnchorPath.value = null
+  }
+
+  await refreshActiveFileTree()
+}
+
+function handleTreeNodeSelect(event: MouseEvent, node: FileNode) {
+  const isCtrlSelection = event.ctrlKey || event.metaKey
+  const isShiftSelection = event.shiftKey
+
+  if (isShiftSelection && selectionAnchorPath.value) {
+    const visiblePaths = visibleTreeNodes.value.map(item => item.path)
+    const anchorIndex = visiblePaths.indexOf(selectionAnchorPath.value)
+    const currentIndex = visiblePaths.indexOf(node.path)
+
+    if (anchorIndex !== -1 && currentIndex !== -1) {
+      const [start, end] = anchorIndex < currentIndex
+        ? [anchorIndex, currentIndex]
+        : [currentIndex, anchorIndex]
+      setTreeSelection(visiblePaths.slice(start, end + 1), node)
+      return
+    }
+  }
+
+  if (isCtrlSelection) {
+    if (selectedTreePaths.value.includes(node.path)) {
+      setTreeSelection(selectedTreePaths.value.filter(path => path !== node.path))
+    } else {
+      setTreeSelection([...selectedTreePaths.value, node.path], node)
+    }
+    selectionAnchorPath.value = node.path
+    return
+  }
+
+  selectSingleTreeNode(node)
+}
+
 const {
   start: startFileTreeAutoRefresh,
   stop: stopFileTreeAutoRefresh
@@ -408,7 +612,7 @@ async function handleToggleDependency(id: string) {
 // 切换文件夹
 async function toggleFolder(node: FileNode) {
   if (!node.isDirectory) return
-  selectedNode.value = node
+  selectSingleTreeNode(node)
   node.expanded = !node.expanded
   if (node.expanded && (!node.children || node.children.length === 0)) {
     try {
@@ -442,7 +646,7 @@ async function toggleGameFolder(node: FileNode) {
 async function handleOpenFile(node: FileNode, paneId?: string, jumpInfo?: any) {
   if (node.isDirectory) return
   
-  selectedNode.value = node
+  selectSingleTreeNode(node)
   const targetPaneId = paneId || editorGroupRef.value?.activePaneId
   if (!targetPaneId) return
   
@@ -543,11 +747,13 @@ async function handlePreviewGui(paneId: string) {
 
 // 右键菜单包装函数（处理 selectedNode 高亮）
 function handleShowTreeContextMenu(event: MouseEvent, node: FileNode | null = null) {
-  showTreeContextMenu(event, node)
-  // 强制高亮选中的节点
-  if (node) {
+  focusFileTree()
+  if (node && !selectedTreePaths.value.includes(node.path)) {
+    selectSingleTreeNode(node)
+  } else if (node) {
     selectedNode.value = node
   }
+  showTreeContextMenu(event, node)
 }
 
 function isProjectMapFolder(node: FileNode | null) {
@@ -704,6 +910,12 @@ async function handleContextMenuAction(action: string, payload?: any) {
         logger.error('删除失败:', error)
         alert(`删除失败: ${error}`)
       }
+    } else if (action === 'copy') {
+      storeTreeClipboard('copy')
+    } else if (action === 'cut') {
+      storeTreeClipboard('cut')
+    } else if (action === 'paste') {
+      await pasteTreeClipboard()
     } else if (action === 'copyPath') {
       if (treeContextMenuNode.value) {
         navigator.clipboard.writeText(treeContextMenuNode.value.path).catch(err => {
@@ -1047,6 +1259,33 @@ useKeyboardShortcuts({
   },
   undo: () => {},
   redo: () => {},
+  copy: () => {
+    if (!isFileTreeFocused() || selectedTreePaths.value.length === 0) {
+      return false
+    }
+    treeClipboard.value = {
+      action: 'copy',
+      paths: [...selectedTreePaths.value]
+    }
+    return true
+  },
+  cut: () => {
+    if (!isFileTreeFocused() || selectedTreePaths.value.length === 0) {
+      return false
+    }
+    treeClipboard.value = {
+      action: 'cut',
+      paths: [...selectedTreePaths.value]
+    }
+    return true
+  },
+  paste: () => {
+    if (!isFileTreeFocused() || !treeClipboard.value) {
+      return false
+    }
+    void pasteTreeClipboard()
+    return true
+  },
   search: () => {
     // 打开右侧边栏并切换到搜索标签页
     rightPanelExpanded.value = true
@@ -1138,7 +1377,13 @@ onUnmounted(() => {
         />
         
         <!-- 文件树内容 -->
-        <div class="flex-1 overflow-y-auto p-2" @contextmenu.prevent="handleShowTreeContextMenu($event, null)">
+        <div
+          ref="fileTreeContainerRef"
+          class="flex-1 overflow-y-auto p-2 focus:outline-none"
+          tabindex="0"
+          @mousedown="focusFileTree"
+          @contextmenu.prevent="handleShowTreeContextMenu($event, null)"
+        >
           <h3 class="text-hoi4-text font-bold mb-2 text-sm">
             {{ leftPanelActiveTab === 'project' ? '项目文件' : leftPanelActiveTab === 'dependencies' ? '依赖项文件' : '插件' }}
           </h3>
@@ -1154,7 +1399,8 @@ onUnmounted(() => {
                   :key="node.path"
                   :node="node"
                   :level="0"
-                  :selected-path="selectedNode?.path"
+                  :selected-paths="selectedTreePaths"
+                  @select="handleTreeNodeSelect"
                   @toggle="toggleFolder"
                   @open-file="handleOpenFile"
                   @contextmenu="(e, n) => handleShowTreeContextMenu(e, n)"
@@ -1176,7 +1422,8 @@ onUnmounted(() => {
                   :key="node.path"
                   :node="node"
                   :level="0"
-                  :selected-path="selectedNode?.path"
+                  :selected-paths="selectedTreePaths"
+                  @select="handleTreeNodeSelect"
                   @toggle="toggleFolder"
                   @open-file="handleOpenFile"
                   @contextmenu="(e, n) => handleShowTreeContextMenu(e, n)"
@@ -1296,6 +1543,7 @@ onUnmounted(() => {
       :can-split="(editorGroupRef?.panes.length || 0) < 3"
       :tree-node-path="treeContextMenuNode?.path"
       :tree-node-is-directory="treeContextMenuNode?.isDirectory"
+      :has-tree-clipboard="!!treeClipboard"
       :project-root="projectPath"
       :available-panes="availablePanesForMove"
       @action="handleContextMenuAction"

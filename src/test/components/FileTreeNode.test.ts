@@ -26,7 +26,7 @@ const createMockFileNode = (overrides: Partial<FileNode> = {}): FileNode => ({
 const defaultProps = {
   node: createMockFileNode(),
   level: 0,
-  selectedPath: null as string | null
+  selectedPaths: [] as string[]
 }
 
 describe('FileTreeNode', () => {
@@ -72,14 +72,17 @@ describe('FileTreeNode', () => {
 
   it('应该在点击文件时触发openFile事件', async () => {
     const openFile = vi.fn()
+    const select = vi.fn()
     const wrapper = mount(FileTreeNode, {
       props: {
         ...defaultProps,
+        'onSelect': select,
         'onOpenFile': openFile
       }
     })
 
     await wrapper.find('.file-tree-node').trigger('click')
+    expect(select).toHaveBeenCalledWith(expect.any(MouseEvent), defaultProps.node)
     expect(openFile).toHaveBeenCalledWith(defaultProps.node)
   })
 
@@ -176,7 +179,7 @@ describe('FileTreeNode', () => {
     const wrapper = mount(FileTreeNode, {
       props: {
         ...defaultProps,
-        selectedPath: '/test/test.txt'
+        selectedPaths: ['/test/test.txt']
       }
     })
 

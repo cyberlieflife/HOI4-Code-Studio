@@ -390,6 +390,129 @@ pub fn delete_path(target_path: String) -> serde_json::Value {
 }
 
 /// 打开文件夹
+fn build_paste_operations(
+    source_paths: &[String],
+    target_dir: &std::path::Path,
+) -> Result<Vec<(std::path::PathBuf, std::path::PathBuf)>, String> {
+    if source_paths.is_empty() {
+        return Err("没有可粘贴的文件或文件夹".to_string());
+    }
+
+    if !target_dir.exists() || !target_dir.is_dir() {
+        return Err("目标目录不存在".to_string());
+    }
+
+    let mut operations = Vec::new();
+
+    for source_path in source_paths {
+        let source = std::path::PathBuf::from(source_path);
+        if !source.exists() {
+            return Err(format!("源路径不存在: {}", source_path));
+        }
+
+        let file_name = source
+            .file_name()
+            .ok_or_else(|| format!("无法解析路径名称: {}", source_path))?;
+        let target = target_dir.join(file_name);
+
+        if target.exists() {
+            return Err(format!("目标路径已存在: {}", target.display()));
+        }
+
+        if source == target {
+            return Err("不能粘贴到相同路径".to_string());
+        }
+
+        if source.is_dir() && target.starts_with(&source) {
+            return Err(format!("不能将目录粘贴到自身内部: {}", source.display()));
+        }
+
+        operations.push((source, target));
+    }
+
+    Ok(operations)
+}
+
+fn copy_path_recursive(source: &std::path::Path, target: &std::path::Path) -> std::io::Result<()> {
+    use std::fs;
+
+    if source.is_file() {
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(source, target)?;
+        return Ok(());
+    }
+
+    fs::create_dir_all(target)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let child_source = entry.path();
+        let child_target = target.join(entry.file_name());
+        copy_path_recursive(&child_source, &child_target)?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn copy_paths(source_paths: Vec<String>, target_dir: String) -> serde_json::Value {
+    let target_dir_path = std::path::Path::new(&target_dir);
+    let operations = match build_paste_operations(&source_paths, target_dir_path) {
+        Ok(value) => value,
+        Err(message) => {
+            return serde_json::json!({
+                "success": false,
+                "message": message
+            })
+        }
+    };
+
+    for (source, target) in operations {
+        if let Err(error) = copy_path_recursive(&source, &target) {
+            return serde_json::json!({
+                "success": false,
+                "message": format!("复制失败: {}", error)
+            });
+        }
+    }
+
+    serde_json::json!({
+        "success": true,
+        "message": "复制成功"
+    })
+}
+
+#[tauri::command]
+pub fn move_paths(source_paths: Vec<String>, target_dir: String) -> serde_json::Value {
+    use std::fs;
+
+    let target_dir_path = std::path::Path::new(&target_dir);
+    let operations = match build_paste_operations(&source_paths, target_dir_path) {
+        Ok(value) => value,
+        Err(message) => {
+            return serde_json::json!({
+                "success": false,
+                "message": message
+            })
+        }
+    };
+
+    for (source, target) in operations {
+        if let Err(error) = fs::rename(&source, &target) {
+            return serde_json::json!({
+                "success": false,
+                "message": format!("移动失败: {}", error)
+            });
+        }
+    }
+
+    serde_json::json!({
+        "success": true,
+        "message": "移动成功"
+    })
+}
+
 #[tauri::command]
 pub fn open_folder(path: String) -> serde_json::Value {
     use std::process::Command;
@@ -723,5 +846,70 @@ pub fn read_image_as_base64(file_path: String) -> ImageReadResult {
             base64: None,
             mime_type: None,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{copy_paths, move_paths};
+    use std::fs;
+
+    #[test]
+    fn copy_paths_should_copy_file_and_directory() {
+        let temp_dir = tempfile::tempdir().expect("应能创建临时目录");
+        let source_root = temp_dir.path().join("source");
+        let target_root = temp_dir.path().join("target");
+        fs::create_dir_all(&source_root).expect("应能创建源目录");
+        fs::create_dir_all(&target_root).expect("应能创建目标目录");
+
+        let file_path = source_root.join("test.txt");
+        fs::write(&file_path, "hello").expect("应能写入测试文件");
+
+        let folder_path = source_root.join("folder");
+        fs::create_dir_all(&folder_path).expect("应能创建测试文件夹");
+        fs::write(folder_path.join("nested.txt"), "nested").expect("应能写入嵌套文件");
+
+        let result = copy_paths(
+            vec![
+                file_path.to_string_lossy().to_string(),
+                folder_path.to_string_lossy().to_string(),
+            ],
+            target_root.to_string_lossy().to_string(),
+        );
+
+        assert_eq!(result["success"].as_bool(), Some(true));
+        assert_eq!(
+            fs::read_to_string(target_root.join("test.txt")).expect("复制后应能读取文件"),
+            "hello"
+        );
+        assert_eq!(
+            fs::read_to_string(target_root.join("folder").join("nested.txt"))
+                .expect("复制后应能读取嵌套文件"),
+            "nested"
+        );
+    }
+
+    #[test]
+    fn move_paths_should_move_file_and_remove_source() {
+        let temp_dir = tempfile::tempdir().expect("应能创建临时目录");
+        let source_root = temp_dir.path().join("source");
+        let target_root = temp_dir.path().join("target");
+        fs::create_dir_all(&source_root).expect("应能创建源目录");
+        fs::create_dir_all(&target_root).expect("应能创建目标目录");
+
+        let file_path = source_root.join("move.txt");
+        fs::write(&file_path, "move").expect("应能写入测试文件");
+
+        let result = move_paths(
+            vec![file_path.to_string_lossy().to_string()],
+            target_root.to_string_lossy().to_string(),
+        );
+
+        assert_eq!(result["success"].as_bool(), Some(true));
+        assert!(!file_path.exists());
+        assert_eq!(
+            fs::read_to_string(target_root.join("move.txt")).expect("移动后应能读取文件"),
+            "move"
+        );
     }
 }

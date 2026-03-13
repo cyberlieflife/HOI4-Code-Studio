@@ -403,6 +403,14 @@ export async function createFolder(folderPath: string): Promise<FileOperationRes
   return await invoke('create_folder', { folderPath })
 }
 
+export async function copyPaths(sourcePaths: string[], targetDir: string): Promise<FileOperationResult> {
+  return await invoke('copy_paths', { sourcePaths, targetDir })
+}
+
+export async function movePaths(sourcePaths: string[], targetDir: string): Promise<FileOperationResult> {
+  return await invoke('move_paths', { sourcePaths, targetDir })
+}
+
 /**
  * 重命名文件或文件夹
  */
