@@ -49,7 +49,7 @@ function isSelected(path: string) {
 <template>
   <div>
     <div
-      class="flex items-center px-2 py-1 rounded cursor-pointer text-sm file-tree-node transition-colors"
+      class="flex items-center px-2 py-1 rounded cursor-pointer text-sm file-tree-node transition-colors select-none"
       :class="[isSelected(node.path) ? 'bg-hoi4-selected text-white' : 'hover:bg-hoi4-accent/50']"
       :style="{ paddingLeft: (level * 16 + 8) + 'px' }"
       @click="handleClick"
