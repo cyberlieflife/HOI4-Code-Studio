@@ -1,7 +1,7 @@
 {
   "name": "hoi4-code-studio",
   "private": true,
-  "version": "0.3.7-dev",
+  "version": "0.3.8-dev",
   "type": "module",
   "scripts": {
     "dev": "vite",
