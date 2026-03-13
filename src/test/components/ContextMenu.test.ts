@@ -42,4 +42,25 @@ describe('ContextMenu', () => {
     await buttons[5].trigger('click')
     expect(wrapper.emitted('action')).toEqual([['cut', undefined]])
   })
+
+  it('存在树剪贴板内容时应显示粘贴操作', async () => {
+    const wrapper = mount(ContextMenu, {
+      props: {
+        visible: true,
+        x: 16,
+        y: 24,
+        menuType: 'tree',
+        treeNodePath: '/project/folder',
+        treeNodeIsDirectory: true,
+        hasTreeClipboard: true,
+        projectRoot: '/project'
+      }
+    })
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons).toHaveLength(9)
+
+    await buttons[6].trigger('click')
+    expect(wrapper.emitted('action')).toEqual([['paste', undefined]])
+  })
 })

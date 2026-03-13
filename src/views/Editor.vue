@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { buildDirectoryTreeFast, createFile, createFolder, writeFileContent, launchGame, renamePath, deletePath, openFolder, loadSettingsSnapshot, type Settings } from '../api/tauri'
+import { buildDirectoryTreeFast, createFile, createFolder, copyPaths, movePaths, writeFileContent, launchGame, renamePath, deletePath, openFolder, loadSettingsSnapshot, type Settings } from '../api/tauri'
 import 'highlight.js/styles/github-dark.css'
 import 'highlight.js/lib/languages/json'
 import 'highlight.js/lib/languages/yaml'
@@ -420,6 +420,78 @@ function storeTreeClipboard(action: 'copy' | 'cut') {
   return true
 }
 
+function getParentPath(path: string) {
+  const lastSeparatorIndex = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  return lastSeparatorIndex > 0 ? path.substring(0, lastSeparatorIndex) : path
+}
+
+function getActiveTreeRootPath() {
+  if (leftPanelActiveTab.value === 'dependencies' && activeDependencyId.value) {
+    return dependencies.value.find(dep => dep.id === activeDependencyId.value)?.path ?? ''
+  }
+
+  return projectPath.value
+}
+
+function getTreePasteTargetDirectory() {
+  if (treeContextMenuNode.value) {
+    return treeContextMenuNode.value.isDirectory
+      ? treeContextMenuNode.value.path
+      : getParentPath(treeContextMenuNode.value.path)
+  }
+
+  if (selectedNode.value) {
+    return selectedNode.value.isDirectory
+      ? selectedNode.value.path
+      : getParentPath(selectedNode.value.path)
+  }
+
+  return getActiveTreeRootPath()
+}
+
+async function refreshActiveFileTree() {
+  if (leftPanelActiveTab.value === 'dependencies' && activeDependencyId.value) {
+    invalidateDependencyFileTree(activeDependencyId.value)
+    await loadDependencyFileTree(activeDependencyId.value)
+    return
+  }
+
+  await loadFileTree()
+}
+
+async function pasteTreeClipboard() {
+  if (!treeClipboard.value) {
+    return
+  }
+
+  const targetDirectory = getTreePasteTargetDirectory()
+  if (!targetDirectory) {
+    alert('未找到可用的粘贴目标目录')
+    return
+  }
+
+  const { action, paths } = treeClipboard.value
+  const result = action === 'copy'
+    ? await copyPaths(paths, targetDirectory)
+    : await movePaths(paths, targetDirectory)
+
+  if (!result.success) {
+    alert(result.message || '粘贴失败')
+    return
+  }
+
+  if (action === 'cut') {
+    for (const sourcePath of paths) {
+      await closeOpenedFilesUnderPath(sourcePath)
+    }
+    treeClipboard.value = null
+    setTreeSelection([], null)
+    selectionAnchorPath.value = null
+  }
+
+  await refreshActiveFileTree()
+}
+
 function handleTreeNodeSelect(event: MouseEvent, node: FileNode) {
   const isCtrlSelection = event.ctrlKey || event.metaKey
   const isShiftSelection = event.shiftKey
@@ -832,6 +904,8 @@ async function handleContextMenuAction(action: string, payload?: any) {
       storeTreeClipboard('copy')
     } else if (action === 'cut') {
       storeTreeClipboard('cut')
+    } else if (action === 'paste') {
+      await pasteTreeClipboard()
     } else if (action === 'copyPath') {
       if (treeContextMenuNode.value) {
         navigator.clipboard.writeText(treeContextMenuNode.value.path).catch(err => {
@@ -1426,6 +1500,7 @@ onUnmounted(() => {
       :can-split="(editorGroupRef?.panes.length || 0) < 3"
       :tree-node-path="treeContextMenuNode?.path"
       :tree-node-is-directory="treeContextMenuNode?.isDirectory"
+      :has-tree-clipboard="!!treeClipboard"
       :project-root="projectPath"
       :available-panes="availablePanesForMove"
       @action="handleContextMenuAction"

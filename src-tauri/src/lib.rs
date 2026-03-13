@@ -112,6 +112,8 @@ pub fn run() {
             commands::read_directory,
             commands::create_file,
             commands::create_folder,
+            commands::copy_paths,
+            commands::move_paths,
             commands::rename_path,
             commands::delete_path,
             commands::load_settings,

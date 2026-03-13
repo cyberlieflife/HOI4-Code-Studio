@@ -11,6 +11,7 @@ const props = defineProps<{
   currentFilePath?: string
   treeNodePath?: string
   treeNodeIsDirectory?: boolean
+  hasTreeClipboard?: boolean
   projectRoot?: string
   availablePanes?: Array<{id: string, name: string}>
 }>()
@@ -170,7 +171,7 @@ function hideMoveMenu() {
       class="w-full px-4 py-2 text-left text-sm border-t whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
     >
-      馃搵 澶嶅埗
+      复制
     </button>
     <button
       v-if="treeNodePath"
@@ -178,7 +179,15 @@ function hideMoveMenu() {
       class="w-full px-4 py-2 text-left text-sm border-t whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
     >
-      鉁傦笍 鍓垏
+      剪切
+    </button>
+    <button
+      v-if="hasTreeClipboard"
+      @click="handleAction('paste')"
+      class="w-full px-4 py-2 text-left text-sm border-t whitespace-nowrap transition-colors context-menu-item"
+      :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
+    >
+      粘贴
     </button>
     <button
       @click="handleAction('copyPath')"
