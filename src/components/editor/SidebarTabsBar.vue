@@ -89,18 +89,31 @@ function handleDragStart(event: DragEvent, key: string) {
   draggedKey.value = key
   dropTargetKey.value = ''
   dropPosition.value = 'before'
-  event.dataTransfer?.setData('text/plain', key)
-  event.dataTransfer!.effectAllowed = 'move'
+  if (!event.dataTransfer) return
+  event.dataTransfer.setData('text/plain', key)
+  event.dataTransfer.effectAllowed = 'move'
 }
 
 function handleDragOver(event: DragEvent, key: string) {
   if (!draggedKey.value || draggedKey.value === key) return
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
   const target = event.currentTarget as HTMLElement | null
   if (!target) return
   const rect = target.getBoundingClientRect()
   const centerX = rect.left + rect.width / 2
   dropTargetKey.value = key
   dropPosition.value = event.clientX >= centerX ? 'after' : 'before'
+}
+
+function handleContainerDragOver(event: DragEvent) {
+  if (!draggedKey.value) return
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+  dropTargetKey.value = ''
+  dropPosition.value = 'end'
 }
 
 function handleDrop(key?: string) {
@@ -122,12 +135,13 @@ function clearDragState() {
   <div class="ui-island-header ui-separator-bottom p-1 flex items-center gap-1 overflow-x-auto">
     <div
       class="flex items-center gap-1"
-      @dragover.prevent="dropPosition = 'end'"
+      @dragover.prevent="handleContainerDragOver"
       @drop.prevent="handleDrop()"
     >
       <button
         v-for="item in items"
         :key="item.key"
+        type="button"
         draggable="true"
         @dragstart="handleDragStart($event, item.key)"
         @dragend="clearDragState"

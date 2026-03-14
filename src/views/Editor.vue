@@ -746,6 +746,14 @@ function handleSwitchToRightPluginsTab() {
   handleSwitchToRightPlugins(pluginRightPanels.value[0]?.uid)
 }
 
+function handleLeftSidebarReorder(draggedKey: string, targetKey?: string, position?: 'before' | 'after' | 'end') {
+  reorderSidebarItems('left', draggedKey, targetKey, position)
+}
+
+function handleRightSidebarReorder(draggedKey: string, targetKey?: string, position?: 'before' | 'after' | 'end') {
+  reorderSidebarItems('right', draggedKey, targetKey, position)
+}
+
 async function handleAddDependency(path: string) {
   const result = await addDependency(path)
   if (result.success) {
@@ -1569,7 +1577,7 @@ onUnmounted(() => {
           @activate-plugins="handleSwitchToPluginsTab"
           @manage-dependencies="handleManageDependencies"
           @open-context-menu="showSidebarTabContextMenu"
-          @reorder="(...args) => reorderSidebarItems('left', ...args)"
+          @reorder="handleLeftSidebarReorder"
         />
         
         <!-- 文件树内容 -->
@@ -1770,7 +1778,7 @@ onUnmounted(() => {
           @activate-plugins="handleSwitchToRightPluginsTab"
           @close="toggleRightPanel"
           @open-context-menu="showSidebarTabContextMenu"
-          @reorder="(...args) => reorderSidebarItems('right', ...args)"
+          @reorder="handleRightSidebarReorder"
         />
 
         <div
