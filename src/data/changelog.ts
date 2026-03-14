@@ -17,8 +17,16 @@ export interface VersionLog {
 
 export const changelog: VersionLog[] = [
   {
+    version: 'v0.3.10-dev',
+    description: '侧边栏与选项卡优化与新增功能',
+    changes: [
+      { type: 'feature', content: '支持侧边栏内图标排序' },
+      { type: 'feature', content: '支持图标左右侧边栏移动' },
+    ]
+  },
+  {
     version: 'v0.3.9-dev',
-    description: '侧边栏与选项卡、粘贴优化',
+    description: '侧边栏与选项卡、粘贴优化与新增功能',
     changes: [
       { type: 'improvement', content: '优化粘贴功能' },
       { type: 'improvement', content: '默认收缩右侧边栏' },
