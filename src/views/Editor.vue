@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { buildDirectoryTreeFast, createFile, createFolder, copyPaths, movePaths, writeFileContent, launchGame, renamePath, deletePath, openFolder, loadSettingsSnapshot, type Settings } from '../api/tauri'
+import { buildDirectoryTreeFast, createFile, createFolder, copyPaths, movePaths, writeFileContent, launchGame, renamePath, deletePath, openFolder, loadSettingsSnapshot, saveSettings, type Settings } from '../api/tauri'
 import 'highlight.js/styles/github-dark.css'
 import 'highlight.js/lib/languages/json'
 import 'highlight.js/lib/languages/yaml'
@@ -10,18 +10,21 @@ import 'highlight.js/lib/languages/yaml'
 // 组件导入
 import EditorToolbar from '../components/editor/EditorToolbar.vue'
 import EditorGroup from '../components/editor/EditorGroup.vue'
-import RightPanel from '../components/editor/RightPanel.vue'
 import ContextMenu from '../components/editor/ContextMenu.vue'
 import CreateDialog from '../components/editor/CreateDialog.vue'
 import ConfirmDialog from '../components/editor/ConfirmDialog.vue'
 import FileTreeNode from '../components/FileTreeNode.vue'
-import LeftPanelTabs from '../components/editor/LeftPanelTabs.vue'
 import SearchPanel from '../components/editor/SearchPanel.vue'
 import DependencyManager from '../components/editor/DependencyManager.vue'
 import LoadingMonitor from '../components/editor/LoadingMonitor.vue'
 import PackageDialog from '../components/editor/PackageDialog.vue'
 import EditorWorkspaceShell from '../components/editor/EditorWorkspaceShell.vue'
 import TerminalPanel from '../components/editor/TerminalPanel.vue'
+import SidebarTabsBar from '../components/editor/SidebarTabsBar.vue'
+import ProjectInfo from '../components/editor/ProjectInfo.vue'
+import GameDirectory from '../components/editor/GameDirectory.vue'
+import ErrorList from '../components/editor/ErrorList.vue'
+import AIPanelConstruction from '../components/editor/AIPanelConstruction.vue'
 
 // Composables 导入
 import { type FileNode } from '../composables/useFileManager'
@@ -55,7 +58,7 @@ import { usePreviewPaneManager } from '../composables/usePreviewPaneManager'
 import { useSearchNavigation } from '../composables/useSearchNavigation'
 import { useEditorErrorNavigation } from '../composables/useEditorErrorNavigation'
 import PluginIframeHost from '../components/plugins/PluginIframeHost.vue'
-import { useEditorUiState } from '../composables/useEditorUiState'
+import { useEditorUiState, type SidebarSide, type SidebarMovableItem } from '../composables/useEditorUiState'
 import { markStartupStep } from '../utils/startupPerformance'
 
 // Highlight.js 语言定义已移至 useSyntaxHighlight.ts 中
@@ -65,10 +68,20 @@ const route = useRoute()
 
 // 基础状态
 const projectPath = ref('')
-const fileTreeContainerRef = ref<HTMLElement | null>(null)
-const selectedNode = ref<FileNode | null>(null)
-const selectedTreePaths = ref<string[]>([])
-const selectionAnchorPath = ref<string | null>(null)
+const leftFileTreeContainerRef = ref<HTMLElement | null>(null)
+const rightFileTreeContainerRef = ref<HTMLElement | null>(null)
+const treeState = {
+  left: {
+    selectedNode: ref<FileNode | null>(null),
+    selectedTreePaths: ref<string[]>([]),
+    selectionAnchorPath: ref<string | null>(null)
+  },
+  right: {
+    selectedNode: ref<FileNode | null>(null),
+    selectedTreePaths: ref<string[]>([]),
+    selectionAnchorPath: ref<string | null>(null)
+  }
+} as const
 const treeClipboard = ref<{ action: 'copy' | 'cut'; paths: string[] } | null>(null)
 const txtErrors = ref<{line: number, msg: string, type: string}[]>([])
 const isLaunchingGame = ref(false)
@@ -80,24 +93,32 @@ const {
   createDialogType,
   createDialogMode,
   createDialogInitialValue,
-  leftPanelActiveTab,
+  leftSidebarItems,
+  rightSidebarItems,
+  leftSidebarView,
+  rightSidebarView,
   activeDependencyId,
   dependencyManagerVisible,
   activeLeftPluginPanelUid,
   loadingMonitorVisible,
   packageDialogVisible,
-  rightPanelActiveTab,
   activeRightPluginPanelUid,
+  activateItemByKey,
   handleSwitchToProject,
   handleSwitchToSearch,
   handleSwitchToPlugins,
+  handleSwitchToRightPlugins,
   handleManageDependencies,
   openDependenciesFromToolbar,
   toggleLoadingMonitor,
   openPackageDialog,
   toggleRightPanel,
   toggleTerminalPanel,
-  handlePluginToolbarClick
+  handlePluginToolbarClick,
+  syncSidebarLayout,
+  moveSidebarItem,
+  reorderSidebarItems,
+  serializeSidebarLayout
 } = useEditorUiState()
 
 // 右键菜单状态（使用 composable）
@@ -109,8 +130,12 @@ const {
   contextMenuPaneId,
   contextMenuFileIndex,
   treeContextMenuNode,
+  treeContextMenuSide,
+  sidebarContextItemKey,
+  sidebarContextSide,
   showFileTabContextMenu,
-  showTreeContextMenu,
+  showTreeContextMenuForSide,
+  showSidebarTabContextMenu,
   hideContextMenu
 } = useContextMenu()
 
@@ -284,6 +309,14 @@ const {
   toolbarItems: pluginToolbarItems,
   refreshPlugins
 } = pluginManager
+
+const activeLeftPluginPanel = computed(() =>
+  pluginLeftPanels.value.find(panel => panel.uid === activeLeftPluginPanelUid.value) || pluginLeftPanels.value[0] || null
+)
+
+const activeRightPluginPanel = computed(() =>
+  pluginRightPanels.value.find(panel => panel.uid === activeRightPluginPanelUid.value) || pluginRightPanels.value[0] || null
+)
 // 依赖项管理
 const dependencyManager = useDependencyManager(projectPath.value)
 const {
@@ -316,6 +349,28 @@ const enabledDependencyRoots = computed(() =>
   (dependencies.value || []).filter(d => d.enabled).map(d => d.path)
 )
 
+const sidebarSettingsSnapshot = ref<Settings>({})
+const isSyncingSidebarLayout = ref(false)
+
+function applySidebarLayoutFromSettings() {
+  isSyncingSidebarLayout.value = true
+  syncSidebarLayout(dependencies.value, sidebarSettingsSnapshot.value)
+  isSyncingSidebarLayout.value = false
+}
+
+async function persistSidebarLayout() {
+  if (isSyncingSidebarLayout.value) return
+  try {
+    sidebarSettingsSnapshot.value = {
+      ...sidebarSettingsSnapshot.value,
+      sidebarLayout: serializeSidebarLayout()
+    }
+    await saveSettings(sidebarSettingsSnapshot.value)
+  } catch (error) {
+    logger.error('淇濆瓨渚ц竟鏍忓竷灞€澶辫触:', error)
+  }
+}
+
 const {
   loading,
   fileTree,
@@ -334,22 +389,6 @@ const {
   invalidateDependencyFileTree
 } = useDependencyTreeCache(dependencies)
 
-const hasActiveDependencyTree = computed(() => hasDependencyTree(activeDependencyId.value))
-
-const activeDependencyTree = computed(() => getDependencyTree(activeDependencyId.value))
-
-const currentTreeRoots = computed(() => {
-  if (leftPanelActiveTab.value === 'dependencies' && activeDependencyId.value) {
-    return activeDependencyTree.value
-  }
-
-  if (leftPanelActiveTab.value === 'project') {
-    return fileTree.value
-  }
-
-  return []
-})
-
 function flattenVisibleTree(nodes: FileNode[]): FileNode[] {
   const flattened: FileNode[] = []
 
@@ -363,7 +402,73 @@ function flattenVisibleTree(nodes: FileNode[]): FileNode[] {
   return flattened
 }
 
-const visibleTreeNodes = computed(() => flattenVisibleTree(currentTreeRoots.value))
+function getSidebarView(side: SidebarSide) {
+  return side === 'left' ? leftSidebarView.value : rightSidebarView.value
+}
+
+function isSidebarBuiltinView(side: SidebarSide, builtinId: SidebarMovableItem['builtinId']) {
+  const view = getSidebarView(side)
+  return view.type === 'builtin' && view.builtinId === builtinId
+}
+
+function isSidebarDependencyView(side: SidebarSide) {
+  return getSidebarView(side).type === 'dependency'
+}
+
+function isSidebarPluginsView(side: SidebarSide) {
+  return getSidebarView(side).type === 'plugins'
+}
+
+function getSidebarDependencyId(side: SidebarSide) {
+  const view = getSidebarView(side)
+  return view.type === 'dependency' ? view.dependencyId : ''
+}
+
+function getSidebarTitle(side: SidebarSide) {
+  const view = getSidebarView(side)
+  if (view.type === 'dependency') return '依赖项文件'
+  if (view.type === 'plugins') return '插件'
+
+  switch (view.builtinId) {
+    case 'project':
+      return '项目文件'
+    case 'search':
+      return '搜索'
+    case 'info':
+      return '项目信息'
+    case 'game':
+      return '游戏目录'
+    case 'errors':
+      return '错误列表'
+    case 'ai':
+      return 'AI'
+    default:
+      return ''
+  }
+}
+
+function getSidebarTreeRoots(side: SidebarSide) {
+  const view = getSidebarView(side)
+  if (view.type === 'dependency') {
+    return getDependencyTree(view.dependencyId)
+  }
+  if (view.type === 'builtin' && view.builtinId === 'project') {
+    return fileTree.value
+  }
+  return []
+}
+
+function getVisibleTreeNodes(side: SidebarSide) {
+  return flattenVisibleTree(getSidebarTreeRoots(side))
+}
+
+function getTreeState(side: SidebarSide) {
+  return treeState[side]
+}
+
+function getFileTreeContainerRef(side: SidebarSide) {
+  return side === 'left' ? leftFileTreeContainerRef : rightFileTreeContainerRef
+}
 
 function findNodeByPath(nodes: FileNode[], path: string): FileNode | null {
   for (const node of nodes) {
@@ -382,40 +487,43 @@ function findNodeByPath(nodes: FileNode[], path: string): FileNode | null {
   return null
 }
 
-function setTreeSelection(paths: string[], preferredNode: FileNode | null = null) {
-  selectedTreePaths.value = Array.from(new Set(paths))
+function setTreeSelection(side: SidebarSide, paths: string[], preferredNode: FileNode | null = null) {
+  const state = getTreeState(side)
+  state.selectedTreePaths.value = Array.from(new Set(paths))
 
-  if (preferredNode && selectedTreePaths.value.includes(preferredNode.path)) {
-    selectedNode.value = preferredNode
+  if (preferredNode && state.selectedTreePaths.value.includes(preferredNode.path)) {
+    state.selectedNode.value = preferredNode
     return
   }
 
-  const fallbackPath = selectedTreePaths.value[selectedTreePaths.value.length - 1]
-  selectedNode.value = fallbackPath ? findNodeByPath(currentTreeRoots.value, fallbackPath) : null
+  const fallbackPath = state.selectedTreePaths.value[state.selectedTreePaths.value.length - 1]
+  state.selectedNode.value = fallbackPath ? findNodeByPath(getSidebarTreeRoots(side), fallbackPath) : null
 }
 
-function selectSingleTreeNode(node: FileNode) {
-  setTreeSelection([node.path], node)
-  selectionAnchorPath.value = node.path
+function selectSingleTreeNode(side: SidebarSide, node: FileNode) {
+  const state = getTreeState(side)
+  setTreeSelection(side, [node.path], node)
+  state.selectionAnchorPath.value = node.path
 }
 
-function getTreeContextTargetPaths() {
+function getTreeContextTargetPaths(side: SidebarSide) {
+  const state = getTreeState(side)
   if (treeContextMenuNode.value) {
-    if (selectedTreePaths.value.includes(treeContextMenuNode.value.path)) {
-      return [...selectedTreePaths.value]
+    if (state.selectedTreePaths.value.includes(treeContextMenuNode.value.path)) {
+      return [...state.selectedTreePaths.value]
     }
     return [treeContextMenuNode.value.path]
   }
 
-  if (selectedTreePaths.value.length > 0) {
-    return [...selectedTreePaths.value]
+  if (state.selectedTreePaths.value.length > 0) {
+    return [...state.selectedTreePaths.value]
   }
 
   return []
 }
 
-function storeTreeClipboard(action: 'copy' | 'cut') {
-  const targetPaths = getTreeContextTargetPaths()
+function storeTreeClipboard(side: SidebarSide, action: 'copy' | 'cut') {
+  const targetPaths = getTreeContextTargetPaths(side)
   if (targetPaths.length === 0) {
     return false
   }
@@ -432,46 +540,55 @@ function getParentPath(path: string) {
   return lastSeparatorIndex > 0 ? path.substring(0, lastSeparatorIndex) : path
 }
 
-function getActiveTreeRootPath() {
-  if (leftPanelActiveTab.value === 'dependencies' && activeDependencyId.value) {
-    return dependencies.value.find(dep => dep.id === activeDependencyId.value)?.path ?? ''
+function getActiveTreeRootPath(side: SidebarSide) {
+  const view = getSidebarView(side)
+  if (view.type === 'dependency') {
+    return dependencies.value.find(dep => dep.id === view.dependencyId)?.path ?? ''
   }
 
-  return projectPath.value
+  if (view.type === 'builtin' && view.builtinId === 'project') {
+    return projectPath.value
+  }
+
+  return ''
 }
 
-function getTreePasteTargetDirectory() {
+function getTreePasteTargetDirectory(side: SidebarSide) {
+  const state = getTreeState(side)
   if (treeContextMenuNode.value) {
     return treeContextMenuNode.value.isDirectory
       ? treeContextMenuNode.value.path
       : getParentPath(treeContextMenuNode.value.path)
   }
 
-  if (selectedNode.value) {
-    return selectedNode.value.isDirectory
-      ? selectedNode.value.path
-      : getParentPath(selectedNode.value.path)
+  if (state.selectedNode.value) {
+    return state.selectedNode.value.isDirectory
+      ? state.selectedNode.value.path
+      : getParentPath(state.selectedNode.value.path)
   }
 
-  return getActiveTreeRootPath()
+  return getActiveTreeRootPath(side)
 }
 
-async function refreshActiveFileTree() {
-  if (leftPanelActiveTab.value === 'dependencies' && activeDependencyId.value) {
-    invalidateDependencyFileTree(activeDependencyId.value)
-    await loadDependencyFileTree(activeDependencyId.value)
+async function refreshActiveFileTree(side: SidebarSide) {
+  const view = getSidebarView(side)
+  if (view.type === 'dependency') {
+    invalidateDependencyFileTree(view.dependencyId)
+    await loadDependencyFileTree(view.dependencyId)
     return
   }
 
-  await loadFileTree()
+  if (view.type === 'builtin' && view.builtinId === 'project') {
+    await loadFileTree()
+  }
 }
 
 function normalizeTreePath(path: string) {
   return path.replace(/\\/g, '/').replace(/\/+$/, '')
 }
 
-async function reloadActiveTreeDirectory(directoryPath: string) {
-  const targetNode = findNodeByPath(currentTreeRoots.value, directoryPath)
+async function reloadActiveTreeDirectory(side: SidebarSide, directoryPath: string) {
+  const targetNode = findNodeByPath(getSidebarTreeRoots(side), directoryPath)
   if (!targetNode || !targetNode.isDirectory) {
     return
   }
@@ -493,20 +610,27 @@ async function reloadActiveTreeDirectory(directoryPath: string) {
   }
 }
 
-function focusFileTree() {
-  fileTreeContainerRef.value?.focus()
+function focusFileTree(side: SidebarSide) {
+  getFileTreeContainerRef(side).value?.focus()
 }
 
-function isFileTreeFocused() {
-  return document.activeElement === fileTreeContainerRef.value
+function getFocusedTreeSide(): SidebarSide | null {
+  if (document.activeElement === leftFileTreeContainerRef.value) {
+    return 'left'
+  }
+  if (document.activeElement === rightFileTreeContainerRef.value) {
+    return 'right'
+  }
+  return null
 }
 
-async function pasteTreeClipboard() {
+async function pasteTreeClipboard(side: SidebarSide) {
   if (!treeClipboard.value) {
     return
   }
 
-  const targetDirectory = getTreePasteTargetDirectory()
+  const state = getTreeState(side)
+  const targetDirectory = getTreePasteTargetDirectory(side)
   if (!targetDirectory) {
     alert('未找到可用的粘贴目标目录')
     return
@@ -527,51 +651,52 @@ async function pasteTreeClipboard() {
       await closeOpenedFilesUnderPath(sourcePath)
     }
     treeClipboard.value = null
-    setTreeSelection([], null)
-    selectionAnchorPath.value = null
+    setTreeSelection(side, [], null)
+    state.selectionAnchorPath.value = null
   }
 
-  await refreshActiveFileTree()
+  await refreshActiveFileTree(side)
 
-  const activeRootPath = getActiveTreeRootPath()
+  const activeRootPath = getActiveTreeRootPath(side)
   if (
     activeRootPath &&
     normalizeTreePath(targetDirectory) !== normalizeTreePath(activeRootPath) &&
     isPathUnder(targetDirectory, activeRootPath)
   ) {
-    await reloadActiveTreeDirectory(targetDirectory)
+    await reloadActiveTreeDirectory(side, targetDirectory)
   }
 }
 
-function handleTreeNodeSelect(event: MouseEvent, node: FileNode) {
+function handleTreeNodeSelect(side: SidebarSide, event: MouseEvent, node: FileNode) {
+  const state = getTreeState(side)
   const isCtrlSelection = event.ctrlKey || event.metaKey
   const isShiftSelection = event.shiftKey
 
-  if (isShiftSelection && selectionAnchorPath.value) {
-    const visiblePaths = visibleTreeNodes.value.map(item => item.path)
-    const anchorIndex = visiblePaths.indexOf(selectionAnchorPath.value)
+  if (isShiftSelection && state.selectionAnchorPath.value) {
+    const visiblePaths = getVisibleTreeNodes(side).map(item => item.path)
+    const anchorIndex = visiblePaths.indexOf(state.selectionAnchorPath.value)
     const currentIndex = visiblePaths.indexOf(node.path)
 
     if (anchorIndex !== -1 && currentIndex !== -1) {
       const [start, end] = anchorIndex < currentIndex
         ? [anchorIndex, currentIndex]
         : [currentIndex, anchorIndex]
-      setTreeSelection(visiblePaths.slice(start, end + 1), node)
+      setTreeSelection(side, visiblePaths.slice(start, end + 1), node)
       return
     }
   }
 
   if (isCtrlSelection) {
-    if (selectedTreePaths.value.includes(node.path)) {
-      setTreeSelection(selectedTreePaths.value.filter(path => path !== node.path))
+    if (state.selectedTreePaths.value.includes(node.path)) {
+      setTreeSelection(side, state.selectedTreePaths.value.filter(path => path !== node.path))
     } else {
-      setTreeSelection([...selectedTreePaths.value, node.path], node)
+      setTreeSelection(side, [...state.selectedTreePaths.value, node.path], node)
     }
-    selectionAnchorPath.value = node.path
+    state.selectionAnchorPath.value = node.path
     return
   }
 
-  selectSingleTreeNode(node)
+  selectSingleTreeNode(side, node)
 }
 
 const {
@@ -613,15 +738,20 @@ async function loadEditorBackgroundData(settingsSnapshot: Settings) {
   }
 }
 
-// 依赖项管理函数
-function handleSwitchToDependency(id: string) {
-  activeDependencyId.value = id
-  leftPanelActiveTab.value = 'dependencies'
-  loadDependencyFileTree(id)
-}
-
 function handleSwitchToPluginsTab() {
   handleSwitchToPlugins(pluginLeftPanels.value[0]?.uid)
+}
+
+function handleSwitchToRightPluginsTab() {
+  handleSwitchToRightPlugins(pluginRightPanels.value[0]?.uid)
+}
+
+function handleLeftSidebarReorder(draggedKey: string, targetKey?: string, position?: 'before' | 'after' | 'end') {
+  reorderSidebarItems('left', draggedKey, targetKey, position)
+}
+
+function handleRightSidebarReorder(draggedKey: string, targetKey?: string, position?: 'before' | 'after' | 'end') {
+  reorderSidebarItems('right', draggedKey, targetKey, position)
 }
 
 async function handleAddDependency(path: string) {
@@ -652,9 +782,9 @@ async function handleToggleDependency(id: string) {
 }
 
 // 切换文件夹
-async function toggleFolder(node: FileNode) {
+async function toggleFolder(side: SidebarSide, node: FileNode) {
   if (!node.isDirectory) return
-  selectSingleTreeNode(node)
+  selectSingleTreeNode(side, node)
   node.expanded = !node.expanded
   if (node.expanded && (!node.children || node.children.length === 0)) {
     try {
@@ -688,7 +818,10 @@ async function toggleGameFolder(node: FileNode) {
 async function handleOpenFile(node: FileNode, paneId?: string, jumpInfo?: any) {
   if (node.isDirectory) return
   
-  selectSingleTreeNode(node)
+  const treeSide = getFocusedTreeSide()
+  if (treeSide) {
+    selectSingleTreeNode(treeSide, node)
+  }
   const targetPaneId = paneId || editorGroupRef.value?.activePaneId
   if (!targetPaneId) return
   
@@ -788,14 +921,15 @@ async function handlePreviewGui(paneId: string) {
 }
 
 // 右键菜单包装函数（处理 selectedNode 高亮）
-function handleShowTreeContextMenu(event: MouseEvent, node: FileNode | null = null) {
-  focusFileTree()
-  if (node && !selectedTreePaths.value.includes(node.path)) {
-    selectSingleTreeNode(node)
+function handleShowTreeContextMenu(side: SidebarSide, event: MouseEvent, node: FileNode | null = null) {
+  const state = getTreeState(side)
+  focusFileTree(side)
+  if (node && !state.selectedTreePaths.value.includes(node.path)) {
+    selectSingleTreeNode(side, node)
   } else if (node) {
-    selectedNode.value = node
+    state.selectedNode.value = node
   }
-  showTreeContextMenu(event, node)
+  showTreeContextMenuForSide(event, side, node)
 }
 
 function isProjectMapFolder(node: FileNode | null) {
@@ -942,22 +1076,17 @@ async function handleContextMenuAction(action: string, payload?: any) {
 
         await closeOpenedFilesUnderPath(node.path)
 
-        if (leftPanelActiveTab.value === 'dependencies' && activeDependencyId.value) {
-          invalidateDependencyFileTree(activeDependencyId.value)
-          await loadDependencyFileTree(activeDependencyId.value)
-        } else {
-          await loadFileTree()
-        }
+        await refreshActiveFileTree(treeContextMenuSide.value)
       } catch (error) {
         logger.error('删除失败:', error)
         alert(`删除失败: ${error}`)
       }
     } else if (action === 'copy') {
-      storeTreeClipboard('copy')
+      storeTreeClipboard(treeContextMenuSide.value, 'copy')
     } else if (action === 'cut') {
-      storeTreeClipboard('cut')
+      storeTreeClipboard(treeContextMenuSide.value, 'cut')
     } else if (action === 'paste') {
-      await pasteTreeClipboard()
+      await pasteTreeClipboard(treeContextMenuSide.value)
     } else if (action === 'copyPath') {
       if (treeContextMenuNode.value) {
         navigator.clipboard.writeText(treeContextMenuNode.value.path).catch(err => {
@@ -989,6 +1118,11 @@ async function handleContextMenuAction(action: string, payload?: any) {
       if (!isProjectMapFolder(treeContextMenuNode.value)) return
       await openProjectMapPreview(projectPath.value)
     }
+  } else if (contextMenuType.value === 'sidebar') {
+    if (action === 'moveSidebarItem') {
+      moveSidebarItem(sidebarContextItemKey.value, payload as SidebarSide)
+      void persistSidebarLayout()
+    }
   }
   hideContextMenu()
 }
@@ -1007,7 +1141,7 @@ async function handleCreateConfirm(name: string, useBom: boolean = false) {
     try {
       const result = await renamePath(oldPath, newPath)
       if (result.success) {
-        await loadFileTree()
+        await refreshActiveFileTree(treeContextMenuSide.value)
         createDialogVisible.value = false
       } else {
         alert(result.message || '重命名失败')
@@ -1020,16 +1154,18 @@ async function handleCreateConfirm(name: string, useBom: boolean = false) {
   }
 
   let parentPath: string
+  const treeSide = treeContextMenuSide.value
+  const currentTreeState = getTreeState(treeSide)
   if (treeContextMenuNode.value) {
     parentPath = treeContextMenuNode.value.isDirectory 
       ? treeContextMenuNode.value.path 
       : treeContextMenuNode.value.path.substring(0, treeContextMenuNode.value.path.lastIndexOf('\\'))
-  } else if (selectedNode.value) {
-    parentPath = selectedNode.value.isDirectory 
-      ? selectedNode.value.path 
-      : selectedNode.value.path.substring(0, selectedNode.value.path.lastIndexOf('\\'))
+  } else if (currentTreeState.selectedNode.value) {
+    parentPath = currentTreeState.selectedNode.value.isDirectory 
+      ? currentTreeState.selectedNode.value.path 
+      : currentTreeState.selectedNode.value.path.substring(0, currentTreeState.selectedNode.value.path.lastIndexOf('\\'))
   } else {
-    parentPath = projectPath.value
+    parentPath = getActiveTreeRootPath(treeSide) || projectPath.value
   }
   const targetPath = `${parentPath}\\${name}`
   try {
@@ -1040,7 +1176,7 @@ async function handleCreateConfirm(name: string, useBom: boolean = false) {
       result = await createFolder(targetPath)
     }
     if (result.success) {
-      await loadFileTree()
+      await refreshActiveFileTree(treeSide)
       createDialogVisible.value = false
     } else {
       alert(result.message || '创建失败')
@@ -1180,6 +1316,23 @@ async function handleEditorContextMenuAction(action: string, paneId: string) {
   }
 }
 
+watch(
+  dependencies,
+  () => {
+    applySidebarLayoutFromSettings()
+  },
+  { deep: true }
+)
+
+watch(
+  [leftSidebarItems, rightSidebarItems],
+  () => {
+    if (isSyncingSidebarLayout.value) return
+    void persistSidebarLayout()
+  },
+  { deep: true }
+)
+
 // 处理打包
 async function handlePackageProject(fileName: string) {
   if (!projectPath.value || !packageDialogRef.value) return
@@ -1302,30 +1455,33 @@ useKeyboardShortcuts({
   undo: () => {},
   redo: () => {},
   copy: () => {
-    if (!isFileTreeFocused() || selectedTreePaths.value.length === 0) {
+    const side = getFocusedTreeSide()
+    if (!side || getTreeState(side).selectedTreePaths.value.length === 0) {
       return false
     }
     treeClipboard.value = {
       action: 'copy',
-      paths: [...selectedTreePaths.value]
+      paths: [...getTreeState(side).selectedTreePaths.value]
     }
     return true
   },
   cut: () => {
-    if (!isFileTreeFocused() || selectedTreePaths.value.length === 0) {
+    const side = getFocusedTreeSide()
+    if (!side || getTreeState(side).selectedTreePaths.value.length === 0) {
       return false
     }
     treeClipboard.value = {
       action: 'cut',
-      paths: [...selectedTreePaths.value]
+      paths: [...getTreeState(side).selectedTreePaths.value]
     }
     return true
   },
   paste: () => {
-    if (!isFileTreeFocused() || !treeClipboard.value) {
+    const side = getFocusedTreeSide()
+    if (!side || !treeClipboard.value) {
       return false
     }
-    void pasteTreeClipboard()
+    void pasteTreeClipboard(side)
     return true
   },
   search: () => {
@@ -1343,11 +1499,13 @@ useKeyboardShortcuts({
 onMounted(async () => {
   markStartupStep('startup:editor-mounted', '编辑器页面挂载完成')
   const settingsSnapshot = await loadSettingsSnapshot()
+  sidebarSettingsSnapshot.value = settingsSnapshot
   await Promise.all([
     loadThemeFromSettings(settingsSnapshot),
     loadIconSetFromSettings(settingsSnapshot),
     loadInitialSettings(settingsSnapshot)
   ])
+  applySidebarLayoutFromSettings()
   markStartupStep('startup:editor-theme-loaded', '编辑器主题加载完成')
   markStartupStep('startup:editor-icons-loaded', '编辑器图标集加载完成')
   markStartupStep('startup:editor-settings-loaded', '编辑器基础设置加载完成')
@@ -1409,33 +1567,35 @@ onUnmounted(() => {
         :style="{ width: leftPanelWidth + 'px' }"
       >
         <!-- 左侧面板标签栏 -->
-        <LeftPanelTabs
-          :active-tab="leftPanelActiveTab"
-          :active-dependency-id="activeDependencyId"
+        <SidebarTabsBar
+          side="left"
+          :items="leftSidebarItems"
+          :active-view="leftSidebarView"
           :dependencies="dependencies"
-          @switch-to-project="handleSwitchToProject"
-          @switch-to-search="handleSwitchToSearch"
-          @switch-to-dependency="handleSwitchToDependency"
-          @switch-to-plugins="handleSwitchToPluginsTab"
+          :show-manage-dependencies="true"
+          @activate-item="activateItemByKey('left', $event)"
+          @activate-plugins="handleSwitchToPluginsTab"
           @manage-dependencies="handleManageDependencies"
+          @open-context-menu="showSidebarTabContextMenu"
+          @reorder="handleLeftSidebarReorder"
         />
         
         <!-- 文件树内容 -->
         <div
-          ref="fileTreeContainerRef"
+          ref="leftFileTreeContainerRef"
           class="flex-1 focus:outline-none"
-          :class="leftPanelActiveTab === 'search' ? 'overflow-hidden' : 'overflow-y-auto p-2'"
+          :class="isSidebarBuiltinView('left', 'search') || isSidebarBuiltinView('left', 'info') || isSidebarBuiltinView('left', 'game') || isSidebarBuiltinView('left', 'errors') || isSidebarBuiltinView('left', 'ai') || isSidebarPluginsView('left') ? 'overflow-hidden' : 'overflow-y-auto p-2'"
           tabindex="0"
-          @mousedown="focusFileTree"
-          @contextmenu.prevent="handleShowTreeContextMenu($event, null)"
+          @mousedown="focusFileTree('left')"
+          @contextmenu.prevent="handleShowTreeContextMenu('left', $event, null)"
         >
-          <h3 v-if="leftPanelActiveTab !== 'search'" class="text-hoi4-text font-bold mb-2 text-sm">
-            {{ leftPanelActiveTab === 'project' ? '项目文件' : leftPanelActiveTab === 'dependencies' ? '依赖项文件' : '插件' }}
+          <h3 v-if="!isSidebarBuiltinView('left', 'search') && !isSidebarBuiltinView('left', 'info') && !isSidebarBuiltinView('left', 'game') && !isSidebarBuiltinView('left', 'errors') && !isSidebarBuiltinView('left', 'ai') && !isSidebarPluginsView('left')" class="text-hoi4-text font-bold mb-2 text-sm">
+            {{ getSidebarTitle('left') }}
           </h3>
           <!-- 文件树切换过渡效果 -->
           <Transition name="sidebar-fade-slide" mode="out-in">
             <!-- 项目文件树 -->
-            <div v-if="leftPanelActiveTab === 'project'" :key="'project'">
+            <div v-if="isSidebarBuiltinView('left', 'project')" :key="'left-project'">
               <div v-if="loading" class="text-hoi4-text-dim text-sm p-2">加载中...</div>
               <div v-else-if="fileTree.length === 0" class="text-hoi4-text-dim text-sm p-2">无文件</div>
               <div v-else>
@@ -1444,39 +1604,39 @@ onUnmounted(() => {
                   :key="node.path"
                   :node="node"
                   :level="0"
-                  :selected-paths="selectedTreePaths"
-                  @select="handleTreeNodeSelect"
-                  @toggle="toggleFolder"
+                  :selected-paths="treeState.left.selectedTreePaths.value"
+                  @select="handleTreeNodeSelect('left', $event, node)"
+                  @toggle="toggleFolder('left', node)"
                   @open-file="handleOpenFile"
-                  @contextmenu="(e, n) => handleShowTreeContextMenu(e, n)"
+                  @contextmenu="(e, n) => handleShowTreeContextMenu('left', e, n)"
                 />
               </div>
             </div>
 
             <!-- 依赖项文件树 -->
-            <div v-else-if="leftPanelActiveTab === 'dependencies' && activeDependencyId" :key="activeDependencyId">
-              <div v-if="!hasActiveDependencyTree" class="text-hoi4-text-dim text-sm p-2">
+            <div v-else-if="isSidebarDependencyView('left')" :key="`left-${getSidebarDependencyId('left')}`">
+              <div v-if="!hasDependencyTree(getSidebarDependencyId('left'))" class="text-hoi4-text-dim text-sm p-2">
                 加载中...
               </div>
-              <div v-else-if="activeDependencyTree.length === 0" class="text-hoi4-text-dim text-sm p-2">
+              <div v-else-if="getDependencyTree(getSidebarDependencyId('left')).length === 0" class="text-hoi4-text-dim text-sm p-2">
                 无文件
               </div>
               <div v-else>
                 <FileTreeNode
-                  v-for="node in activeDependencyTree"
+                  v-for="node in getDependencyTree(getSidebarDependencyId('left'))"
                   :key="node.path"
                   :node="node"
                   :level="0"
-                  :selected-paths="selectedTreePaths"
-                  @select="handleTreeNodeSelect"
-                  @toggle="toggleFolder"
+                  :selected-paths="treeState.left.selectedTreePaths.value"
+                  @select="handleTreeNodeSelect('left', $event, node)"
+                  @toggle="toggleFolder('left', node)"
                   @open-file="handleOpenFile"
-                  @contextmenu="(e, n) => handleShowTreeContextMenu(e, n)"
+                  @contextmenu="(e, n) => handleShowTreeContextMenu('left', e, n)"
                 />
               </div>
             </div>
 
-            <div v-else-if="leftPanelActiveTab === 'search'" :key="'search'" class="h-full overflow-hidden flex flex-col">
+            <div v-else-if="isSidebarBuiltinView('left', 'search')" :key="'left-search'" class="h-full overflow-hidden flex flex-col">
               <SearchPanel
                 :search-query="searchQuery"
                 :search-results="searchResults"
@@ -1498,7 +1658,35 @@ onUnmounted(() => {
               />
             </div>
 
-            <div v-else-if="leftPanelActiveTab === 'plugins'" :key="'plugins'" class="h-full overflow-hidden flex flex-col">
+            <ProjectInfo
+              v-else-if="isSidebarBuiltinView('left', 'info')"
+              :key="'left-info'"
+              :project-info="projectInfo"
+            />
+
+            <GameDirectory
+              v-else-if="isSidebarBuiltinView('left', 'game')"
+              :key="'left-game'"
+              :game-directory="gameDirectory"
+              :game-file-tree="gameFileTree"
+              :is-loading="isLoadingGameTree"
+              @toggle-folder="toggleGameFolder"
+              @open-file="handleOpenFile"
+            />
+
+            <ErrorList
+              v-else-if="isSidebarBuiltinView('left', 'errors')"
+              :key="'left-errors'"
+              :errors="txtErrors"
+              @jump-to-error="jumpToError"
+            />
+
+            <AIPanelConstruction
+              v-else-if="isSidebarBuiltinView('left', 'ai')"
+              :key="'left-ai'"
+            />
+
+            <div v-else :key="'left-plugins'" class="h-full overflow-hidden flex flex-col">
               <div class="p-2 ui-separator-bottom flex items-center gap-2 overflow-x-auto">
                 <button
                   v-for="p in pluginLeftPanels"
@@ -1512,16 +1700,16 @@ onUnmounted(() => {
                 </button>
               </div>
               <div class="flex-1 overflow-hidden">
-                <div v-if="pluginLeftPanels.length === 0" class="p-3 text-hoi4-text-dim text-sm">暂无插件面板</div>
+                <div v-if="!activeLeftPluginPanel" class="p-3 text-hoi4-text-dim text-sm">暂无插件面板</div>
                 <PluginIframeHost
                   v-else
-                  :entry-file-path="(pluginLeftPanels.find(x => x.uid === activeLeftPluginPanelUid) || pluginLeftPanels[0]).entryFilePath"
-                  :plugin-id="(pluginLeftPanels.find(x => x.uid === activeLeftPluginPanelUid) || pluginLeftPanels[0]).pluginId"
-                  :plugin-name="(pluginLeftPanels.find(x => x.uid === activeLeftPluginPanelUid) || pluginLeftPanels[0]).pluginName"
-                  :side="(pluginLeftPanels.find(x => x.uid === activeLeftPluginPanelUid) || pluginLeftPanels[0]).side"
-                  :panel-id="(pluginLeftPanels.find(x => x.uid === activeLeftPluginPanelUid) || pluginLeftPanels[0]).panelId"
-                  :panel-title="(pluginLeftPanels.find(x => x.uid === activeLeftPluginPanelUid) || pluginLeftPanels[0]).title"
-                  :allowed-commands="(pluginLeftPanels.find(x => x.uid === activeLeftPluginPanelUid) || pluginLeftPanels[0]).allowedCommands"
+                  :entry-file-path="activeLeftPluginPanel.entryFilePath"
+                  :plugin-id="activeLeftPluginPanel.pluginId"
+                  :plugin-name="activeLeftPluginPanel.pluginName"
+                  :side="activeLeftPluginPanel.side"
+                  :panel-id="activeLeftPluginPanel.panelId"
+                  :panel-title="activeLeftPluginPanel.title"
+                  :allowed-commands="activeLeftPluginPanel.allowedCommands"
                 />
               </div>
             </div>
@@ -1575,22 +1763,152 @@ onUnmounted(() => {
       ></div>
 
       <!-- 右侧面板 -->
-      <RightPanel
+      <div
         v-if="rightPanelExpanded"
-        :project-info="projectInfo"
-        :game-directory="gameDirectory"
-        :game-file-tree="gameFileTree"
-        :is-loading-game-tree="isLoadingGameTree"
-        :txt-errors="txtErrors"
-        :width="rightPanelWidth"
-        :plugin-panels="pluginRightPanels"
-        v-model:activePluginPanelUid="activeRightPluginPanelUid"
-        v-model:active-tab="rightPanelActiveTab"
-        @close="toggleRightPanel"
-        @jumpToError="jumpToError"
-        @toggleGameFolder="toggleGameFolder"
-        @openFile="handleOpenFile"
-      />
+        class="ui-island flex-shrink-0 overflow-hidden flex flex-col rounded-xl my-2 mr-2"
+        :style="{ width: rightPanelWidth + 'px' }"
+      >
+        <SidebarTabsBar
+          side="right"
+          :items="rightSidebarItems"
+          :active-view="rightSidebarView"
+          :dependencies="dependencies"
+          :show-close="true"
+          @activate-item="activateItemByKey('right', $event)"
+          @activate-plugins="handleSwitchToRightPluginsTab"
+          @close="toggleRightPanel"
+          @open-context-menu="showSidebarTabContextMenu"
+          @reorder="handleRightSidebarReorder"
+        />
+
+        <div
+          ref="rightFileTreeContainerRef"
+          class="flex-1 focus:outline-none"
+          :class="isSidebarBuiltinView('right', 'search') || isSidebarBuiltinView('right', 'info') || isSidebarBuiltinView('right', 'game') || isSidebarBuiltinView('right', 'errors') || isSidebarBuiltinView('right', 'ai') || isSidebarPluginsView('right') ? 'overflow-hidden' : 'overflow-y-auto p-2'"
+          tabindex="0"
+          @mousedown="focusFileTree('right')"
+          @contextmenu.prevent="handleShowTreeContextMenu('right', $event, null)"
+        >
+          <h3 v-if="!isSidebarBuiltinView('right', 'search') && !isSidebarBuiltinView('right', 'info') && !isSidebarBuiltinView('right', 'game') && !isSidebarBuiltinView('right', 'errors') && !isSidebarBuiltinView('right', 'ai') && !isSidebarPluginsView('right')" class="text-hoi4-text font-bold mb-2 text-sm">
+            {{ getSidebarTitle('right') }}
+          </h3>
+          <Transition name="sidebar-fade-slide" mode="out-in">
+            <div v-if="isSidebarBuiltinView('right', 'project')" :key="'right-project'">
+              <div v-if="loading" class="text-hoi4-text-dim text-sm p-2">加载中...</div>
+              <div v-else-if="fileTree.length === 0" class="text-hoi4-text-dim text-sm p-2">无文件</div>
+              <div v-else>
+                <FileTreeNode
+                  v-for="node in fileTree"
+                  :key="node.path"
+                  :node="node"
+                  :level="0"
+                  :selected-paths="treeState.right.selectedTreePaths.value"
+                  @select="handleTreeNodeSelect('right', $event, node)"
+                  @toggle="toggleFolder('right', node)"
+                  @open-file="handleOpenFile"
+                  @contextmenu="(e, n) => handleShowTreeContextMenu('right', e, n)"
+                />
+              </div>
+            </div>
+
+            <div v-else-if="isSidebarDependencyView('right')" :key="`right-${getSidebarDependencyId('right')}`">
+              <div v-if="!hasDependencyTree(getSidebarDependencyId('right'))" class="text-hoi4-text-dim text-sm p-2">加载中...</div>
+              <div v-else-if="getDependencyTree(getSidebarDependencyId('right')).length === 0" class="text-hoi4-text-dim text-sm p-2">无文件</div>
+              <div v-else>
+                <FileTreeNode
+                  v-for="node in getDependencyTree(getSidebarDependencyId('right'))"
+                  :key="node.path"
+                  :node="node"
+                  :level="0"
+                  :selected-paths="treeState.right.selectedTreePaths.value"
+                  @select="handleTreeNodeSelect('right', $event, node)"
+                  @toggle="toggleFolder('right', node)"
+                  @open-file="handleOpenFile"
+                  @contextmenu="(e, n) => handleShowTreeContextMenu('right', e, n)"
+                />
+              </div>
+            </div>
+
+            <div v-else-if="isSidebarBuiltinView('right', 'search')" :key="'right-search'" class="h-full overflow-hidden flex flex-col">
+              <SearchPanel
+                :search-query="searchQuery"
+                :search-results="searchResults"
+                :is-searching="isSearching"
+                :search-case-sensitive="searchCaseSensitive"
+                :search-regex="searchRegex"
+                :search-scope="searchScope"
+                :include-all-files="includeAllFiles"
+                :project-path="projectPath"
+                :game-directory="gameDirectory"
+                @jump-to-result="handleJumpToSearchResult"
+                @update:search-query="searchQuery = $event"
+                @update:search-case-sensitive="searchCaseSensitive = $event"
+                @update:search-regex="searchRegex = $event"
+                @update:search-scope="searchScope = $event as 'project' | 'game' | 'dependencies'"
+                @update:include-all-files="includeAllFiles = $event"
+                @perform-search="handlePerformSearch"
+                @perform-replace="handlePerformReplace"
+              />
+            </div>
+
+            <ProjectInfo
+              v-else-if="isSidebarBuiltinView('right', 'info')"
+              :key="'right-info'"
+              :project-info="projectInfo"
+            />
+
+            <GameDirectory
+              v-else-if="isSidebarBuiltinView('right', 'game')"
+              :key="'right-game'"
+              :game-directory="gameDirectory"
+              :game-file-tree="gameFileTree"
+              :is-loading="isLoadingGameTree"
+              @toggle-folder="toggleGameFolder"
+              @open-file="handleOpenFile"
+            />
+
+            <ErrorList
+              v-else-if="isSidebarBuiltinView('right', 'errors')"
+              :key="'right-errors'"
+              :errors="txtErrors"
+              @jump-to-error="jumpToError"
+            />
+
+            <AIPanelConstruction
+              v-else-if="isSidebarBuiltinView('right', 'ai')"
+              :key="'right-ai'"
+            />
+
+            <div v-else :key="'right-plugins'" class="h-full overflow-hidden flex flex-col">
+              <div class="p-2 ui-separator-bottom flex items-center gap-2 overflow-x-auto">
+                <button
+                  v-for="p in pluginRightPanels"
+                  :key="p.uid"
+                  class="px-2 py-1 rounded text-xs flex-shrink-0"
+                  :class="p.uid === activeRightPluginPanelUid ? 'bg-hoi4-accent text-hoi4-text' : 'bg-hoi4-border/40 text-hoi4-text-dim hover:text-hoi4-text hover:bg-hoi4-border/60'"
+                  @click="activeRightPluginPanelUid = p.uid"
+                  :title="p.title"
+                >
+                  {{ p.title }}
+                </button>
+              </div>
+              <div class="flex-1 overflow-hidden">
+                <div v-if="!activeRightPluginPanel" class="p-3 text-hoi4-text-dim text-sm">暂无插件面板</div>
+                <PluginIframeHost
+                  v-else
+                  :entry-file-path="activeRightPluginPanel.entryFilePath"
+                  :plugin-id="activeRightPluginPanel.pluginId"
+                  :plugin-name="activeRightPluginPanel.pluginName"
+                  :side="activeRightPluginPanel.side"
+                  :panel-id="activeRightPluginPanel.panelId"
+                  :panel-title="activeRightPluginPanel.title"
+                  :allowed-commands="activeRightPluginPanel.allowedCommands"
+                />
+              </div>
+            </div>
+          </Transition>
+        </div>
+      </div>
     </div>
 
     <!-- 右键菜单 -->
@@ -1605,6 +1923,7 @@ onUnmounted(() => {
       :has-tree-clipboard="!!treeClipboard"
       :project-root="projectPath"
       :available-panes="availablePanesForMove"
+      :sidebar-current-side="sidebarContextSide"
       @action="handleContextMenuAction"
       @close="hideContextMenu"
     />
