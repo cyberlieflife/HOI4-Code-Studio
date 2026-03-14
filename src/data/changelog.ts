@@ -21,6 +21,7 @@ export const changelog: VersionLog[] = [
     description: '文件树更新，地图预览更新',
     changes: [
       { type: 'improvement', content: '优化粘贴功能' },
+      { type: 'improvement', content: '默认收缩右侧边栏' },
     ]
   },
   {

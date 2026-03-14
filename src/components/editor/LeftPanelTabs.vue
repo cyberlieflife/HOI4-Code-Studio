@@ -3,13 +3,14 @@ import { computed } from 'vue'
 import type { Dependency } from '../../types/dependency'
 
 const props = defineProps<{
-  activeTab: 'project' | 'dependencies' | 'plugins'
+  activeTab: 'project' | 'search' | 'dependencies' | 'plugins'
   activeDependencyId?: string
   dependencies: Dependency[]
 }>()
 
 const emit = defineEmits<{
   switchToProject: []
+  switchToSearch: []
   switchToDependency: [id: string]
   switchToPlugins: []
   manageDependencies: []
@@ -36,6 +37,17 @@ const enabledDependencies = computed(() =>
     </button>
 
     <!-- 依赖项标签 -->
+    <button
+      @click="emit('switchToSearch')"
+      class="p-2 transition-all rounded-lg flex-shrink-0 hover-scale"
+      :class="activeTab === 'search' ? 'bg-hoi4-accent text-hoi4-text' : 'text-hoi4-text-dim hover:text-hoi4-text hover:bg-hoi4-border/40'"
+      title="搜索"
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+      </svg>
+    </button>
+
     <template v-if="enabledDependencies.length > 0">
       <div class="w-px h-6 bg-hoi4-border/40"></div>
       <button

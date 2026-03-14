@@ -16,6 +16,7 @@ import CreateDialog from '../components/editor/CreateDialog.vue'
 import ConfirmDialog from '../components/editor/ConfirmDialog.vue'
 import FileTreeNode from '../components/FileTreeNode.vue'
 import LeftPanelTabs from '../components/editor/LeftPanelTabs.vue'
+import SearchPanel from '../components/editor/SearchPanel.vue'
 import DependencyManager from '../components/editor/DependencyManager.vue'
 import LoadingMonitor from '../components/editor/LoadingMonitor.vue'
 import PackageDialog from '../components/editor/PackageDialog.vue'
@@ -86,6 +87,7 @@ const {
   rightPanelActiveTab,
   activeRightPluginPanelUid,
   handleSwitchToProject,
+  handleSwitchToSearch,
   handleSwitchToPlugins,
   handleManageDependencies,
   openDependenciesFromToolbar,
@@ -1324,9 +1326,8 @@ useKeyboardShortcuts({
     return true
   },
   search: () => {
-    // 打开右侧边栏并切换到搜索标签页
-    rightPanelExpanded.value = true
-    rightPanelActiveTab.value = 'search'
+    // 打开左侧搜索面板
+    handleSwitchToSearch()
   },
   nextError: handleNextError,
   previousError: handlePreviousError,
@@ -1408,6 +1409,7 @@ onUnmounted(() => {
           :active-dependency-id="activeDependencyId"
           :dependencies="dependencies"
           @switch-to-project="handleSwitchToProject"
+          @switch-to-search="handleSwitchToSearch"
           @switch-to-dependency="handleSwitchToDependency"
           @switch-to-plugins="handleSwitchToPluginsTab"
           @manage-dependencies="handleManageDependencies"
@@ -1416,12 +1418,13 @@ onUnmounted(() => {
         <!-- 文件树内容 -->
         <div
           ref="fileTreeContainerRef"
-          class="flex-1 overflow-y-auto p-2 focus:outline-none"
+          class="flex-1 focus:outline-none"
+          :class="leftPanelActiveTab === 'search' ? 'overflow-hidden' : 'overflow-y-auto p-2'"
           tabindex="0"
           @mousedown="focusFileTree"
           @contextmenu.prevent="handleShowTreeContextMenu($event, null)"
         >
-          <h3 class="text-hoi4-text font-bold mb-2 text-sm">
+          <h3 v-if="leftPanelActiveTab !== 'search'" class="text-hoi4-text font-bold mb-2 text-sm">
             {{ leftPanelActiveTab === 'project' ? '项目文件' : leftPanelActiveTab === 'dependencies' ? '依赖项文件' : '插件' }}
           </h3>
           <!-- 文件树切换过渡效果 -->
@@ -1466,6 +1469,28 @@ onUnmounted(() => {
                   @contextmenu="(e, n) => handleShowTreeContextMenu(e, n)"
                 />
               </div>
+            </div>
+
+            <div v-else-if="leftPanelActiveTab === 'search'" :key="'search'" class="h-full overflow-hidden flex flex-col">
+              <SearchPanel
+                :search-query="searchQuery"
+                :search-results="searchResults"
+                :is-searching="isSearching"
+                :search-case-sensitive="searchCaseSensitive"
+                :search-regex="searchRegex"
+                :search-scope="searchScope"
+                :include-all-files="includeAllFiles"
+                :project-path="projectPath"
+                :game-directory="gameDirectory"
+                @jump-to-result="handleJumpToSearchResult"
+                @update:search-query="searchQuery = $event"
+                @update:search-case-sensitive="searchCaseSensitive = $event"
+                @update:search-regex="searchRegex = $event"
+                @update:search-scope="searchScope = $event as 'project' | 'game' | 'dependencies'"
+                @update:include-all-files="includeAllFiles = $event"
+                @perform-search="handlePerformSearch"
+                @perform-replace="handlePerformReplace"
+              />
             </div>
 
             <div v-else-if="leftPanelActiveTab === 'plugins'" :key="'plugins'" class="h-full overflow-hidden flex flex-col">
@@ -1545,14 +1570,6 @@ onUnmounted(() => {
         :is-loading-game-tree="isLoadingGameTree"
         :txt-errors="txtErrors"
         :width="rightPanelWidth"
-        :search-query="searchQuery"
-        :search-results="searchResults"
-        :is-searching="isSearching"
-        :search-case-sensitive="searchCaseSensitive"
-        :search-regex="searchRegex"
-        :search-scope="searchScope"
-        :include-all-files="includeAllFiles"
-        :project-path="projectPath"
         :plugin-panels="pluginRightPanels"
         v-model:activePluginPanelUid="activeRightPluginPanelUid"
         v-model:active-tab="rightPanelActiveTab"
@@ -1560,14 +1577,6 @@ onUnmounted(() => {
         @jumpToError="jumpToError"
         @toggleGameFolder="toggleGameFolder"
         @openFile="handleOpenFile"
-        @update:search-query="searchQuery = $event"
-        @update:search-case-sensitive="searchCaseSensitive = $event"
-        @update:search-regex="searchRegex = $event"
-        @update:search-scope="searchScope = $event as 'project' | 'game' | 'dependencies'"
-        @update:include-all-files="includeAllFiles = $event"
-        @perform-search="handlePerformSearch"
-        @perform-replace="handlePerformReplace"
-        @jumpToSearchResult="handleJumpToSearchResult"
       />
     </div>
 

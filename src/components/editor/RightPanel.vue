@@ -3,11 +3,9 @@ import { computed, ref, watch } from 'vue'
 import ProjectInfo from './ProjectInfo.vue'
 import GameDirectory from './GameDirectory.vue'
 import ErrorList from './ErrorList.vue'
-import SearchPanel from './SearchPanel.vue'
 import AIPanelConstruction from './AIPanelConstruction.vue'
 import PluginIframeHost from '../plugins/PluginIframeHost.vue'
 import type { FileNode } from '../../composables/useFileManager'
-import type { SearchResult } from '../../composables/useSearch'
 import type { PluginPanelRef } from '../../composables/usePluginManager'
 
 const props = withDefaults(defineProps<{
@@ -17,17 +15,9 @@ const props = withDefaults(defineProps<{
   isLoadingGameTree: boolean
   txtErrors: Array<{line: number, msg: string, type: string}>
   width: number
-  searchQuery: string
-  searchResults: SearchResult[]
-  isSearching: boolean
-  searchCaseSensitive: boolean
-  searchRegex: boolean
-  searchScope: string
-  includeAllFiles: boolean
-  projectPath: string
   pluginPanels: PluginPanelRef[]
   activePluginPanelUid?: string
-  activeTab?: 'info' | 'game' | 'errors' | 'search' | 'ai' | 'plugins'
+  activeTab?: 'info' | 'game' | 'errors' | 'ai' | 'plugins'
 }>(), {
   activeTab: 'info'
 })
@@ -38,19 +28,11 @@ const emit = defineEmits<{
   jumpToError: [error: {line: number, msg: string, type: string}]
   toggleGameFolder: [node: FileNode]
   openFile: [node: FileNode]
-  'update:searchQuery': [value: string]
-  'update:searchCaseSensitive': [value: boolean]
-  'update:searchRegex': [value: boolean]
-  'update:searchScope': [value: string]
-  'update:includeAllFiles': [value: boolean]
-  performSearch: []
-  performReplace: [replaceText: string]
-  jumpToSearchResult: [result: SearchResult]
-  'update:activeTab': [value: 'info' | 'game' | 'errors' | 'search' | 'ai' | 'plugins']
+  'update:activeTab': [value: 'info' | 'game' | 'errors' | 'ai' | 'plugins']
   'update:activePluginPanelUid': [value: string]
 }>()
 
-const localActiveTab = ref<'info' | 'game' | 'errors' | 'search' | 'ai' | 'plugins'>(props.activeTab)
+const localActiveTab = ref<'info' | 'game' | 'errors' | 'ai' | 'plugins'>(props.activeTab)
 const localActivePluginPanelUid = ref<string>(props.activePluginPanelUid || '')
 
 const activePluginPanel = computed(() => {
@@ -60,7 +42,6 @@ const activePluginPanel = computed(() => {
   return byUid || panels[0]
 })
 
-// 监听props.activeTab变化，更新本地状态
 watch(() => props.activeTab, (newTab) => {
   if (newTab) {
     localActiveTab.value = newTab
@@ -86,7 +67,6 @@ watch(() => props.pluginPanels, (panels) => {
   }
 })
 
-// 监听本地activeTab变化，通知父组件
 watch(localActiveTab, (newTab) => {
   emit('update:activeTab', newTab)
 })
@@ -103,7 +83,6 @@ watch(localActivePluginPanelUid, (uid) => {
     class="ui-island flex-shrink-0 overflow-hidden flex flex-col rounded-xl my-2 mr-2"
     :style="{ width: width + 'px' }"
   >
-    <!-- 标签栏 -->
     <div class="ui-island-header ui-separator-bottom flex items-center justify-between rounded-t-xl">
       <div class="flex gap-1 p-1">
         <button
@@ -137,16 +116,6 @@ watch(localActivePluginPanelUid, (uid) => {
           </svg>
         </button>
         <button
-          @click="localActiveTab = 'search'"
-          class="p-2 transition-all rounded-lg hover-scale"
-          :class="localActiveTab === 'search' ? 'bg-hoi4-accent text-hoi4-text' : 'text-hoi4-text-dim hover:text-hoi4-text hover:bg-hoi4-border/40'"
-          title="搜索"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-          </svg>
-        </button>
-        <button
           @click="localActiveTab = 'ai'"
           class="px-3 py-2 transition-all rounded-lg hover-scale text-sm font-bold"
           :class="localActiveTab === 'ai' ? 'bg-hoi4-accent text-hoi4-text' : 'text-hoi4-text-dim hover:text-hoi4-text hover:bg-hoi4-border/40'"
@@ -175,7 +144,6 @@ watch(localActivePluginPanelUid, (uid) => {
       </button>
     </div>
 
-    <!-- 内容区域 -->
     <div class="flex-1 overflow-hidden">
       <Transition name="sidebar-fade-slide" mode="out-in">
         <ProjectInfo
@@ -183,7 +151,7 @@ watch(localActivePluginPanelUid, (uid) => {
           :key="'info'"
           :project-info="projectInfo"
         />
-        
+
         <GameDirectory
           v-else-if="localActiveTab === 'game'"
           :key="'game'"
@@ -193,39 +161,13 @@ watch(localActivePluginPanelUid, (uid) => {
           @toggle-folder="emit('toggleGameFolder', $event)"
           @open-file="emit('openFile', $event)"
         />
-        
+
         <ErrorList
           v-else-if="localActiveTab === 'errors'"
           :key="'errors'"
           :errors="txtErrors"
           @jump-to-error="emit('jumpToError', $event)"
         />
-        
-        <div
-          v-else-if="localActiveTab === 'search'"
-          :key="'search'"
-          class="h-full overflow-hidden flex flex-col"
-        >
-          <SearchPanel
-            :search-query="searchQuery"
-            :search-results="searchResults"
-            :is-searching="isSearching"
-            :search-case-sensitive="searchCaseSensitive"
-            :search-regex="searchRegex"
-            :search-scope="searchScope"
-            :include-all-files="includeAllFiles"
-            :project-path="projectPath"
-            :game-directory="gameDirectory"
-            @jump-to-result="emit('jumpToSearchResult', $event)"
-            @update:search-query="emit('update:searchQuery', $event)"
-            @update:search-case-sensitive="emit('update:searchCaseSensitive', $event)"
-            @update:search-regex="emit('update:searchRegex', $event)"
-            @update:search-scope="emit('update:searchScope', $event)"
-            @update:include-all-files="emit('update:includeAllFiles', $event)"
-            @perform-search="emit('performSearch')"
-            @perform-replace="emit('performReplace', $event)"
-          />
-        </div>
 
         <AIPanelConstruction
           v-else-if="localActiveTab === 'ai'"
@@ -269,7 +211,6 @@ watch(localActivePluginPanelUid, (uid) => {
 </template>
 
 <style scoped>
-/* 悬停放大动画 */
 .hover-scale {
   transition: background-color 0.2s ease;
 }

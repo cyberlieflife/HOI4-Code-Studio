@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 
-type LeftPanelTab = 'project' | 'dependencies' | 'plugins'
-type RightPanelTab = 'info' | 'game' | 'errors' | 'search' | 'ai' | 'plugins'
+type LeftPanelTab = 'project' | 'search' | 'dependencies' | 'plugins'
+type RightPanelTab = 'info' | 'game' | 'errors' | 'ai' | 'plugins'
 type CreateDialogType = 'file' | 'folder'
 type CreateDialogMode = 'create' | 'rename'
 
@@ -32,6 +32,11 @@ export function useEditorUiState() {
   function handleSwitchToDependency(id: string) {
     leftPanelActiveTab.value = 'dependencies'
     activeDependencyId.value = id
+  }
+
+  function handleSwitchToSearch() {
+    leftPanelActiveTab.value = 'search'
+    activeDependencyId.value = undefined
   }
 
   function handleSwitchToPlugins(defaultPanelUid?: string) {
@@ -91,6 +96,7 @@ export function useEditorUiState() {
     activeRightPluginPanelUid,
     handleSwitchToProject,
     handleSwitchToDependency,
+    handleSwitchToSearch,
     handleSwitchToPlugins,
     handleManageDependencies,
     openDependenciesFromToolbar,
