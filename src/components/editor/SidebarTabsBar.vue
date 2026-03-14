@@ -128,7 +128,7 @@ function clearDragState() {
       <button
         v-for="item in items"
         :key="item.key"
-        draggable="false"
+        draggable="true"
         @dragstart="handleDragStart($event, item.key)"
         @dragend="clearDragState"
         @dragover.prevent="handleDragOver($event, item.key)"
