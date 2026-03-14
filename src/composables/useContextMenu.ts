@@ -1,6 +1,6 @@
 /**
- * 右键菜单 Composable
- * 管理右键菜单的显示状态和位置
+ * 右键菜单 composable
+ * 负责维护全局右键菜单的显示状态和上下文信息。
  */
 
 import { ref } from 'vue'
@@ -9,7 +9,7 @@ import type { SidebarSide } from './useEditorUiState'
 
 export type ContextMenuType = 'file' | 'tree' | 'pane' | 'sidebar'
 
-// 全局状态（单例模式）
+// 全局状态，使用单例模式保证同一时间只有一个右键菜单实例。
 const contextMenuVisible = ref(false)
 const contextMenuX = ref(0)
 const contextMenuY = ref(0)
@@ -23,15 +23,12 @@ const sidebarContextSide = ref<SidebarSide>('left')
 const lastContextMenuTime = ref(0)
 
 /**
- * 右键菜单 Composable
- * 使用单例模式，确保全局只有一个右键菜单实例
+ * 右键菜单 composable
+ * 通过单例共享状态，避免多个菜单同时出现。
  */
 export function useContextMenu() {
   /**
-   * 显示文件标签页右键菜单
-   * @param event 鼠标事件
-   * @param paneId 窗格 ID
-   * @param fileIndex 文件索引
+   * 显示文件标签页右键菜单。
    */
   function showFileTabContextMenu(event: MouseEvent, paneId: string, fileIndex: number) {
     contextMenuPaneId.value = paneId
@@ -43,12 +40,11 @@ export function useContextMenu() {
   }
 
   /**
-   * 显示文件树右键菜单
-   * @param event 鼠标事件
-   * @param node 文件节点（可选，为空时表示点击背景）
+   * 显示文件树右键菜单。
+   * 当 `node` 为空时表示点击了文件树空白区域。
    */
   function showTreeContextMenu(event: MouseEvent, node: FileNode | null = null) {
-    // 如果是背景点击（node=null），且距离上次有效点击时间很近，则忽略（视为冒泡）
+    // 避免节点点击冒泡后立刻触发空白区域菜单。
     const now = Date.now()
     if (node === null && now - lastContextMenuTime.value < 100) {
       return
@@ -82,14 +78,13 @@ export function useContextMenu() {
   }
 
   /**
-   * 隐藏右键菜单
+   * 隐藏右键菜单。
    */
   function hideContextMenu() {
     contextMenuVisible.value = false
   }
 
   return {
-    // 状态
     contextMenuVisible,
     contextMenuX,
     contextMenuY,
@@ -101,7 +96,6 @@ export function useContextMenu() {
     sidebarContextItemKey,
     sidebarContextSide,
     lastContextMenuTime,
-    // 方法
     showFileTabContextMenu,
     showTreeContextMenu,
     showTreeContextMenuForSide,

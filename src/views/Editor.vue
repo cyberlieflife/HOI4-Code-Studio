@@ -27,8 +27,8 @@ import ErrorList from '../components/editor/ErrorList.vue'
 import AIPanelConstruction from '../components/editor/AIPanelConstruction.vue'
 
 // Composables 导入
-import { type FileNode } from '../composables/useFileManager'
-import { useSearch } from '../composables/useSearch'
+import { type FileNode, type OpenFile } from '../composables/useFileManager'
+import { useSearch, type SearchScope, type SearchSourceFile } from '../composables/useSearch'
 import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
 import { usePanelResize } from '../composables/usePanelResize'
 
@@ -172,6 +172,8 @@ async function handlePerformReplace(replaceText: string) {
   if (!searchQuery.value.trim()) return
   if (searchResults.value.length === 0) return
 
+  const isOpenEditorScope = searchScope.value === 'currentFile' || searchScope.value === 'openFiles'
+
   const confirmed = await showConfirmDialog(
     `确定要将搜索到的内容替换为 "${replaceText}" 吗？该操作将直接修改文件内容，且不可恢复。`,
     '✏️ 替换确认',
@@ -190,9 +192,78 @@ async function handlePerformReplace(replaceText: string) {
     return
   }
 
+  function countMatches(content: string): number {
+    const matchPattern = new RegExp(pattern.source, pattern.flags)
+    let count = 0
+    let match: RegExpExecArray | null
+
+    while ((match = matchPattern.exec(content)) !== null) {
+      count += 1
+      if ((match[0] ?? '').length === 0) {
+        matchPattern.lastIndex += 1
+      }
+    }
+
+    return count
+  }
+
   const filePaths = Array.from(new Set(searchResults.value.map(r => r.file.path)))
   let totalReplacements = 0
   const updatedContents = new Map<string, string>()
+
+  if (isOpenEditorScope) {
+    const targets = searchScope.value === 'currentFile'
+      ? getCurrentEditorSearchTargets()
+      : getAllOpenedEditorSearchTargets()
+    const targetMap = new Map(targets.map(target => [target.path, target]))
+    const skippedConflictNames: string[] = []
+
+    for (const filePath of filePaths) {
+      const target = targetMap.get(filePath)
+      if (!target) {
+        continue
+      }
+      if (target.hasConflict) {
+        skippedConflictNames.push(target.name)
+        continue
+      }
+
+      const matchCount = countMatches(target.content)
+      if (matchCount === 0) {
+        continue
+      }
+
+      const updated = target.content.replace(new RegExp(pattern.source, pattern.flags), replaceText)
+      const writeResult = await writeFileContent(filePath, updated)
+      if (!writeResult.success) {
+        alert(`写入文件失败：${filePath}\n${writeResult.message}`)
+        continue
+      }
+
+      target.content = updated
+
+      for (const openFile of target.openFiles) {
+        openFile.content = updated
+        openFile.hasUnsavedChanges = false
+      }
+
+      for (const paneId of target.paneIds) {
+        syncPreviewContent(paneId, updated)
+      }
+
+      totalReplacements += matchCount
+    }
+
+    await handlePerformSearch()
+
+    if (skippedConflictNames.length > 0) {
+      alert(`替换完成：共替换 ${totalReplacements} 处，同时跳过了 ${skippedConflictNames.length} 个同路径但内容不一致的已打开文件。`)
+      return
+    }
+
+    alert(`替换完成：共替换 ${totalReplacements} 处，结果已同步写入文件。`)
+    return
+  }
 
   function syncOpenedFilesContent() {
     if (!editorGroupRef.value) return
@@ -200,12 +271,12 @@ async function handlePerformReplace(replaceText: string) {
     for (const pane of editorGroupRef.value.panes) {
       for (const openFile of pane.openFiles) {
         if (!openFile?.node?.path) continue
-        if (openFile.hasUnsavedChanges) continue
         if (openFile.isImage) continue
 
         const updated = updatedContents.get(openFile.node.path)
         if (updated !== undefined) {
           openFile.content = updated
+          openFile.hasUnsavedChanges = false
         }
       }
     }
@@ -220,11 +291,10 @@ async function handlePerformReplace(replaceText: string) {
       }
 
       const original = readResult.content ?? ''
-      const matches = original.match(pattern)
-      const matchCount = matches ? matches.length : 0
+      const matchCount = countMatches(original)
       if (matchCount === 0) continue
 
-      const updated = original.replace(pattern, replaceText)
+      const updated = original.replace(new RegExp(pattern.source, pattern.flags), replaceText)
       const writeResult = await writeFileContent(filePath, updated)
       if (!writeResult.success) {
         alert(`写入文件失败: ${filePath}\n${writeResult.message}`)
@@ -285,7 +355,8 @@ const {
   searchRegex,
   searchScope,
   includeAllFiles,
-  performSearch
+  performSearch,
+  performSearchInFiles
 } = useSearch()
 
 
@@ -550,7 +621,36 @@ function getActiveTreeRootPath(side: SidebarSide) {
     return projectPath.value
   }
 
+  if (view.type === 'builtin' && view.builtinId === 'game') {
+    return gameDirectory.value
+  }
+
   return ''
+}
+
+function getTreeMenuMode(side: SidebarSide): 'editable' | 'readonly' | 'none' {
+  const view = getSidebarView(side)
+  if (view.type === 'dependency') {
+    return 'readonly'
+  }
+
+  if (view.type !== 'builtin') {
+    return 'none'
+  }
+
+  if (view.builtinId === 'project') {
+    return 'editable'
+  }
+
+  if (view.builtinId === 'game') {
+    return 'readonly'
+  }
+
+  return 'none'
+}
+
+function treeSupportsFileOperations(side: SidebarSide) {
+  return getTreeMenuMode(side) === 'editable'
 }
 
 function getTreePasteTargetDirectory(side: SidebarSide) {
@@ -896,6 +996,122 @@ async function handleOpenFile(node: FileNode, paneId?: string, jumpInfo?: any) {
 
 const { jumpToSearchResult: handleJumpToSearchResult } = useSearchNavigation(editorGroupRef, handleOpenFile)
 
+interface EditorSearchTarget {
+  name: string
+  path: string
+  content: string
+  openFiles: OpenFile[]
+  paneIds: string[]
+  hasConflict: boolean
+}
+
+function isSearchableOpenFile(file: OpenFile | undefined | null): file is OpenFile {
+  if (!file) return false
+
+  return !file.isImage
+    && !file.isPreview
+    && !file.isEventGraph
+    && !file.isFocusTree
+    && !file.isWorldMap
+    && !file.isGuiPreview
+    && !file.isMioPreview
+    && !file.isGfxPreview
+}
+
+function toSearchSourceFile(target: EditorSearchTarget): SearchSourceFile {
+  return {
+    name: target.name,
+    path: target.path,
+    content: target.content
+  }
+}
+
+function getCurrentEditorSearchTargets(): EditorSearchTarget[] {
+  const activePaneId = editorGroupRef.value?.activePaneId
+  if (!activePaneId) {
+    return []
+  }
+
+  const activePane = editorGroupRef.value?.panes.find(p => p.id === activePaneId)
+  if (!activePane || activePane.activeFileIndex < 0) {
+    return []
+  }
+
+  const activeFile = activePane.openFiles[activePane.activeFileIndex]
+  if (!isSearchableOpenFile(activeFile)) {
+    return []
+  }
+
+  return [
+    {
+      name: activeFile.node.name,
+      path: activeFile.node.path,
+      content: activeFile.content,
+      openFiles: [activeFile],
+      paneIds: [activePane.id],
+      hasConflict: false
+    }
+  ]
+}
+
+function getAllOpenedEditorSearchTargets(): EditorSearchTarget[] {
+  if (!editorGroupRef.value) {
+    return []
+  }
+
+  const activePaneId = editorGroupRef.value.activePaneId
+  const orderedPanes = [...editorGroupRef.value.panes].sort((left, right) => {
+    if (left.id === activePaneId) return -1
+    if (right.id === activePaneId) return 1
+    return 0
+  })
+
+  const targets = new Map<string, EditorSearchTarget>()
+
+  for (const pane of orderedPanes) {
+    const orderedOpenFiles = pane.activeFileIndex >= 0
+      ? [pane.openFiles[pane.activeFileIndex], ...pane.openFiles.filter((_, index) => index !== pane.activeFileIndex)]
+      : pane.openFiles
+
+    for (const openFile of orderedOpenFiles) {
+      if (!isSearchableOpenFile(openFile)) {
+        continue
+      }
+
+      const existingTarget = targets.get(openFile.node.path)
+      if (!existingTarget) {
+        targets.set(openFile.node.path, {
+          name: openFile.node.name,
+          path: openFile.node.path,
+          content: openFile.content,
+          openFiles: [openFile],
+          paneIds: [pane.id],
+          hasConflict: false
+        })
+        continue
+      }
+
+      existingTarget.openFiles.push(openFile)
+      if (!existingTarget.paneIds.includes(pane.id)) {
+        existingTarget.paneIds.push(pane.id)
+      }
+      if (existingTarget.content !== openFile.content) {
+        existingTarget.hasConflict = true
+      }
+    }
+  }
+
+  return Array.from(targets.values())
+}
+
+function getCurrentEditorSearchFiles(): SearchSourceFile[] {
+  return getCurrentEditorSearchTargets().map(toSearchSourceFile)
+}
+
+function getAllOpenedEditorSearchFiles(): SearchSourceFile[] {
+  return getAllOpenedEditorSearchTargets().map(toSearchSourceFile)
+}
+
 async function handlePreviewEvent(paneId: string) {
   await openPreview(paneId, 'event')
 }
@@ -922,6 +1138,10 @@ async function handlePreviewGui(paneId: string) {
 
 // 右键菜单包装函数（处理 selectedNode 高亮）
 function handleShowTreeContextMenu(side: SidebarSide, event: MouseEvent, node: FileNode | null = null) {
+  if (getTreeMenuMode(side) === 'none') {
+    return
+  }
+
   const state = getTreeState(side)
   focusFileTree(side)
   if (node && !state.selectedTreePaths.value.includes(node.path)) {
@@ -1038,6 +1258,11 @@ async function handleContextMenuAction(action: string, payload?: any) {
       pane.activeFileIndex = 0
     }
   } else if (contextMenuType.value === 'tree') {
+    if (!treeSupportsFileOperations(treeContextMenuSide.value) && ['createFile', 'createFolder', 'rename', 'delete', 'copy', 'cut', 'paste'].includes(action)) {
+      hideContextMenu()
+      return
+    }
+
     if (action === 'createFile') {
       createDialogType.value = 'file'
       createDialogMode.value = 'create'
@@ -1092,14 +1317,14 @@ async function handleContextMenuAction(action: string, payload?: any) {
         navigator.clipboard.writeText(treeContextMenuNode.value.path).catch(err => {
           console.error('无法复制路径: ', err)
         })
-      } else if (projectPath.value) {
+      } else if (getActiveTreeRootPath(treeContextMenuSide.value)) {
         // 如果是在根目录空白处点击，复制项目路径
-        navigator.clipboard.writeText(projectPath.value).catch(err => {
+        navigator.clipboard.writeText(getActiveTreeRootPath(treeContextMenuSide.value)).catch(err => {
           console.error('无法复制路径: ', err)
         })
       }
     } else if (action === 'showInExplorer') {
-      const targetPath = treeContextMenuNode.value ? treeContextMenuNode.value.path : projectPath.value
+      const targetPath = treeContextMenuNode.value ? treeContextMenuNode.value.path : getActiveTreeRootPath(treeContextMenuSide.value)
       if (targetPath) {
         // 如果是文件，打开父目录；如果是目录，直接打开
         // 由于 openFolder 目前只负责打开，对于文件，我们尝试获取其父目录
@@ -1396,6 +1621,16 @@ function handleErrorsChange(_paneId: string, errors: Array<{line: number, msg: s
 
 // 处理搜索
 async function handlePerformSearch() {
+  if (searchScope.value === 'currentFile') {
+    await performSearchInFiles(getCurrentEditorSearchFiles())
+    return
+  }
+
+  if (searchScope.value === 'openFiles') {
+    await performSearchInFiles(getAllOpenedEditorSearchFiles())
+    return
+  }
+
   if (searchScope.value === 'dependencies') {
     // 搜索所有启用的依赖项
     const enabledDependencies = dependencies.value.filter(dep => dep.enabled)
@@ -1651,7 +1886,7 @@ onUnmounted(() => {
                 @update:search-query="searchQuery = $event"
                 @update:search-case-sensitive="searchCaseSensitive = $event"
                 @update:search-regex="searchRegex = $event"
-                @update:search-scope="searchScope = $event as 'project' | 'game' | 'dependencies'"
+                @update:search-scope="searchScope = $event as SearchScope"
                 @update:include-all-files="includeAllFiles = $event"
                 @perform-search="handlePerformSearch"
                 @perform-replace="handlePerformReplace"
@@ -1844,7 +2079,7 @@ onUnmounted(() => {
                 @update:search-query="searchQuery = $event"
                 @update:search-case-sensitive="searchCaseSensitive = $event"
                 @update:search-regex="searchRegex = $event"
-                @update:search-scope="searchScope = $event as 'project' | 'game' | 'dependencies'"
+                @update:search-scope="searchScope = $event as SearchScope"
                 @update:include-all-files="includeAllFiles = $event"
                 @perform-search="handlePerformSearch"
                 @perform-replace="handlePerformReplace"
@@ -1921,6 +2156,7 @@ onUnmounted(() => {
       :tree-node-path="treeContextMenuNode?.path"
       :tree-node-is-directory="treeContextMenuNode?.isDirectory"
       :has-tree-clipboard="!!treeClipboard"
+      :tree-supports-file-operations="treeSupportsFileOperations(treeContextMenuSide)"
       :project-root="projectPath"
       :available-panes="availablePanesForMove"
       :sidebar-current-side="sidebarContextSide"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import type { SearchResult } from '../../composables/useSearch'
+import { computed, ref, watch } from 'vue'
+import type { SearchResult, SearchScope } from '../../composables/useSearch'
 
 const props = defineProps<{
   searchQuery: string
@@ -8,7 +8,7 @@ const props = defineProps<{
   isSearching: boolean
   searchCaseSensitive: boolean
   searchRegex: boolean
-  searchScope: string
+  searchScope: SearchScope
   includeAllFiles: boolean
   projectPath: string
   gameDirectory: string
@@ -19,13 +19,18 @@ const emit = defineEmits<{
   'update:searchQuery': [value: string]
   'update:searchCaseSensitive': [value: boolean]
   'update:searchRegex': [value: boolean]
-  'update:searchScope': [value: string]
+  'update:searchScope': [value: SearchScope]
   'update:includeAllFiles': [value: boolean]
   performSearch: []
   performReplace: [replaceText: string]
 }>()
 
 const replaceText = ref('')
+const selectedIndex = ref(0)
+const inputRef = ref<HTMLInputElement | null>(null)
+const debounceTimer = ref<number | null>(null)
+
+const isOpenFileScope = computed(() => props.searchScope === 'currentFile' || props.searchScope === 'openFiles')
 
 function escapeHtml(input: string): string {
   return input
@@ -44,7 +49,6 @@ function getReplacePreviewHtml(result: SearchResult): string {
   const before = escapeHtml(content.slice(0, start))
   const matched = escapeHtml(content.slice(start, end))
   const after = escapeHtml(content.slice(end))
-
   const replacement = escapeHtml(replaceText.value)
 
   if (!replacement) {
@@ -58,53 +62,64 @@ function getReplacePreviewHtml(result: SearchResult): string {
     + `${after}`
 }
 
-// 键盘导航
-const selectedIndex = ref(0)
-const inputRef = ref<HTMLInputElement | null>(null)
-
-function handleKeyDown(e: KeyboardEvent) {
-  if (e.key === 'ArrowDown') {
-    e.preventDefault()
+function handleKeyDown(event: KeyboardEvent) {
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
     selectedIndex.value = Math.min(selectedIndex.value + 1, props.searchResults.length - 1)
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault()
+    return
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
     selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
-  } else if (e.key === 'Enter' && props.searchResults[selectedIndex.value]) {
+    return
+  }
+
+  if (event.key === 'Enter' && props.searchResults[selectedIndex.value]) {
     emit('jumpToResult', props.searchResults[selectedIndex.value])
   }
 }
 
-// 监听搜索参数变化（1 秒防抖）
-const debounceTimer = ref<number | null>(null)
-watch([() => props.searchQuery, () => props.searchCaseSensitive, () => props.searchRegex, () => props.searchScope], () => {
-  if (debounceTimer.value) {
-    clearTimeout(debounceTimer.value)
-    debounceTimer.value = null
-  }
-  if (!props.searchQuery.trim()) return
-  debounceTimer.value = window.setTimeout(() => {
-    emit('performSearch')
-  }, 1000)
-}, { flush: 'post' })
+watch(
+  [
+    () => props.searchQuery,
+    () => props.searchCaseSensitive,
+    () => props.searchRegex,
+    () => props.searchScope,
+    () => props.includeAllFiles
+  ],
+  () => {
+    if (debounceTimer.value) {
+      clearTimeout(debounceTimer.value)
+      debounceTimer.value = null
+    }
+
+    if (!props.searchQuery.trim()) {
+      return
+    }
+
+    debounceTimer.value = window.setTimeout(() => {
+      emit('performSearch')
+    }, 1000)
+  },
+  { flush: 'post' }
+)
 
 function handleReplaceAll() {
   if (!props.searchQuery.trim()) return
   emit('performReplace', replaceText.value)
 }
 
-// 当组件挂载时聚焦输入框
 setTimeout(() => {
   inputRef.value?.focus()
 }, 100)
 </script>
 
 <template>
-  <!-- 搜索面板 -->
   <div
     class="h-full flex flex-col overflow-hidden bg-hoi4-gray text-hoi4-text"
     @keydown="handleKeyDown"
   >
-    <!-- 搜索输入区 -->
     <div class="p-4 ui-separator-bottom">
       <input
         ref="inputRef"
@@ -131,72 +146,91 @@ setTimeout(() => {
           替换全部
         </button>
       </div>
-      
-      <!-- 选项 -->
+
       <div class="flex items-center gap-3 mt-3 text-xs flex-wrap">
         <label class="flex items-center gap-2 text-hoi4-text cursor-pointer">
-          <input 
-            :checked="searchCaseSensitive" 
+          <input
+            :checked="searchCaseSensitive"
             @change="emit('update:searchCaseSensitive', ($event.target as HTMLInputElement).checked)"
-            type="checkbox" 
-            class="accent-hoi4-accent" 
+            type="checkbox"
+            class="accent-hoi4-accent"
           />
-          <span>大小写敏感</span>
+          <span>区分大小写</span>
         </label>
         <label class="flex items-center gap-2 text-hoi4-text cursor-pointer">
-          <input 
-            :checked="searchRegex" 
+          <input
+            :checked="searchRegex"
             @change="emit('update:searchRegex', ($event.target as HTMLInputElement).checked)"
-            type="checkbox" 
-            class="accent-hoi4-accent" 
+            type="checkbox"
+            class="accent-hoi4-accent"
           />
           <span>正则表达式</span>
         </label>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <label class="flex items-center gap-2 text-hoi4-text cursor-pointer">
-            <input 
-              :checked="searchScope === 'project'" 
+            <input
+              :checked="searchScope === 'currentFile'"
+              @change="emit('update:searchScope', 'currentFile')"
+              type="radio"
+              name="searchScope"
+              class="accent-hoi4-accent"
+            />
+            <span>当前文件</span>
+          </label>
+          <label class="flex items-center gap-2 text-hoi4-text cursor-pointer">
+            <input
+              :checked="searchScope === 'openFiles'"
+              @change="emit('update:searchScope', 'openFiles')"
+              type="radio"
+              name="searchScope"
+              class="accent-hoi4-accent"
+            />
+            <span>已打开文件</span>
+          </label>
+          <label class="flex items-center gap-2 text-hoi4-text cursor-pointer">
+            <input
+              :checked="searchScope === 'project'"
               @change="emit('update:searchScope', 'project')"
-              type="radio" 
-              name="searchScope" 
-              class="accent-hoi4-accent" 
+              type="radio"
+              name="searchScope"
+              class="accent-hoi4-accent"
             />
             <span>项目目录</span>
           </label>
           <label class="flex items-center gap-2 text-hoi4-text cursor-pointer">
-            <input 
-              :checked="searchScope === 'game'" 
+            <input
+              :checked="searchScope === 'game'"
               @change="emit('update:searchScope', 'game')"
-              type="radio" 
-              name="searchScope" 
-              class="accent-hoi4-accent" 
+              type="radio"
+              name="searchScope"
+              class="accent-hoi4-accent"
             />
             <span>游戏目录</span>
           </label>
           <label class="flex items-center gap-2 text-hoi4-text cursor-pointer">
-            <input 
-              :checked="searchScope === 'dependencies'" 
+            <input
+              :checked="searchScope === 'dependencies'"
               @change="emit('update:searchScope', 'dependencies')"
-              type="radio" 
-              name="searchScope" 
-              class="accent-hoi4-accent" 
+              type="radio"
+              name="searchScope"
+              class="accent-hoi4-accent"
             />
             <span>依赖目录</span>
           </label>
         </div>
         <label class="flex items-center gap-2 text-hoi4-text cursor-pointer">
-          <input 
-            :checked="includeAllFiles" 
+          <input
+            :checked="includeAllFiles"
             @change="emit('update:includeAllFiles', ($event.target as HTMLInputElement).checked)"
-            type="checkbox" 
-            class="accent-hoi4-accent" 
+            type="checkbox"
+            class="accent-hoi4-accent"
+            :disabled="isOpenFileScope"
           />
-          <span>所有文件类型</span>
+          <span :class="{ 'opacity-50': isOpenFileScope }">所有文件类型</span>
         </label>
       </div>
     </div>
-    
-    <!-- 搜索结果列表 -->
+
     <div class="flex-1 overflow-y-auto">
       <div v-if="isSearching" class="p-4 text-center text-hoi4-text-dim">
         搜索中...

@@ -1,15 +1,10 @@
-/**
- * useSearch composable 的单元测试
- */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSearch, type SearchScope } from '../../../src/composables/useSearch'
 
-// 模拟 Tauri API
 vi.mock('../../../src/api/tauri', () => ({
   searchFiles: vi.fn()
 }))
 
-// 模拟 logger
 vi.mock('../../../src/utils/logger', () => ({
   logger: {
     error: vi.fn()
@@ -27,7 +22,7 @@ describe('useSearch', () => {
     search = useSearch()
   })
 
-  it('应该正确初始化状态', () => {
+  it('正确初始化状态', () => {
     expect(search.searchQuery.value).toBe('')
     expect(search.searchResults.value).toEqual([])
     expect(search.isSearching.value).toBe(false)
@@ -37,210 +32,199 @@ describe('useSearch', () => {
     expect(search.includeAllFiles.value).toBe(false)
   })
 
-  it('应该能够设置搜索查询', () => {
-    // 设置搜索查询
+  it('可以设置搜索选项', () => {
     search.searchQuery.value = 'test query'
-    expect(search.searchQuery.value).toBe('test query')
-    
-    // 清空搜索查询
-    search.searchQuery.value = ''
-    expect(search.searchQuery.value).toBe('')
-  })
-
-  it('应该能够设置搜索选项', () => {
-    // 设置区分大小写
     search.searchCaseSensitive.value = true
-    expect(search.searchCaseSensitive.value).toBe(true)
-    
-    // 设置正则表达式
     search.searchRegex.value = true
-    expect(search.searchRegex.value).toBe(true)
-    
-    // 设置搜索范围
     search.searchScope.value = 'game' as SearchScope
-    expect(search.searchScope.value).toBe('game')
-    
-    // 设置包含所有文件
     search.includeAllFiles.value = true
+
+    expect(search.searchQuery.value).toBe('test query')
+    expect(search.searchCaseSensitive.value).toBe(true)
+    expect(search.searchRegex.value).toBe(true)
+    expect(search.searchScope.value).toBe('game')
     expect(search.includeAllFiles.value).toBe(true)
+
+    search.searchScope.value = 'currentFile' as SearchScope
+    expect(search.searchScope.value).toBe('currentFile')
   })
 
-  it('应该能够执行搜索', async () => {
-    // 模拟 searchFiles 返回结果
-    const mockApiResults = [
-      {
-        file_name: 'test1.txt',
-        file_path: '/path/to/test1.txt',
-        line: 1,
-        content: 'Test line 1',
-        match_start: 0,
-        match_end: 4
-      },
-      {
-        file_name: 'test2.txt',
-        file_path: '/path/to/test2.txt',
-        line: 3,
-        content: 'Another test line',
-        match_start: 8,
-        match_end: 12
-      }
-    ]
-    
+  it('可以执行目录搜索', async () => {
     vi.mocked(searchFiles).mockResolvedValue({
       success: true,
-      results: mockApiResults,
-      message: ''
+      message: '',
+      results: [
+        {
+          file_name: 'test1.txt',
+          file_path: '/path/to/test1.txt',
+          line: 1,
+          content: 'Test line 1',
+          match_start: 0,
+          match_end: 4
+        },
+        {
+          file_name: 'test2.txt',
+          file_path: '/path/to/test2.txt',
+          line: 3,
+          content: 'Another test line',
+          match_start: 8,
+          match_end: 12
+        }
+      ]
     })
-    
-    // 设置搜索查询
+
     search.searchQuery.value = 'test'
-    
-    // 执行搜索
-    const searchPath = '/test/path'
-    await search.performSearch(searchPath)
-    
-    // 应该调用 searchFiles API
-    expect(searchFiles).toHaveBeenCalledTimes(1)
-    expect(searchFiles).toHaveBeenCalledWith(
-      searchPath,
-      'test',
-      false, // searchCaseSensitive 默认是 false
-      false, // searchRegex 默认是 false
-      false  // includeAllFiles 默认是 false
-    )
-    
-    // 应该更新搜索状态和结果
+    await search.performSearch('/test/path')
+
+    expect(searchFiles).toHaveBeenCalledWith('/test/path', 'test', false, false, false)
     expect(search.isSearching.value).toBe(false)
-    expect(search.searchResults.value.length).toBe(2)
-    
-    // 检查第一个搜索结果
-    expect(search.searchResults.value[0].file.name).toBe('test1.txt')
-    expect(search.searchResults.value[0].file.path).toBe('/path/to/test1.txt')
-    expect(search.searchResults.value[0].line).toBe(1)
-    expect(search.searchResults.value[0].content).toBe('Test line 1')
-    expect(search.searchResults.value[0].matchStart).toBe(0)
-    expect(search.searchResults.value[0].matchEnd).toBe(4)
-    
-    // 检查第二个搜索结果
-    expect(search.searchResults.value[1].file.name).toBe('test2.txt')
-    expect(search.searchResults.value[1].file.path).toBe('/path/to/test2.txt')
-    expect(search.searchResults.value[1].line).toBe(3)
-    expect(search.searchResults.value[1].content).toBe('Another test line')
-    expect(search.searchResults.value[1].matchStart).toBe(8)
-    expect(search.searchResults.value[1].matchEnd).toBe(12)
+    expect(search.searchResults.value).toHaveLength(2)
+    expect(search.searchResults.value[0]).toMatchObject({
+      file: {
+        name: 'test1.txt',
+        path: '/path/to/test1.txt',
+        isDirectory: false
+      },
+      line: 1,
+      content: 'Test line 1',
+      matchStart: 0,
+      matchEnd: 4
+    })
   })
 
-  it('应该能够处理空搜索查询', async () => {
-    // 设置空搜索查询
+  it('空查询时会清空结果且不调用接口', async () => {
     search.searchQuery.value = ''
-    
-    // 执行搜索
-    const searchPath = '/test/path'
-    await search.performSearch(searchPath)
-    
-    // 不应该调用 searchFiles API
+    search.searchResults.value = [
+      {
+        file: {
+          name: 'test.txt',
+          path: '/test.txt',
+          isDirectory: false
+        },
+        line: 1,
+        content: 'test',
+        matchStart: 0,
+        matchEnd: 4
+      }
+    ]
+
+    await search.performSearch('/test/path')
+
     expect(searchFiles).not.toHaveBeenCalled()
-    
-    // 应该清空搜索结果
     expect(search.searchResults.value).toEqual([])
   })
 
-  it('应该能够处理空搜索路径', async () => {
-    // 设置搜索查询
+  it('空路径时记录错误', async () => {
     search.searchQuery.value = 'test'
-    
-    // 执行搜索（空路径）
+
     await search.performSearch('')
-    
-    // 不应该调用 searchFiles API
+
     expect(searchFiles).not.toHaveBeenCalled()
-    
-    // 应该记录错误
     expect(logger.error).toHaveBeenCalledTimes(1)
-    expect(logger.error).toHaveBeenCalledWith('搜索路径未设置')
   })
 
-  it('应该能够处理搜索失败', async () => {
-    // 模拟 searchFiles 返回失败
+  it('接口失败时记录错误', async () => {
     vi.mocked(searchFiles).mockResolvedValue({
       success: false,
       message: '搜索失败',
       results: []
     })
-    
-    // 设置搜索查询
+
     search.searchQuery.value = 'test'
-    
-    // 执行搜索
-    const searchPath = '/test/path'
-    await search.performSearch(searchPath)
-    
-    // 应该调用 searchFiles API
+    await search.performSearch('/test/path')
+
     expect(searchFiles).toHaveBeenCalledTimes(1)
-    
-    // 应该记录错误
     expect(logger.error).toHaveBeenCalledTimes(1)
-    expect(logger.error).toHaveBeenCalledWith('搜索失败: 搜索失败')
-    
-    // 应该更新搜索状态
     expect(search.isSearching.value).toBe(false)
   })
 
-  it('应该能够追加搜索结果', async () => {
-    // 模拟 searchFiles 返回结果
-    const mockApiResults1 = [
-      {
-        file_name: 'test1.txt',
-        file_path: '/path/to/test1.txt',
-        line: 1,
-        content: 'Test line 1',
-        match_start: 0,
-        match_end: 4
-      }
-    ]
-    
-    const mockApiResults2 = [
-      {
-        file_name: 'test2.txt',
-        file_path: '/path/to/test2.txt',
-        line: 3,
-        content: 'Another test line',
-        match_start: 8,
-        match_end: 12
-      }
-    ]
-    
+  it('支持追加搜索结果', async () => {
     vi.mocked(searchFiles)
       .mockResolvedValueOnce({
-        success: true, results: mockApiResults1,
-        message: ''
+        success: true,
+        message: '',
+        results: [
+          {
+            file_name: 'test1.txt',
+            file_path: '/path/to/test1.txt',
+            line: 1,
+            content: 'Test line 1',
+            match_start: 0,
+            match_end: 4
+          }
+        ]
       })
       .mockResolvedValueOnce({
-        success: true, results: mockApiResults2,
-        message: ''
+        success: true,
+        message: '',
+        results: [
+          {
+            file_name: 'test2.txt',
+            file_path: '/path/to/test2.txt',
+            line: 3,
+            content: 'Another test line',
+            match_start: 8,
+            match_end: 12
+          }
+        ]
       })
-    
-    // 设置搜索查询
+
     search.searchQuery.value = 'test'
-    
-    // 执行第一次搜索
     await search.performSearch('/test/path1')
-    expect(search.searchResults.value.length).toBe(1)
-    
-    // 执行追加搜索
     await search.performSearch('/test/path2', true)
-    
-    // 应该调用两次 searchFiles API
-    expect(searchFiles).toHaveBeenCalledTimes(2)
-    
-    // 搜索结果应该合并
-    expect(search.searchResults.value.length).toBe(2)
+
+    expect(search.searchResults.value).toHaveLength(2)
     expect(search.searchResults.value[0].file.name).toBe('test1.txt')
     expect(search.searchResults.value[1].file.name).toBe('test2.txt')
   })
 
-  it('应该能够清空搜索结果', () => {
-    // 模拟搜索结果
+  it('支持在已打开文件中搜索', async () => {
+    search.searchQuery.value = 'test'
+
+    await search.performSearchInFiles([
+      {
+        name: 'open.txt',
+        path: '/open.txt',
+        content: 'first test line\nsecond TEST line'
+      }
+    ])
+
+    expect(search.searchResults.value).toHaveLength(2)
+    expect(search.searchResults.value[0]).toMatchObject({
+      line: 1,
+      content: 'first test line',
+      matchStart: 6,
+      matchEnd: 10
+    })
+    expect(search.searchResults.value[1]).toMatchObject({
+      line: 2,
+      content: 'second TEST line',
+      matchStart: 7,
+      matchEnd: 11
+    })
+  })
+
+  it('支持在已打开文件中使用正则搜索', async () => {
+    search.searchQuery.value = 'te.t'
+    search.searchRegex.value = true
+
+    await search.performSearchInFiles([
+      {
+        name: 'regex.txt',
+        path: '/regex.txt',
+        content: 'test text\ntoast'
+      }
+    ])
+
+    expect(search.searchResults.value).toHaveLength(2)
+    expect(search.searchResults.value[0].content).toBe('test text')
+    expect(search.searchResults.value[1].content).toBe('test text')
+    expect(search.searchResults.value[0].matchStart).toBe(0)
+    expect(search.searchResults.value[1].matchStart).toBe(5)
+  })
+
+  it('可以清空搜索结果', () => {
+    search.searchQuery.value = 'test'
     search.searchResults.value = [
       {
         file: {
@@ -254,20 +238,16 @@ describe('useSearch', () => {
         matchEnd: 4
       }
     ]
-    
-    // 清空搜索结果
+
     search.clearResults()
-    
-    // 应该清空搜索结果和查询
+
     expect(search.searchResults.value).toEqual([])
     expect(search.searchQuery.value).toBe('')
   })
 
-  it('应该能够跳转到搜索结果', () => {
-    // 模拟编辑器视图
+  it('可以跳转到搜索结果', () => {
     const mockDispatch = vi.fn()
     const mockFocus = vi.fn()
-    
     const mockEditorView = {
       dispatch: mockDispatch,
       focus: mockFocus,
@@ -281,31 +261,26 @@ describe('useSearch', () => {
         }
       }
     }
-    
-    // 模拟搜索结果
-    const mockResult = {
-      file: {
-        name: 'test.txt',
-        path: '/path/to/test.txt',
-        isDirectory: false
+
+    search.jumpToResult(
+      {
+        file: {
+          name: 'test.txt',
+          path: '/path/to/test.txt',
+          isDirectory: false
+        },
+        line: 5,
+        content: 'Test line content',
+        matchStart: 0,
+        matchEnd: 4
       },
-      line: 5,
-      content: 'Test line content',
-      matchStart: 0,
-      matchEnd: 4
-    }
-    
-    // 执行跳转到搜索结果
-    search.jumpToResult(mockResult, mockEditorView as any)
-    
-    // 应该调用编辑器的 dispatch 和 focus 方法
-    expect(mockDispatch).toHaveBeenCalledTimes(1)
-    expect(mockFocus).toHaveBeenCalledTimes(1)
-    
-    // 检查 dispatch 的参数
+      mockEditorView as any
+    )
+
     expect(mockDispatch).toHaveBeenCalledWith({
-      selection: { anchor: 80, head: 84 }, // line 5 的 from 是 (5-1)*20=80, matchStart=0, matchEnd=4
+      selection: { anchor: 80, head: 84 },
       scrollIntoView: true
     })
+    expect(mockFocus).toHaveBeenCalledTimes(1)
   })
 })

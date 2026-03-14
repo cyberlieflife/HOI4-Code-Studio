@@ -12,12 +12,13 @@ const props = defineProps<{
   treeNodePath?: string
   treeNodeIsDirectory?: boolean
   hasTreeClipboard?: boolean
+  treeSupportsFileOperations?: boolean
   projectRoot?: string
   availablePanes?: Array<{id: string, name: string}>
   sidebarCurrentSide?: 'left' | 'right'
 }>()
 
-// 获取当前主题
+// 获取当前主题。
 const { currentTheme } = useTheme()
 
 const emit = defineEmits<{
@@ -28,33 +29,33 @@ const emit = defineEmits<{
 const templateMenuVisible = ref(false)
 const moveMenuVisible = ref(false)
 
-// 检查当前文件是否在 common/ideas 目录下
+// 判断当前文件是否位于 common/ideas 目录。
 const isInCommonIdeas = computed(() => {
   if (!props.currentFilePath) return false
   const normalizedPath = props.currentFilePath.replace(/\\/g, '/')
   return normalizedPath.includes('common/ideas/')
 })
 
-// 检查当前文件是否在 history/countries 目录下
+// 判断当前文件是否位于 history/countries 目录。
 const isInHistoryCountries = computed(() => {
   if (!props.currentFilePath) return false
   const normalizedPath = props.currentFilePath.replace(/\\/g, '/')
   return normalizedPath.includes('history/countries/')
 })
 
-// 检查当前文件是否在 common/bop 目录下
+// 判断当前文件是否位于 common/bop 目录。
 const isInCommonBop = computed(() => {
   if (!props.currentFilePath) return false
   const normalizedPath = props.currentFilePath.replace(/\\/g, '/')
   return normalizedPath.includes('common/bop/')
 })
 
-// 检查是否有任何可用的模板
+// 判断是否存在可用模板。
 const hasAnyTemplateAvailable = computed(() => {
   return isInCommonIdeas.value || isInHistoryCountries.value || isInCommonBop.value
 })
 
-// 检查二级菜单是否应该显示在左侧
+// 判断二级菜单是否需要显示在左侧，避免超出屏幕。
 const showSubmenuOnLeft = computed(() => {
   const submenuWidth = 180
   const padding = 20
@@ -72,6 +73,8 @@ const isProjectMapDirectory = computed(() => {
 
   return normalizePath(props.treeNodePath) === `${normalizePath(props.projectRoot)}/map`
 })
+
+const canOperateTreeFiles = computed(() => props.treeSupportsFileOperations !== false)
 
 function handleAction(action: string, payload?: any) {
   emit('action', action, payload)
@@ -95,12 +98,12 @@ function hideMoveMenu() {
 </script>
 
 <template>
-  <!-- 文件标签右键菜单 -->
+  <!-- 文件标签页右键菜单 -->
   <div
     v-if="visible && menuType === 'file'"
     class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
-    :style="{ 
-      left: x + 'px', 
+    :style="{
+      left: x + 'px',
       top: y + 'px',
       backgroundColor: currentTheme.colors.bgSecondary,
       borderColor: currentTheme.colors.border,
@@ -124,12 +127,12 @@ function hideMoveMenu() {
     </button>
   </div>
 
-  <!-- 文件树右键菜单 -->
+  <!-- 文件树右键菜单：可操作目录 -->
   <div
-    v-if="visible && menuType === 'tree'"
+    v-if="visible && menuType === 'tree' && canOperateTreeFiles"
     class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
-    :style="{ 
-      left: x + 'px', 
+    :style="{
+      left: x + 'px',
       top: y + 'px',
       backgroundColor: currentTheme.colors.bgSecondary,
       borderColor: currentTheme.colors.border,
@@ -214,6 +217,36 @@ function hideMoveMenu() {
     </button>
   </div>
 
+  <!-- 文件树右键菜单：只读目录 -->
+  <div
+    v-if="visible && menuType === 'tree' && !canOperateTreeFiles"
+    class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
+    :style="{
+      left: x + 'px',
+      top: y + 'px',
+      backgroundColor: currentTheme.colors.bgSecondary,
+      borderColor: currentTheme.colors.border,
+      color: currentTheme.colors.fg
+    }"
+    @click.stop
+  >
+    <button
+      @click="handleAction('copyPath')"
+      class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
+      :style="{ color: currentTheme.colors.fg }"
+    >
+      复制路径
+    </button>
+    <button
+      @click="handleAction('showInExplorer')"
+      class="w-full px-4 py-2 text-left text-sm border-t whitespace-nowrap transition-colors context-menu-item"
+      :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
+    >
+      在资源管理器中显示
+    </button>
+  </div>
+
+  <!-- 侧边栏标签右键菜单 -->
   <div
     v-if="visible && menuType === 'sidebar'"
     class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
@@ -248,8 +281,8 @@ function hideMoveMenu() {
   <div
     v-if="visible && menuType === 'pane'"
     class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
-    :style="{ 
-      left: x + 'px', 
+    :style="{
+      left: x + 'px',
       top: y + 'px',
       backgroundColor: currentTheme.colors.bgSecondary,
       borderColor: currentTheme.colors.border,
@@ -263,10 +296,9 @@ function hideMoveMenu() {
       class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
       :style="{ color: currentTheme.colors.fg }"
     >
-      向右分割
+      向右分屏
     </button>
-    <!-- 移动到其他窗格菜单 -->
-    <div 
+    <div
       v-if="availablePanes && availablePanes.length > 0"
       class="relative"
       @mouseenter="showMoveMenu"
@@ -280,12 +312,11 @@ function hideMoveMenu() {
         <span>移动到</span>
         <span>▶</span>
       </button>
-      <!-- 二级菜单 -->
       <div
         v-if="moveMenuVisible"
         class="absolute top-0 border rounded-xl shadow-2xl backdrop-blur-sm"
         :class="showSubmenuOnLeft ? 'right-full mr-1' : 'left-full ml-1'"
-        :style="{ 
+        :style="{
           backgroundColor: currentTheme.colors.bgSecondary,
           borderColor: currentTheme.colors.border,
           minWidth: '150px',
@@ -324,8 +355,8 @@ function hideMoveMenu() {
   <div
     v-if="visible && menuType === 'editor'"
     class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
-    :style="{ 
-      left: x + 'px', 
+    :style="{
+      left: x + 'px',
       top: y + 'px',
       backgroundColor: currentTheme.colors.bgSecondary,
       borderColor: currentTheme.colors.border,
@@ -362,8 +393,12 @@ function hideMoveMenu() {
     >
       粘贴
     </button>
-    <div v-if="hasAnyTemplateAvailable" class="h-px w-full my-1" :style="{ backgroundColor: currentTheme.colors.border }"></div>
-    <div 
+    <div
+      v-if="hasAnyTemplateAvailable"
+      class="h-px w-full my-1"
+      :style="{ backgroundColor: currentTheme.colors.border }"
+    ></div>
+    <div
       v-if="hasAnyTemplateAvailable"
       class="relative"
       @mouseenter="showTemplateMenu"
@@ -376,12 +411,11 @@ function hideMoveMenu() {
         <span>插入模板</span>
         <span>▶</span>
       </button>
-      <!-- 二级菜单 -->
       <div
         v-if="templateMenuVisible"
         class="absolute top-0 border rounded-xl shadow-2xl backdrop-blur-sm"
         :class="showSubmenuOnLeft ? 'right-full mr-1' : 'left-full ml-1'"
-        :style="{ 
+        :style="{
           backgroundColor: currentTheme.colors.bgSecondary,
           borderColor: currentTheme.colors.border,
           minWidth: '200px',
@@ -394,7 +428,7 @@ function hideMoveMenu() {
           class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
           :style="{ color: currentTheme.colors.fg }"
         >
-          插入Idea模板
+          插入 Idea 模板
         </button>
         <button
           v-if="isInHistoryCountries"
@@ -403,7 +437,7 @@ function hideMoveMenu() {
           :class="{ 'border-t': isInCommonIdeas }"
           :style="{ color: currentTheme.colors.fg, borderColor: currentTheme.colors.border }"
         >
-          插入Tag初始态定义模板
+          插入 Tag 初始定义模板
         </button>
         <button
           v-if="isInCommonBop"

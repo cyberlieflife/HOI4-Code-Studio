@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { searchFiles, type SearchResult as ApiSearchResult } from '../api/tauri'
+import { escapeRegExp } from '../utils/fileUtils'
 import { logger } from '../utils/logger'
 
 /**
@@ -17,7 +18,13 @@ export interface SearchResult {
   matchEnd: number
 }
 
-export type SearchScope = 'project' | 'game' | 'dependencies'
+export interface SearchSourceFile {
+  name: string
+  path: string
+  content: string
+}
+
+export type SearchScope = 'project' | 'game' | 'dependencies' | 'currentFile' | 'openFiles'
 
 /**
  * 搜索功能 Composable
@@ -46,6 +53,33 @@ export function useSearch() {
       content: apiResult.content,
       matchStart: apiResult.match_start,
       matchEnd: apiResult.match_end
+    }
+  }
+
+  function createSearchPattern(): RegExp {
+    const flags = searchCaseSensitive.value ? 'g' : 'gi'
+    return searchRegex.value
+      ? new RegExp(searchQuery.value, flags)
+      : new RegExp(escapeRegExp(searchQuery.value), flags)
+  }
+
+  function createFileSearchResult(
+    file: SearchSourceFile,
+    line: number,
+    content: string,
+    matchStart: number,
+    matchEnd: number
+  ): SearchResult {
+    return {
+      file: {
+        name: file.name,
+        path: file.path,
+        isDirectory: false
+      },
+      line,
+      content,
+      matchStart,
+      matchEnd
     }
   }
   
@@ -99,6 +133,50 @@ export function useSearch() {
       }
     }
   }
+
+  async function performSearchInFiles(files: SearchSourceFile[]) {
+    if (!searchQuery.value.trim()) {
+      searchResults.value = []
+      return
+    }
+
+    isSearching.value = true
+    searchResults.value = []
+
+    try {
+      const pattern = createSearchPattern()
+      const results: SearchResult[] = []
+
+      for (const file of files) {
+        const lines = file.content.split(/\r?\n/)
+
+        for (let index = 0; index < lines.length; index++) {
+          const lineContent = lines[index]
+          const linePattern = new RegExp(pattern.source, pattern.flags)
+          let match: RegExpExecArray | null
+
+          while ((match = linePattern.exec(lineContent)) !== null) {
+            const matchedText = match[0] ?? ''
+            const matchStart = match.index
+            const matchEnd = matchStart + matchedText.length
+
+            results.push(createFileSearchResult(file, index + 1, lineContent, matchStart, matchEnd))
+
+            if (matchedText.length === 0) {
+              linePattern.lastIndex += 1
+            }
+          }
+        }
+      }
+
+      searchResults.value = results
+    } catch (error) {
+      logger.error('鎼滅储澶辫触:', error)
+      searchResults.value = []
+    } finally {
+      isSearching.value = false
+    }
+  }
   
   /**
    * 跳转到搜索结果（CodeMirror 6 版本）
@@ -145,6 +223,7 @@ export function useSearch() {
     searchScope,
     includeAllFiles,
     performSearch,
+    performSearchInFiles,
     jumpToResult,
     clearResults
   }

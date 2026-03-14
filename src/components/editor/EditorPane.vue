@@ -310,6 +310,10 @@ watch(() => currentFile.value?.content, (newContent, oldContent) => {
   }
 })
 
+watch(() => currentFile.value?.hasUnsavedChanges, (nextHasUnsavedChanges) => {
+  hasUnsavedChanges.value = nextHasUnsavedChanges ?? false
+})
+
 function handleSwitchFile(index: number) {
   emit('switchFile', props.pane.id, index)
 }
