@@ -75,6 +75,7 @@ pub fn run() {
             use tauri::Manager;
             app.manage(map_engine::MapState::default());
             app.manage(ValidationServiceState::new());
+            app.manage(commands::TerminalState::default());
 
             // 允许 asset protocol 访问插件安装目录。
             // 否则 convertFileSrc() 会生成类似 https://asset.localhost/... 的 URL，但 WebView 无法读取
@@ -195,6 +196,9 @@ pub fn run() {
             commands::get_rule_stats,
             commands::validate_batch,
             commands::load_references,
+            commands::start_terminal_session,
+            commands::write_terminal_input,
+            commands::stop_terminal_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

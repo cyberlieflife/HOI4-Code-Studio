@@ -31,6 +31,14 @@ export interface RecentProject {
   last_opened: string
 }
 
+export type TerminalShell = 'cmd' | 'powershell'
+
+export interface TerminalSessionInfo {
+  sessionId: string
+  shell: TerminalShell
+  cwd: string
+}
+
 export interface ProjectStats {
   path: string
   fileCount: number
@@ -1374,4 +1382,22 @@ export async function parseMioPreview(params: {
     gameDirectory: params.gameDirectory,
     dependencyRoots: params.dependencyRoots
   })
+}
+
+export async function startTerminalSession(
+  shell: TerminalShell,
+  cwd?: string
+): Promise<TerminalSessionInfo> {
+  return await invoke('start_terminal_session', { shell, cwd })
+}
+
+export async function writeTerminalInput(
+  sessionId: string,
+  input: string
+): Promise<boolean> {
+  return await invoke('write_terminal_input', { sessionId, input })
+}
+
+export async function stopTerminalSession(sessionId: string): Promise<boolean> {
+  return await invoke('stop_terminal_session', { sessionId })
 }

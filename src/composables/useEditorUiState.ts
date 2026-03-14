@@ -7,6 +7,7 @@ type CreateDialogMode = 'create' | 'rename'
 
 export function useEditorUiState() {
   const rightPanelExpanded = ref(false)
+  const terminalVisible = ref(false)
 
   const createDialogVisible = ref(false)
   const createDialogType = ref<CreateDialogType>('file')
@@ -67,6 +68,10 @@ export function useEditorUiState() {
     rightPanelExpanded.value = !rightPanelExpanded.value
   }
 
+  function toggleTerminalPanel() {
+    terminalVisible.value = !terminalVisible.value
+  }
+
   function handlePluginToolbarClick(_uid: string, open?: { side: 'left' | 'right'; panelUid: string }) {
     if (!open) return
 
@@ -82,6 +87,7 @@ export function useEditorUiState() {
 
   return {
     rightPanelExpanded,
+    terminalVisible,
     createDialogVisible,
     createDialogType,
     createDialogMode,
@@ -103,6 +109,7 @@ export function useEditorUiState() {
     toggleLoadingMonitor,
     openPackageDialog,
     toggleRightPanel,
+    toggleTerminalPanel,
     handlePluginToolbarClick
   }
 }

@@ -21,6 +21,7 @@ import DependencyManager from '../components/editor/DependencyManager.vue'
 import LoadingMonitor from '../components/editor/LoadingMonitor.vue'
 import PackageDialog from '../components/editor/PackageDialog.vue'
 import EditorWorkspaceShell from '../components/editor/EditorWorkspaceShell.vue'
+import TerminalPanel from '../components/editor/TerminalPanel.vue'
 
 // Composables 导入
 import { type FileNode } from '../composables/useFileManager'
@@ -74,6 +75,7 @@ const isLaunchingGame = ref(false)
 
 const {
   rightPanelExpanded,
+  terminalVisible,
   createDialogVisible,
   createDialogType,
   createDialogMode,
@@ -94,6 +96,7 @@ const {
   toggleLoadingMonitor,
   openPackageDialog,
   toggleRightPanel,
+  toggleTerminalPanel,
   handlePluginToolbarClick
 } = useEditorUiState()
 
@@ -1380,6 +1383,7 @@ onUnmounted(() => {
     <EditorToolbar
       :project-name="projectInfo?.name"
       :right-panel-expanded="rightPanelExpanded"
+      :terminal-visible="terminalVisible"
       :is-launching-game="isLaunchingGame"
       :tag-count="tagList.length"
       :idea-count="ideaList.length"
@@ -1393,6 +1397,7 @@ onUnmounted(() => {
       @package-project="openPackageDialog"
       @toggle-auto-save="toggleAutoSave"
       @open-modifier-sheet="openModifierSheet"
+      @toggle-terminal-panel="toggleTerminalPanel"
       @plugin-toolbar-click="handlePluginToolbarClick"
     />
 
@@ -1531,28 +1536,36 @@ onUnmounted(() => {
       ></div>
 
       <!-- 中间编辑区域 - EditorGroup -->
-      <EditorGroup
-        ref="editorGroupRef"
-        :project-path="projectPath"
-        :game-directory="gameDirectory"
-        :dependency-roots="enabledDependencyRoots"
-        :auto-save="autoSave"
-        :disable-error-handling="disableErrorHandling"
-        @open-file="handleOpenFile"
-        @context-menu="showFileTabContextMenu"
-        @errors-change="handleErrorsChange"
-        @editor-context-menu-action="handleEditorContextMenuAction"
-        @preview-event="handlePreviewEvent"
-      @preview-focus="handlePreviewFocus"
-      @preview-map="handlePreviewMap"
-      @preview-gui="handlePreviewGui"
-      @preview-mio="handlePreviewMio"
-      @preview-gfx="handlePreviewGfx"
-      @jump-to-focus-from-preview="handleJumpToFocusFromPreview"
-      @jump-to-mio-from-preview="handleJumpToMioFromPreview"
-      @jump-to-gfx-from-preview="handleJumpToGfxFromPreview"
-      @content-change="handleContentChange"
-      />
+      <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <EditorGroup
+          ref="editorGroupRef"
+          :project-path="projectPath"
+          :game-directory="gameDirectory"
+          :dependency-roots="enabledDependencyRoots"
+          :auto-save="autoSave"
+          :disable-error-handling="disableErrorHandling"
+          @open-file="handleOpenFile"
+          @context-menu="showFileTabContextMenu"
+          @errors-change="handleErrorsChange"
+          @editor-context-menu-action="handleEditorContextMenuAction"
+          @preview-event="handlePreviewEvent"
+          @preview-focus="handlePreviewFocus"
+          @preview-map="handlePreviewMap"
+          @preview-gui="handlePreviewGui"
+          @preview-mio="handlePreviewMio"
+          @preview-gfx="handlePreviewGfx"
+          @jump-to-focus-from-preview="handleJumpToFocusFromPreview"
+          @jump-to-mio-from-preview="handleJumpToMioFromPreview"
+          @jump-to-gfx-from-preview="handleJumpToGfxFromPreview"
+          @content-change="handleContentChange"
+        />
+
+        <TerminalPanel
+          v-if="terminalVisible"
+          :project-path="projectPath"
+          @close="toggleTerminalPanel"
+        />
+      </div>
 
       <!-- 右侧拖动条 -->
       <div

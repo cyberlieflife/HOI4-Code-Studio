@@ -12,6 +12,7 @@ pub mod game;
 pub mod gfx;
 pub mod project;
 pub mod settings;
+pub mod terminal;
 
 // 重新导出所有命令函数，便于在 lib.rs 中注册
 pub use cwtools::*;
@@ -20,3 +21,4 @@ pub use game::*;
 pub use gfx::*;
 pub use project::*;
 pub use settings::*;
+pub use terminal::*;

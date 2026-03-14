@@ -9,6 +9,7 @@ const appVersion = packageJson.version
 const props = defineProps<{
   projectName?: string
   rightPanelExpanded: boolean
+  terminalVisible?: boolean
   isLaunchingGame?: boolean
   tagCount?: number
   ideaCount?: number
@@ -25,6 +26,7 @@ const emit = defineEmits<{
   packageProject: []
   toggleAutoSave: []
   openModifierSheet: []
+  toggleTerminalPanel: []
   pluginToolbarClick: [uid: string, open?: { side: 'left' | 'right'; panelUid: string }]
 }>()
 
@@ -131,6 +133,16 @@ const totalLoadedCount = computed(() => {
       >
         <svg class="w-5 h-5 text-hoi4-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+        </svg>
+      </button>
+      <button
+        @click="emit('toggleTerminalPanel')"
+        class="p-2 rounded-md transition-colors"
+        :class="terminalVisible ? 'bg-green-600/80 hover:bg-green-700/80' : 'bg-hoi4-accent/80 hover:bg-hoi4-border/40 active:bg-hoi4-border/60'"
+        :title="terminalVisible ? '隐藏终端面板' : '显示终端面板'"
+      >
+        <svg class="w-5 h-5 text-hoi4-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16M8 9l3 3-3 3"></path>
         </svg>
       </button>
       <button
