@@ -5,8 +5,9 @@
 
 import { ref } from 'vue'
 import type { FileNode } from './useFileManager'
+import type { SidebarSide } from './useEditorUiState'
 
-export type ContextMenuType = 'file' | 'tree' | 'pane'
+export type ContextMenuType = 'file' | 'tree' | 'pane' | 'sidebar'
 
 // 全局状态（单例模式）
 const contextMenuVisible = ref(false)
@@ -16,6 +17,9 @@ const contextMenuType = ref<ContextMenuType>('file')
 const contextMenuPaneId = ref('')
 const contextMenuFileIndex = ref(-1)
 const treeContextMenuNode = ref<FileNode | null>(null)
+const treeContextMenuSide = ref<SidebarSide>('left')
+const sidebarContextItemKey = ref('')
+const sidebarContextSide = ref<SidebarSide>('left')
 const lastContextMenuTime = ref(0)
 
 /**
@@ -63,6 +67,20 @@ export function useContextMenu() {
     contextMenuVisible.value = true
   }
 
+  function showTreeContextMenuForSide(event: MouseEvent, side: SidebarSide, node: FileNode | null = null) {
+    treeContextMenuSide.value = side
+    showTreeContextMenu(event, node)
+  }
+
+  function showSidebarTabContextMenu(event: MouseEvent, key: string, side: SidebarSide) {
+    sidebarContextItemKey.value = key
+    sidebarContextSide.value = side
+    contextMenuX.value = event.clientX
+    contextMenuY.value = event.clientY
+    contextMenuType.value = 'sidebar'
+    contextMenuVisible.value = true
+  }
+
   /**
    * 隐藏右键菜单
    */
@@ -79,10 +97,15 @@ export function useContextMenu() {
     contextMenuPaneId,
     contextMenuFileIndex,
     treeContextMenuNode,
+    treeContextMenuSide,
+    sidebarContextItemKey,
+    sidebarContextSide,
     lastContextMenuTime,
     // 方法
     showFileTabContextMenu,
     showTreeContextMenu,
+    showTreeContextMenuForSide,
+    showSidebarTabContextMenu,
     hideContextMenu
   }
 }

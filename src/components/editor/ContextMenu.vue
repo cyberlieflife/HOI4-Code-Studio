@@ -6,7 +6,7 @@ const props = defineProps<{
   visible: boolean
   x: number
   y: number
-  menuType: 'file' | 'tree' | 'pane' | 'editor'
+  menuType: 'file' | 'tree' | 'pane' | 'sidebar' | 'editor'
   canSplit?: boolean
   currentFilePath?: string
   treeNodePath?: string
@@ -14,6 +14,7 @@ const props = defineProps<{
   hasTreeClipboard?: boolean
   projectRoot?: string
   availablePanes?: Array<{id: string, name: string}>
+  sidebarCurrentSide?: 'left' | 'right'
 }>()
 
 // 获取当前主题
@@ -210,6 +211,36 @@ function hideMoveMenu() {
       :style="{ color: currentTheme.colors.fg }"
     >
       在资源管理器中显示
+    </button>
+  </div>
+
+  <div
+    v-if="visible && menuType === 'sidebar'"
+    class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
+    :style="{
+      left: x + 'px',
+      top: y + 'px',
+      backgroundColor: currentTheme.colors.bgSecondary,
+      borderColor: currentTheme.colors.border,
+      color: currentTheme.colors.fg
+    }"
+    @click.stop
+  >
+    <button
+      v-if="sidebarCurrentSide !== 'left'"
+      @click="handleAction('moveSidebarItem', 'left')"
+      class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
+      :style="{ color: currentTheme.colors.fg }"
+    >
+      移动到左侧边栏
+    </button>
+    <button
+      v-if="sidebarCurrentSide !== 'right'"
+      @click="handleAction('moveSidebarItem', 'right')"
+      class="w-full px-4 py-2 text-left text-sm whitespace-nowrap transition-colors context-menu-item"
+      :style="{ color: currentTheme.colors.fg }"
+    >
+      移动到右侧边栏
     </button>
   </div>
 
