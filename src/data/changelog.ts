@@ -22,6 +22,7 @@ export const changelog: VersionLog[] = [
     changes: [
       { type: 'improvement', content: '优化粘贴功能' },
       { type: 'improvement', content: '默认收缩右侧边栏' },
+      { type: 'improvement', content: '搜索选项卡移动至左侧边栏' },
     ]
   },
   {
