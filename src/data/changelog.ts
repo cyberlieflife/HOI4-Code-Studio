@@ -17,8 +17,8 @@ export interface VersionLog {
 
 export const changelog: VersionLog[] = [
   {
-    version: 'v0.3.8-dev',
-    description: '文件树更新，地图预览更新',
+    version: 'v0.3.9-dev',
+    description: '侧边栏与选项卡、粘贴优化',
     changes: [
       { type: 'improvement', content: '优化粘贴功能' },
       { type: 'improvement', content: '默认收缩右侧边栏' },
