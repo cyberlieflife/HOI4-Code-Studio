@@ -300,7 +300,7 @@ onBeforeUnmount(async () => {
 
     <div
       ref="outputRef"
-      class="flex-1 overflow-auto px-4 py-3 bg-[#11161d] text-[#d6dde8] font-mono text-sm leading-6 cursor-text"
+      class="terminal-screen flex-1 overflow-auto px-4 py-3 font-mono text-sm leading-6 cursor-text"
       @click="focusInlineInput"
     >
       <div class="whitespace-pre-wrap break-words min-h-full">
@@ -335,5 +335,15 @@ onBeforeUnmount(async () => {
 <style scoped>
 .cursor-row-resize {
   cursor: row-resize;
+}
+
+.terminal-screen {
+  background: linear-gradient(180deg, var(--theme-surface-1), var(--theme-bg-secondary));
+  color: var(--theme-fg);
+}
+
+.terminal-screen ::selection {
+  background: var(--theme-selection);
+  color: var(--theme-fg);
 }
 </style>
