@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onUnmounted } from 'vue'
 import type { BuiltinSidebarTab, SidebarMovableItem, SidebarSide, SidebarView } from '../../composables/useEditorUiState'
 import type { Dependency } from '../../types/dependency'
 
@@ -27,6 +27,10 @@ const emit = defineEmits<{
 const draggedKey = ref('')
 const dropTargetKey = ref('')
 const dropPosition = ref<'before' | 'after' | 'end'>('before')
+const pointerDownKey = ref('')
+const dragStartPoint = ref({ x: 0, y: 0 })
+const isPointerDragging = ref(false)
+const suppressClickKey = ref('')
 
 const dependencyNameMap = computed(() => {
   const out = new Map<string, string>()
@@ -85,20 +89,16 @@ function getItemTitle(item: SidebarMovableItem) {
   return dependencyNameMap.value.get(item.dependencyId || '') || '依赖项'
 }
 
-function handleDragStart(event: DragEvent, key: string) {
-  draggedKey.value = key
+function resetDragState() {
+  draggedKey.value = ''
   dropTargetKey.value = ''
   dropPosition.value = 'before'
-  if (!event.dataTransfer) return
-  event.dataTransfer.setData('text/plain', key)
-  event.dataTransfer.effectAllowed = 'move'
+  pointerDownKey.value = ''
+  isPointerDragging.value = false
 }
 
-function handleDragOver(event: DragEvent, key: string) {
+function updateDropTarget(event: MouseEvent, key: string) {
   if (!draggedKey.value || draggedKey.value === key) return
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'move'
-  }
   const target = event.currentTarget as HTMLElement | null
   if (!target) return
   const rect = target.getBoundingClientRect()
@@ -107,53 +107,90 @@ function handleDragOver(event: DragEvent, key: string) {
   dropPosition.value = event.clientX >= centerX ? 'after' : 'before'
 }
 
-function handleContainerDragOver(event: DragEvent) {
-  if (!draggedKey.value) return
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'move'
+function handlePointerMove(event: MouseEvent) {
+  if (!pointerDownKey.value) return
+
+  const deltaX = Math.abs(event.clientX - dragStartPoint.value.x)
+  const deltaY = Math.abs(event.clientY - dragStartPoint.value.y)
+  if (!isPointerDragging.value && deltaX + deltaY < 6) {
+    return
   }
+
+  if (!isPointerDragging.value) {
+    isPointerDragging.value = true
+    draggedKey.value = pointerDownKey.value
+    dropTargetKey.value = ''
+    dropPosition.value = 'end'
+    suppressClickKey.value = pointerDownKey.value
+  }
+}
+
+function handlePointerUp() {
+  if (isPointerDragging.value && draggedKey.value) {
+    emit('reorder', draggedKey.value, dropTargetKey.value || undefined, dropTargetKey.value ? dropPosition.value : 'end')
+  }
+  resetDragState()
+}
+
+function handlePointerDown(event: MouseEvent, key: string) {
+  if (event.button !== 0) return
+  pointerDownKey.value = key
+  dragStartPoint.value = { x: event.clientX, y: event.clientY }
+  document.addEventListener('mousemove', handlePointerMove)
+  document.addEventListener('mouseup', handlePointerUp, { once: true })
+}
+
+function handleItemPointerMove(event: MouseEvent, key: string) {
+  if (!isPointerDragging.value) return
+  updateDropTarget(event, key)
+}
+
+function handleContainerPointerMove() {
+  if (!isPointerDragging.value) return
+  if (!draggedKey.value) return
   dropTargetKey.value = ''
   dropPosition.value = 'end'
 }
 
-function handleDrop(key?: string) {
-  if (!draggedKey.value) return
-  emit('reorder', draggedKey.value, key, key ? dropPosition.value : 'end')
-  draggedKey.value = ''
-  dropTargetKey.value = ''
-  dropPosition.value = 'before'
+function handleItemClick(key: string) {
+  if (suppressClickKey.value === key) {
+    suppressClickKey.value = ''
+    return
+  }
+  emit('activateItem', key)
 }
 
 function clearDragState() {
-  draggedKey.value = ''
-  dropTargetKey.value = ''
-  dropPosition.value = 'before'
+  document.removeEventListener('mousemove', handlePointerMove)
+  document.removeEventListener('mouseup', handlePointerUp)
+  resetDragState()
 }
+
+onUnmounted(() => {
+  clearDragState()
+})
 </script>
 
 <template>
   <div class="ui-island-header ui-separator-bottom p-1 flex items-center gap-1 overflow-x-auto">
     <div
       class="flex items-center gap-1"
-      @dragover.prevent="handleContainerDragOver"
-      @drop.prevent="handleDrop()"
+      @mousemove="handleContainerPointerMove"
     >
       <button
         v-for="item in items"
         :key="item.key"
         type="button"
-        draggable="true"
-        @dragstart="handleDragStart($event, item.key)"
-        @dragend="clearDragState"
-        @dragover.prevent="handleDragOver($event, item.key)"
-        @drop.prevent="handleDrop(item.key)"
-        @click="emit('activateItem', item.key)"
+        @mousedown.left.prevent="handlePointerDown($event, item.key)"
+        @mousemove="handleItemPointerMove($event, item.key)"
+        @click="handleItemClick(item.key)"
         @contextmenu.prevent="emit('openContextMenu', $event, item.key, side)"
         class="p-2 transition-all rounded-lg flex-shrink-0 relative hover-scale border border-transparent"
         :class="[
           isItemActive(item)
             ? 'bg-hoi4-accent text-hoi4-text'
             : 'text-hoi4-text-dim hover:text-hoi4-text hover:bg-hoi4-border/40',
+          draggedKey === item.key ? 'opacity-60' : '',
           dropTargetKey === item.key && dropPosition === 'before' ? 'border-l-hoi4-accent' : '',
           dropTargetKey === item.key && dropPosition === 'after' ? 'border-r-hoi4-accent' : ''
         ]"
