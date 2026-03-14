@@ -134,7 +134,7 @@ function clearDragState() {
         @dragover.prevent="handleDragOver($event, item.key)"
         @drop.prevent="handleDrop(item.key)"
         @click="emit('activateItem', item.key)"
-        @contextmenu.prevent="item.kind === 'builtin' ? emit('openContextMenu', $event, item.key, side) : undefined"
+        @contextmenu.prevent="emit('openContextMenu', $event, item.key, side)"
         class="p-2 transition-all rounded-lg flex-shrink-0 relative hover-scale border border-transparent"
         :class="[
           isItemActive(item)
