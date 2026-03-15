@@ -8,6 +8,7 @@ import {
   type TerminalSessionInfo,
   type TerminalShell
 } from '../../api/tauri'
+import { highlightPowerShellTerminalOutput } from '../../utils/powerShellTerminalHighlight'
 
 const props = defineProps<{
   projectPath: string
@@ -43,6 +44,9 @@ let removeOutputListener: (() => void) | null = null
 let removeExitListener: (() => void) | null = null
 
 const shellLabel = computed(() => currentShell.value === 'powershell' ? 'PowerShell' : 'CMD')
+const highlightedOutputHtml = computed(() => currentShell.value === 'powershell'
+  ? highlightPowerShellTerminalOutput(output.value)
+  : '')
 const statusLabel = computed(() => {
   if (status.value === 'starting') return '连接中'
   if (status.value === 'ready') return '运行中'
@@ -308,7 +312,15 @@ onBeforeUnmount(async () => {
           v-if="status === 'ready'"
           class="text-hoi4-text"
         >
-          <span class="whitespace-pre-wrap break-words">{{ output }}</span>
+          <span
+            v-if="currentShell === 'powershell'"
+            class="terminal-output whitespace-pre-wrap break-words"
+            v-html="highlightedOutputHtml"
+          ></span>
+          <span
+            v-else
+            class="whitespace-pre-wrap break-words"
+          >{{ output }}</span>
           <span
             ref="inlineInputRef"
             contenteditable="true"
@@ -323,7 +335,15 @@ onBeforeUnmount(async () => {
           v-else
           class="text-hoi4-text-dim"
         >
-          <span class="whitespace-pre-wrap break-words">{{ output }}</span>
+          <span
+            v-if="currentShell === 'powershell'"
+            class="terminal-output whitespace-pre-wrap break-words"
+            v-html="highlightedOutputHtml"
+          ></span>
+          <span
+            v-else
+            class="whitespace-pre-wrap break-words"
+          >{{ output }}</span>
           <br v-if="output" />
           终端未连接，可使用右上角的“重启”重新建立会话。
         </div>
@@ -345,5 +365,15 @@ onBeforeUnmount(async () => {
 .terminal-screen ::selection {
   background: var(--theme-selection);
   color: var(--theme-fg);
+}
+
+.terminal-output :deep(.ps-field-name),
+.terminal-output :deep(.ps-table-header) {
+  color: var(--theme-accent);
+  font-weight: 600;
+}
+
+.terminal-output :deep(.ps-field-separator) {
+  color: var(--theme-warning);
 }
 </style>
