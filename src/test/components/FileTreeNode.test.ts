@@ -1,8 +1,8 @@
 /**
- * FileTreeNode 组件的单元测试
+ * FileTreeNode 组件单元测试
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import FileTreeNode from '@/components/FileTreeNode.vue'
 
@@ -39,11 +39,9 @@ describe('FileTreeNode', () => {
       props: defaultProps
     })
 
-    // 查找实际的DOM元素
     expect(wrapper.find('.file-tree-node').exists()).toBe(true)
     expect(wrapper.find('.text-hoi4-text').text()).toBe('test.txt')
-    
-    // 检查是否包含图标（不检查具体的emoji，因为编码问题）
+
     const spans = wrapper.findAll('span')
     expect(spans.length).toBeGreaterThan(0)
   })
@@ -64,20 +62,19 @@ describe('FileTreeNode', () => {
 
     expect(wrapper.find('.file-tree-node').exists()).toBe(true)
     expect(wrapper.find('.text-hoi4-text').text()).toBe('src')
-    
-    // 检查是否包含图标（不检查具体的emoji，因为编码问题）
+
     const spans = wrapper.findAll('span')
     expect(spans.length).toBeGreaterThan(0)
   })
 
-  it('应该在点击文件时触发openFile事件', async () => {
+  it('应该在点击文件时触发 openFile 事件', async () => {
     const openFile = vi.fn()
     const select = vi.fn()
     const wrapper = mount(FileTreeNode, {
       props: {
         ...defaultProps,
-        'onSelect': select,
-        'onOpenFile': openFile
+        onSelect: select,
+        onOpenFile: openFile
       }
     })
 
@@ -86,7 +83,7 @@ describe('FileTreeNode', () => {
     expect(openFile).toHaveBeenCalledWith(defaultProps.node)
   })
 
-  it('应该在点击目录时触发toggle事件', async () => {
+  it('应该在点击目录时触发 toggle 事件', async () => {
     const directoryNode = createMockFileNode({
       isDirectory: true,
       name: 'src'
@@ -97,7 +94,7 @@ describe('FileTreeNode', () => {
       props: {
         ...defaultProps,
         node: directoryNode,
-        'onToggle': toggle
+        onToggle: toggle
       }
     })
 
@@ -123,27 +120,58 @@ describe('FileTreeNode', () => {
       }
     })
 
-    // 检查是否渲染了子节点
     const childNodes = wrapper.findAllComponents(FileTreeNode)
     expect(childNodes).toHaveLength(2)
-    
-    // 检查第二个子组件的props
     expect(childNodes[0].props().node.name).toBe('App.vue')
     expect(childNodes[1].props().node.name).toBe('main.ts')
   })
 
-  it('应该根据文件类型显示不同的图标', () => {
+  it('应该将深层目录节点原样透传给父级监听器', async () => {
+    const nestedDirectoryNode = createMockFileNode({
+      isDirectory: true,
+      name: 'nested',
+      path: '/src/nested',
+      expanded: false
+    })
+    const parentNode = createMockFileNode({
+      isDirectory: true,
+      name: 'src',
+      path: '/src',
+      expanded: true,
+      children: [nestedDirectoryNode]
+    })
+
+    const wrapper = mount(FileTreeNode, {
+      props: {
+        ...defaultProps,
+        node: parentNode
+      }
+    })
+
+    const nodes = wrapper.findAll('.file-tree-node')
+    await nodes[1].trigger('click')
+
+    const selectEvents = wrapper.emitted('select')
+    const toggleEvents = wrapper.emitted('toggle')
+
+    expect(selectEvents).toBeTruthy()
+    expect(toggleEvents).toBeTruthy()
+    expect(selectEvents?.[0]?.[1]).toEqual(nestedDirectoryNode)
+    expect(toggleEvents?.[0]?.[0]).toEqual(nestedDirectoryNode)
+  })
+
+  it('应该根据文件类型显示图标', () => {
     const testCases = [
-      { fileName: 'App.vue', ext: 'vue' },
-      { fileName: 'main.ts', ext: 'ts' },
-      { fileName: 'style.css', ext: 'css' },
-      { fileName: 'README.md', ext: 'md' },
-      { fileName: 'image.png', ext: 'png' },
-      { fileName: 'data.json', ext: 'json' },
-      { fileName: 'test.mod', ext: 'mod' }
+      'App.vue',
+      'main.ts',
+      'style.css',
+      'README.md',
+      'image.png',
+      'data.json',
+      'test.mod'
     ]
 
-    testCases.forEach(({ fileName }) => {
+    testCases.forEach((fileName) => {
       const fileNode = createMockFileNode({
         name: fileName,
         path: `/test/${fileName}`
@@ -156,7 +184,6 @@ describe('FileTreeNode', () => {
         }
       })
 
-      // 检查是否渲染了图标
       const spans = wrapper.findAll('span')
       expect(spans.length).toBeGreaterThan(0)
     })
@@ -167,7 +194,7 @@ describe('FileTreeNode', () => {
     const wrapper = mount(FileTreeNode, {
       props: {
         ...defaultProps,
-        'onContextmenu': contextmenu
+        onContextmenu: contextmenu
       }
     })
 
@@ -206,7 +233,7 @@ describe('FileTreeNode', () => {
     expect(nodeElement.attributes('style')).toContain('padding-left: 40px')
   })
 
-  it('应该正确显示展开的目录图标', () => {
+  it('应该正确显示展开目录的图标', () => {
     const expandedDirectoryNode = createMockFileNode({
       isDirectory: true,
       name: 'src',
@@ -220,7 +247,6 @@ describe('FileTreeNode', () => {
       }
     })
 
-    // 检查是否渲染了图标
     const spans = wrapper.findAll('span')
     expect(spans.length).toBeGreaterThan(0)
   })

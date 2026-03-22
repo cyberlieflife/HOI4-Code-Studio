@@ -18,11 +18,10 @@ static RE_STATE_CORE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"add_core_of\s*=\s*([A-Z0-9]{3})").unwrap());
 static RE_STATE_CLAIM: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"add_claim_by\s*=\s*([A-Z0-9]{3})").unwrap());
-static RE_COUNTRY_COLOR: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r"(?m)^([A-Z0-9]{3})\s*=\s*\{\s*color\s*=\s*(?:rgb)?\s*\{\s*(\d+)\s+(\d+)\s+(\d+)\s*\}",
-    )
-    .unwrap()
+static RE_COUNTRY_ENTRY: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?m)^([A-Z0-9]{3})\s*=\s*\{").unwrap());
+static RE_COUNTRY_COLOR_VALUE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?s)\bcolor\s*=\s*(?:rgb)?\s*\{\s*(\d+)\s+(\d+)\s+(\d+)\s*\}").unwrap()
 });
 
 /// 地图上下文状态 (常驻内存)
@@ -95,7 +94,7 @@ pub struct BoundingBox {
 }
 
 /// 颜色结构
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RGBColor {
     pub r: u8,
     pub g: u8,
@@ -622,16 +621,51 @@ pub fn load_country_colors(path: String) -> HashMap<String, RGBColor> {
     let p = Path::new(&path);
     let content = read_file_with_encoding(p).unwrap_or_default();
 
-    // 使用预编译的正则匹配 TAG = { color = { r g b } }
-    for cap in RE_COUNTRY_COLOR.captures_iter(&content) {
+    // 先识别顶层 TAG 块，再在块内解析 color/colors 定义，兼容 RGB/rgb/无前缀写法。
+    for cap in RE_COUNTRY_ENTRY.captures_iter(&content) {
+        let Some(full_match) = cap.get(0) else {
+            continue;
+        };
         let tag = cap[1].to_string();
-        let r = cap[2].parse().unwrap_or(0);
-        let g = cap[3].parse().unwrap_or(0);
-        let b = cap[4].parse().unwrap_or(0);
+        let open_brace_index = full_match.end() - 1;
+        let Some(close_brace_index) = find_matching_brace(&content, open_brace_index) else {
+            continue;
+        };
+        let block_content = &content[open_brace_index + 1..close_brace_index];
+
+        let Some(color_caps) = RE_COUNTRY_COLOR_VALUE.captures(block_content) else {
+            continue;
+        };
+        let r = color_caps[1].parse().unwrap_or(0);
+        let g = color_caps[2].parse().unwrap_or(0);
+        let b = color_caps[3].parse().unwrap_or(0);
         colors.insert(tag, RGBColor { r, g, b, a: 255 });
     }
 
     colors
+}
+
+fn find_matching_brace(content: &str, open_brace_index: usize) -> Option<usize> {
+    let bytes = content.as_bytes();
+    if bytes.get(open_brace_index) != Some(&b'{') {
+        return None;
+    }
+
+    let mut depth = 0usize;
+    for (index, byte) in bytes.iter().enumerate().skip(open_brace_index) {
+        match byte {
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
 }
 
 /// 根据州所有权和国家颜色生成省份颜色映射
@@ -2032,4 +2066,78 @@ pub fn get_map_tile_direct(
 
     log_map_perf("rust.get_map_tile_direct", started_at);
     Ok(pixels)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{load_country_colors, RGBColor};
+    use std::fs;
+
+    fn write_temp_colors_file(content: &str) -> String {
+        let unique = format!(
+            "hoi4-color-test-{}-{}.txt",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time before unix epoch")
+                .as_nanos()
+        );
+        let path = std::env::temp_dir().join(unique);
+        fs::write(&path, content).expect("failed to write temp colors file");
+        path.to_string_lossy().to_string()
+    }
+
+    #[test]
+    fn load_country_colors_supports_basic_color_syntaxes() {
+        let path = write_temp_colors_file(
+            r#"
+AAA = { color = { 1 2 3 } }
+BBB = { color = rgb { 4 5 6 } }
+CCC = { color = RGB { 7 8 9 } }
+DDD = {
+    graphical_culture = eastern_european_gfx
+    colors = { 10 11 12 }
+}
+EEE = {
+    color = RGB {
+        13 14 15
+    }
+}
+"#,
+        );
+
+        let colors = load_country_colors(path.clone());
+        fs::remove_file(path).expect("failed to remove temp colors file");
+
+        assert_eq!(
+            colors.get("AAA"),
+            Some(&RGBColor {
+                r: 1,
+                g: 2,
+                b: 3,
+                a: 255
+            })
+        );
+        assert_eq!(
+            colors.get("BBB"),
+            Some(&RGBColor {
+                r: 4,
+                g: 5,
+                b: 6,
+                a: 255
+            })
+        );
+        assert_eq!(
+            colors.get("CCC"),
+            None
+        );
+        assert_eq!(
+            colors.get("DDD"),
+            None
+        );
+        assert_eq!(
+            colors.get("EEE"),
+            None
+        );
+    }
 }
