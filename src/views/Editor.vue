@@ -1840,8 +1840,8 @@ onUnmounted(() => {
                   :node="node"
                   :level="0"
                   :selected-paths="treeState.left.selectedTreePaths.value"
-                  @select="handleTreeNodeSelect('left', $event, node)"
-                  @toggle="toggleFolder('left', node)"
+                  @select="(event, selectedNode) => handleTreeNodeSelect('left', event, selectedNode)"
+                  @toggle="(targetNode) => toggleFolder('left', targetNode)"
                   @open-file="handleOpenFile"
                   @contextmenu="(e, n) => handleShowTreeContextMenu('left', e, n)"
                 />
@@ -1863,8 +1863,8 @@ onUnmounted(() => {
                   :node="node"
                   :level="0"
                   :selected-paths="treeState.left.selectedTreePaths.value"
-                  @select="handleTreeNodeSelect('left', $event, node)"
-                  @toggle="toggleFolder('left', node)"
+                  @select="(event, selectedNode) => handleTreeNodeSelect('left', event, selectedNode)"
+                  @toggle="(targetNode) => toggleFolder('left', targetNode)"
                   @open-file="handleOpenFile"
                   @contextmenu="(e, n) => handleShowTreeContextMenu('left', e, n)"
                 />
@@ -2038,8 +2038,8 @@ onUnmounted(() => {
                   :node="node"
                   :level="0"
                   :selected-paths="treeState.right.selectedTreePaths.value"
-                  @select="handleTreeNodeSelect('right', $event, node)"
-                  @toggle="toggleFolder('right', node)"
+                  @select="(event, selectedNode) => handleTreeNodeSelect('right', event, selectedNode)"
+                  @toggle="(targetNode) => toggleFolder('right', targetNode)"
                   @open-file="handleOpenFile"
                   @contextmenu="(e, n) => handleShowTreeContextMenu('right', e, n)"
                 />
@@ -2056,8 +2056,8 @@ onUnmounted(() => {
                   :node="node"
                   :level="0"
                   :selected-paths="treeState.right.selectedTreePaths.value"
-                  @select="handleTreeNodeSelect('right', $event, node)"
-                  @toggle="toggleFolder('right', node)"
+                  @select="(event, selectedNode) => handleTreeNodeSelect('right', event, selectedNode)"
+                  @toggle="(targetNode) => toggleFolder('right', targetNode)"
                   @open-file="handleOpenFile"
                   @contextmenu="(e, n) => handleShowTreeContextMenu('right', e, n)"
                 />

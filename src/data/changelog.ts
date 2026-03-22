@@ -17,6 +17,15 @@ export interface VersionLog {
 
 export const changelog: VersionLog[] = [
   {
+    version: 'v0.3.11-dev',
+    description: '编辑器交互与地图预览修复',
+    changes: [
+      { type: 'fix', content: '修复文件树右键菜单在窗口边缘被遮挡的问题' },
+      { type: 'fix', content: '修复文件树点击深层目录时错误折叠父级目录的问题' },
+      { type: 'fix', content: '修复地图预览对 color/colors 与 rgb/RGB 颜色写法的兼容问题' },
+    ]
+  },
+  {
     version: 'v0.3.10-dev',
     description: '侧边栏与选项卡优化与新增功能',
     changes: [

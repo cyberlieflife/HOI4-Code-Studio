@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useTheme } from '../../composables/useTheme'
 
 const props = defineProps<{
@@ -26,8 +26,12 @@ const emit = defineEmits<{
   close: []
 }>()
 
+const MENU_PADDING = 12
 const templateMenuVisible = ref(false)
 const moveMenuVisible = ref(false)
+const menuRootRef = ref<HTMLElement | null>(null)
+const resolvedX = ref(props.x)
+const resolvedY = ref(props.y)
 
 // 判断当前文件是否位于 common/ideas 目录。
 const isInCommonIdeas = computed(() => {
@@ -76,6 +80,84 @@ const isProjectMapDirectory = computed(() => {
 
 const canOperateTreeFiles = computed(() => props.treeSupportsFileOperations !== false)
 
+const menuStyle = computed(() => ({
+  left: `${resolvedX.value}px`,
+  top: `${resolvedY.value}px`,
+  backgroundColor: currentTheme.value.colors.bgSecondary,
+  borderColor: currentTheme.value.colors.border,
+  color: currentTheme.value.colors.fg
+}))
+
+function clampPosition(value: number, min: number, max: number) {
+  if (max < min) {
+    return min
+  }
+  return Math.min(Math.max(value, min), max)
+}
+
+function updateMenuPosition() {
+  const menuElement = menuRootRef.value
+  if (!props.visible || !menuElement) {
+    resolvedX.value = props.x
+    resolvedY.value = props.y
+    return
+  }
+
+  const menuWidth = menuElement.offsetWidth
+  const menuHeight = menuElement.offsetHeight
+  const maxX = window.innerWidth - menuWidth - MENU_PADDING
+  const maxY = window.innerHeight - menuHeight - MENU_PADDING
+
+  resolvedX.value = clampPosition(props.x, MENU_PADDING, maxX)
+  resolvedY.value = clampPosition(props.y, MENU_PADDING, maxY)
+}
+
+function scheduleMenuPositionUpdate() {
+  if (!props.visible) {
+    resolvedX.value = props.x
+    resolvedY.value = props.y
+    return
+  }
+
+  nextTick(() => {
+    updateMenuPosition()
+  })
+}
+
+function handleWindowResize() {
+  updateMenuPosition()
+}
+
+watch(
+  () => [
+    props.visible,
+    props.x,
+    props.y,
+    props.menuType,
+    props.canSplit,
+    props.currentFilePath,
+    props.treeNodePath,
+    props.treeNodeIsDirectory,
+    props.hasTreeClipboard,
+    props.treeSupportsFileOperations,
+    props.projectRoot,
+    props.sidebarCurrentSide,
+    props.availablePanes?.length ?? 0
+  ],
+  () => {
+    scheduleMenuPositionUpdate()
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  window.addEventListener('resize', handleWindowResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleWindowResize)
+})
+
 function handleAction(action: string, payload?: any) {
   emit('action', action, payload)
 }
@@ -101,14 +183,9 @@ function hideMoveMenu() {
   <!-- 文件标签页右键菜单 -->
   <div
     v-if="visible && menuType === 'file'"
+    ref="menuRootRef"
     class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
-    :style="{
-      left: x + 'px',
-      top: y + 'px',
-      backgroundColor: currentTheme.colors.bgSecondary,
-      borderColor: currentTheme.colors.border,
-      color: currentTheme.colors.fg
-    }"
+    :style="menuStyle"
     @click.stop
   >
     <button
@@ -130,14 +207,9 @@ function hideMoveMenu() {
   <!-- 文件树右键菜单：可操作目录 -->
   <div
     v-if="visible && menuType === 'tree' && canOperateTreeFiles"
+    ref="menuRootRef"
     class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
-    :style="{
-      left: x + 'px',
-      top: y + 'px',
-      backgroundColor: currentTheme.colors.bgSecondary,
-      borderColor: currentTheme.colors.border,
-      color: currentTheme.colors.fg
-    }"
+    :style="menuStyle"
     @click.stop
   >
     <button
@@ -220,14 +292,9 @@ function hideMoveMenu() {
   <!-- 文件树右键菜单：只读目录 -->
   <div
     v-if="visible && menuType === 'tree' && !canOperateTreeFiles"
+    ref="menuRootRef"
     class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
-    :style="{
-      left: x + 'px',
-      top: y + 'px',
-      backgroundColor: currentTheme.colors.bgSecondary,
-      borderColor: currentTheme.colors.border,
-      color: currentTheme.colors.fg
-    }"
+    :style="menuStyle"
     @click.stop
   >
     <button
@@ -249,14 +316,9 @@ function hideMoveMenu() {
   <!-- 侧边栏标签右键菜单 -->
   <div
     v-if="visible && menuType === 'sidebar'"
+    ref="menuRootRef"
     class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
-    :style="{
-      left: x + 'px',
-      top: y + 'px',
-      backgroundColor: currentTheme.colors.bgSecondary,
-      borderColor: currentTheme.colors.border,
-      color: currentTheme.colors.fg
-    }"
+    :style="menuStyle"
     @click.stop
   >
     <button
@@ -280,14 +342,9 @@ function hideMoveMenu() {
   <!-- 编辑器窗格右键菜单 -->
   <div
     v-if="visible && menuType === 'pane'"
+    ref="menuRootRef"
     class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
-    :style="{
-      left: x + 'px',
-      top: y + 'px',
-      backgroundColor: currentTheme.colors.bgSecondary,
-      borderColor: currentTheme.colors.border,
-      color: currentTheme.colors.fg
-    }"
+    :style="menuStyle"
     @click.stop
   >
     <button
@@ -354,14 +411,9 @@ function hideMoveMenu() {
   <!-- 编辑器内容右键菜单 -->
   <div
     v-if="visible && menuType === 'editor'"
+    ref="menuRootRef"
     class="fixed border rounded-xl shadow-2xl z-50 backdrop-blur-sm"
-    :style="{
-      left: x + 'px',
-      top: y + 'px',
-      backgroundColor: currentTheme.colors.bgSecondary,
-      borderColor: currentTheme.colors.border,
-      color: currentTheme.colors.fg
-    }"
+    :style="menuStyle"
     @click.stop
   >
     <button
