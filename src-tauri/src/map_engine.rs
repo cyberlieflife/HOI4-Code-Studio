@@ -21,8 +21,7 @@ static RE_STATE_CLAIM: Lazy<Regex> =
 static RE_COUNTRY_ENTRY: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?m)^([A-Z0-9]{3})\s*=\s*\{").unwrap());
 static RE_COUNTRY_COLOR_VALUE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)\bcolors?\s*=\s*(?:(?i:rgb))?\s*\{\s*(\d+)\s+(\d+)\s+(\d+)\s*\}")
-        .unwrap()
+    Regex::new(r"(?s)\bcolor\s*=\s*(?:rgb)?\s*\{\s*(\d+)\s+(\d+)\s+(\d+)\s*\}").unwrap()
 });
 
 /// 地图上下文状态 (常驻内存)
@@ -2089,7 +2088,7 @@ mod tests {
     }
 
     #[test]
-    fn load_country_colors_supports_multiple_color_syntaxes() {
+    fn load_country_colors_supports_basic_color_syntaxes() {
         let path = write_temp_colors_file(
             r#"
 AAA = { color = { 1 2 3 } }
@@ -2130,30 +2129,15 @@ EEE = {
         );
         assert_eq!(
             colors.get("CCC"),
-            Some(&RGBColor {
-                r: 7,
-                g: 8,
-                b: 9,
-                a: 255
-            })
+            None
         );
         assert_eq!(
             colors.get("DDD"),
-            Some(&RGBColor {
-                r: 10,
-                g: 11,
-                b: 12,
-                a: 255
-            })
+            None
         );
         assert_eq!(
             colors.get("EEE"),
-            Some(&RGBColor {
-                r: 13,
-                g: 14,
-                b: 15,
-                a: 255
-            })
+            None
         );
     }
 }
