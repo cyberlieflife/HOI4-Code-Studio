@@ -84,24 +84,31 @@ function isPreviewHost(file: OpenFile | undefined) {
   )
 }
 
-function createPreviewFile(currentFile: OpenFile, kind: PreviewKind): OpenFile {
-  const definition = previewDefinitions[kind]
-  const previewFile: OpenFile = {
-    node: {
-      ...currentFile.node,
-      name: `${currentFile.node.name}${definition.titleSuffix}`
-    },
-    content: definition.contentFactory(currentFile),
-    hasUnsavedChanges: false,
-    cursorLine: 1,
-    cursorColumn: 1,
-    isPreview: true,
-    sourceFilePath: currentFile.node.path
-  }
+   function createPreviewFile(currentFile: OpenFile, kind: PreviewKind): OpenFile {
+     const definition = previewDefinitions[kind]
+     const previewFile: OpenFile = {
+       node: {
+         ...currentFile.node,
+         name: `${currentFile.node.name}${definition.titleSuffix}`
+       },
+       content: definition.contentFactory(currentFile),
+       hasUnsavedChanges: false,
+       cursorLine: 1,
+       cursorColumn: 1,
+       isPreview: true,
+       sourceFilePath: currentFile.node.path
+     }
 
-  definition.applyFlags(previewFile)
-  return previewFile
-}
+     definition.applyFlags(previewFile)
+
+     // 地图预览特有：编辑器内置预览（基于 default.map 文件）使用 project-only 模式
+     // 这样只会加载项目自身的map资源，不会覆盖游戏目录的文件
+     if (kind === 'map') {
+       previewFile.mergeMode = 'project-only'
+     }
+
+     return previewFile
+   }
 
 function createStandalonePreviewFile(
   node: FileNode,
@@ -225,35 +232,39 @@ export function usePreviewPaneManager(editorGroupRef: Ref<EditorGroupLike | null
     editorGroup.setActivePane(targetPane.id)
   }
 
-  async function openProjectMapPreview(projectPath: string) {
-    const editorGroup = editorGroupRef.value
-    if (!editorGroup) return
+   async function openProjectMapPreview(projectPath: string) {
+     const editorGroup = editorGroupRef.value
+     if (!editorGroup) return
 
-    const normalizedProjectPath = projectPath.replace(/[\\/]+$/, '')
-    const sourceFilePath = `${normalizedProjectPath}/map`
-    const existingPreview = findExistingPreview(sourceFilePath, 'map')
-    if (existingPreview) {
-      existingPreview.pane.activeFileIndex = existingPreview.fileIndex
-      editorGroup.setActivePane(existingPreview.pane.id)
-      return
-    }
+     const normalizedProjectPath = projectPath.replace(/[\\/]+$/, '')
+     const sourceFilePath = `${normalizedProjectPath}/map`
+     const existingPreview = findExistingPreview(sourceFilePath, 'map')
+     if (existingPreview) {
+       existingPreview.pane.activeFileIndex = existingPreview.fileIndex
+       editorGroup.setActivePane(existingPreview.pane.id)
+       return
+     }
 
-    const basePane = resolveBasePane()
-    if (!basePane) return
+     const basePane = resolveBasePane()
+     if (!basePane) return
 
-    const targetPane = resolveTargetPane(basePane)
-    if (!targetPane) return
+     const targetPane = resolveTargetPane(basePane)
+     if (!targetPane) return
 
-    const previewNode: FileNode = {
-      name: 'map',
-      path: sourceFilePath,
-      isDirectory: false
-    }
+     const previewNode: FileNode = {
+       name: 'map',
+       path: sourceFilePath,
+       isDirectory: false
+     }
 
-    targetPane.openFiles.push(createStandalonePreviewFile(previewNode, 'map', sourceFilePath))
-    targetPane.activeFileIndex = targetPane.openFiles.length - 1
-    editorGroup.setActivePane(targetPane.id)
-  }
+     const previewFile = createStandalonePreviewFile(previewNode, 'map', sourceFilePath)
+     // 右键地图预览使用 fallback 模式（游戏目录+dependencies+项目覆盖）
+     // 这样可以查看完整地图，包括游戏内置省份定义
+     previewFile.mergeMode = 'fallback'
+     targetPane.openFiles.push(previewFile)
+     targetPane.activeFileIndex = targetPane.openFiles.length - 1
+     editorGroup.setActivePane(targetPane.id)
+   }
 
   function syncPreviewContent(paneId: string, content: string) {
     const editorGroup = editorGroupRef.value

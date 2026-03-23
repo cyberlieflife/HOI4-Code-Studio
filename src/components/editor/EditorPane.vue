@@ -131,10 +131,16 @@ const isFocusFile = computed(() => {
          !isCurrentFileFocusTree.value
 })
 
-// 当前文件是否为地图预览
-const isCurrentFileWorldMap = computed(() => {
-  return currentFile.value?.isWorldMap === true
-})
+ // 当前文件是否为地图预览
+ const isCurrentFileWorldMap = computed(() => {
+   return currentFile.value?.isWorldMap === true
+ })
+
+ // 当前地图预览的覆盖模式（fallback=右键预览, project-only=编辑器内置）
+ const currentMergeMode = computed(() => {
+   // 如果 OpenFile 中显式设置了 mergeMode 则使用，否则默认 fallback
+   return currentFile.value?.mergeMode || 'fallback'
+ })
 
 // 追踪地图是否曾被加载过，用于延迟加载并保持状态
 const hasMapLoaded = ref(false)
@@ -695,14 +701,15 @@ defineExpose({
 
     <!-- 编辑器 / 图片预览 / 事件关系图预览 -->
     <div v-if="currentFile" class="flex-1 overflow-hidden relative bg-hoi4-dark">
-      <!-- 世界地图预览 (使用 v-if 进行首次初始化，v-show 保持状态并避免重新加载) -->
-      <WorldMapViewer
-        v-if="hasMapLoaded"
-        v-show="isCurrentFileWorldMap"
-        :project-path="projectPath"
-        :game-directory="gameDirectory"
-        :dependency-roots="dependencyRoots"
-      />
+     <!-- 世界地图预览 (使用 v-if 进行首次初始化，v-show 保持状态并避免重新加载) -->
+     <WorldMapViewer
+       v-if="hasMapLoaded"
+       v-show="isCurrentFileWorldMap"
+       :project-path="projectPath"
+       :game-directory="gameDirectory"
+       :dependency-roots="dependencyRoots"
+       :merge-mode="currentMergeMode"
+     />
 
       <!-- 其他预览器 (使用 v-if 以节省资源) -->
       <template v-if="!isCurrentFileWorldMap">
