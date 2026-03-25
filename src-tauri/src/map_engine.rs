@@ -13,15 +13,23 @@ use std::time::Instant;
 static RE_STATE_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"id\s*=\s*(\d+)").unwrap());
 static RE_STATE_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r#"name\s*=\s*"([^"]*)""#).unwrap());
 static RE_STATE_OWNER: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"owner\s*=\s*([A-Z0-9]{3})").unwrap());
+    Lazy::new(|| Regex::new(r#"(?i)owner\s*=\s*['"]?([A-Za-z0-9]{3})['"]?"#).unwrap());
 static RE_STATE_CORE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"add_core_of\s*=\s*([A-Z0-9]{3})").unwrap());
 static RE_STATE_CLAIM: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"add_claim_by\s*=\s*([A-Z0-9]{3})").unwrap());
+// 国家条目：TAG = { ... }
 static RE_COUNTRY_ENTRY: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?m)^([A-Z0-9]{3})\s*=\s*\{").unwrap());
-static RE_COUNTRY_COLOR_VALUE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?s)\bcolor\s*=\s*(?:rgb)?\s*\{\s*(\d+)\s+(\d+)\s+(\d+)\s*\}").unwrap()
+    Lazy::new(|| Regex::new(r"(?im)^([A-Za-z0-9]{3})\s*=\s*\{").unwrap());
+
+// RGB 颜色：支持 color / color_ui，支持可选 rgb 前缀，支持负值和小数
+static RE_COUNTRY_COLOR_RGB: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)(color(?:_ui)?)\s*=\s*(?:rgb\s*)?\{\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\}").unwrap()
+});
+
+// HSV 颜色：支持 color / color_ui
+static RE_COUNTRY_COLOR_HSV: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)(color(?:_ui)?)\s*=\s*HSV\s*\{\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\}").unwrap()
 });
 
 /// 地图上下文状态 (常驻内存)
@@ -100,6 +108,46 @@ pub struct RGBColor {
     pub g: u8,
     pub b: u8,
     pub a: u8,
+}
+
+impl RGBColor {
+    /// 从浮点数 (0.0-1.0) 创建 RGBColor
+    pub fn from_hsv(h: f64, s: f64, v: f64) -> Self {
+        let h = h.fract().max(0.0).min(1.0);
+        let s = s.max(0.0).min(1.0);
+        let v = v.max(0.0).min(1.0);
+
+        let c = v * s;
+        let x = c * (1.0 - ((h * 6.0) % 2.0 - 1.0).abs());
+        let m = v - c;
+
+        let (r, g, b) = match (h * 6.0) as u32 {
+            0 => (c, x, 0.0),
+            1 => (x, c, 0.0),
+            2 => (0.0, c, x),
+            3 => (0.0, x, c),
+            4 => (x, 0.0, c),
+            _ => (c, 0.0, x),
+        };
+
+        RGBColor {
+            r: ((r + m) * 255.0).round().clamp(0.0, 255.0) as u8,
+            g: ((g + m) * 255.0).round().clamp(0.0, 255.0) as u8,
+            b: ((b + m) * 255.0).round().clamp(0.0, 255.0) as u8,
+            a: 255,
+        }
+    }
+
+    /// 从可能带负号和小数的字符串解析分量，并规范化到 0-255
+    fn parse_component(s: &str, is_hsv: bool) -> u8 {
+        if is_hsv {
+            let val: f64 = s.parse().unwrap_or(0.0);
+            ((val.clamp(0.0, 1.0) * 255.0).round().clamp(0.0, 255.0)) as u8
+        } else {
+            let val: i32 = s.parse().unwrap_or(0);
+            val.clamp(0, 255) as u8
+        }
+    }
 }
 
 /// 扩展省份定义，包含位置信息
@@ -614,35 +662,65 @@ pub fn get_definition_color_map(definitions: Vec<ProvinceDefinition>) -> HashMap
     color_map
 }
 
-/// 简单的国家颜色解析逻辑 (common/countries/colors.txt)
+/// 加载国家颜色文件（支持 common/countries/*.txt 和 colors.txt）
+/// 颜色定义优先级：color > color_ui；格式：RGB 或 HSV
 #[tauri::command]
 pub fn load_country_colors(path: String) -> HashMap<String, RGBColor> {
     let mut colors = HashMap::new();
     let p = Path::new(&path);
     let content = read_file_with_encoding(p).unwrap_or_default();
 
-    // 先识别顶层 TAG 块，再在块内解析 color/colors 定义，兼容 RGB/rgb/无前缀写法。
+    // 先识别顶层 TAG 块，再在块内解析 color 定义
     for cap in RE_COUNTRY_ENTRY.captures_iter(&content) {
         let Some(full_match) = cap.get(0) else {
             continue;
         };
-        let tag = cap[1].to_string();
+        let tag = cap[1].to_string().to_uppercase();
         let open_brace_index = full_match.end() - 1;
         let Some(close_brace_index) = find_matching_brace(&content, open_brace_index) else {
             continue;
         };
         let block_content = &content[open_brace_index + 1..close_brace_index];
 
-        let Some(color_caps) = RE_COUNTRY_COLOR_VALUE.captures(block_content) else {
-            continue;
-        };
-        let r = color_caps[1].parse().unwrap_or(0);
-        let g = color_caps[2].parse().unwrap_or(0);
-        let b = color_caps[3].parse().unwrap_or(0);
-        colors.insert(tag, RGBColor { r, g, b, a: 255 });
+        // 优先查找 color（而非 color_ui）
+        let color = find_color_in_block(block_content, false)
+            .or_else(|| find_color_in_block(block_content, true));
+
+        if let Some(col) = color {
+            colors.insert(tag, col);
+        }
     }
 
     colors
+}
+
+/// 在块内容中查找颜色定义
+fn find_color_in_block(block_content: &str, allow_color_ui: bool) -> Option<RGBColor> {
+    // 1. 先尝试 RGB 格式
+    for cap in RE_COUNTRY_COLOR_RGB.captures_iter(block_content) {
+        let name = cap.get(1)?.as_str();
+        if !allow_color_ui && name.eq_ignore_ascii_case("color_ui") {
+            continue;
+        }
+        let r = RGBColor::parse_component(cap.get(2)?.as_str(), false);
+        let g = RGBColor::parse_component(cap.get(3)?.as_str(), false);
+        let b = RGBColor::parse_component(cap.get(4)?.as_str(), false);
+        return Some(RGBColor { r, g, b, a: 255 });
+    }
+
+    // 2. 尝试 HSV 格式
+    for cap in RE_COUNTRY_COLOR_HSV.captures_iter(block_content) {
+        let name = cap.get(1)?.as_str();
+        if !allow_color_ui && name.eq_ignore_ascii_case("color_ui") {
+            continue;
+        }
+        let h: f64 = cap.get(2)?.as_str().parse().unwrap_or(0.0);
+        let s: f64 = cap.get(3)?.as_str().parse().unwrap_or(0.0);
+        let v: f64 = cap.get(4)?.as_str().parse().unwrap_or(0.0);
+        return Some(RGBColor::from_hsv(h, s, v));
+    }
+
+    None
 }
 
 fn find_matching_brace(content: &str, open_brace_index: usize) -> Option<usize> {
@@ -675,6 +753,7 @@ pub fn get_province_owner_color_map(
     country_colors: HashMap<String, RGBColor>,
 ) -> HashMap<u32, RGBColor> {
     let mut province_color_map = HashMap::new();
+
     for state in &states {
         if let Some(color) = country_colors.get(&state.owner) {
             for &province_id in &state.provinces {
@@ -682,6 +761,36 @@ pub fn get_province_owner_color_map(
             }
         }
     }
+
+    #[cfg(debug_assertions)]
+    {
+        let total_provinces: usize = states.iter().map(|s| s.provinces.len()).sum();
+        let matched_provinces = province_color_map.len();
+        let match_rate = if total_provinces > 0 {
+            (matched_provinces as f64 / total_provinces as f64) * 100.0
+        } else {
+            0.0
+        };
+        println!(
+            "[map] province color mapping: {}/{} provinces matched ({:.1}%)",
+            matched_provinces, total_provinces, match_rate
+        );
+
+        // Collect owners missing colors
+        let mut missing_owners = std::collections::HashSet::new();
+        for state in &states {
+            if !country_colors.contains_key(&state.owner) && !state.owner.is_empty() {
+                missing_owners.insert(state.owner.clone());
+            }
+        }
+        if !missing_owners.is_empty() {
+            println!(
+                "[map]   owners missing color definitions: {:?}",
+                missing_owners
+            );
+        }
+    }
+
     province_color_map
 }
 
@@ -726,7 +835,17 @@ pub fn parse_state_file(path: &Path) -> Result<StateDefinition, String> {
     }
 
     if let Some(caps) = RE_STATE_OWNER.captures(&content) {
-        owner = caps[1].to_string();
+        owner = caps[1].to_string().to_uppercase();
+    }
+
+    if owner.is_empty() {
+        #[cfg(debug_assertions)]
+        eprintln!(
+            "[map] parsed state {} (id={}) with empty owner from {}",
+            name,
+            id,
+            path.display()
+        );
     }
 
     for cap in RE_STATE_CORE.captures_iter(&content) {
@@ -932,15 +1051,46 @@ fn load_merged_country_colors_from_roots(roots: &[PathBuf]) -> HashMap<String, R
 fn load_merged_states_from_roots(roots: &[PathBuf]) -> Vec<StateDefinition> {
     let mut states_by_id = HashMap::new();
 
+    #[cfg(debug_assertions)]
+    println!(
+        "[map] load_merged_states_from_roots: {} search roots",
+        roots.len()
+    );
+
     for root in roots.iter().rev() {
         let states_dir = root.join("history/states");
         if !states_dir.exists() {
+            #[cfg(debug_assertions)]
+            println!("[map]   states dir not found: {}", states_dir.display());
             continue;
         }
 
-        for state in load_all_states(states_dir.to_string_lossy().to_string()) {
+        let states = load_all_states(states_dir.to_string_lossy().to_string());
+        let count = states.len();
+        for state in states {
             states_by_id.insert(state.id, state);
         }
+        #[cfg(debug_assertions)]
+        println!(
+            "[map]   loaded {} states from {}",
+            count,
+            states_dir.display()
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    {
+        let empty_owner_count = states_by_id.values().filter(|s| s.owner.is_empty()).count();
+        if empty_owner_count > 0 {
+            eprintln!(
+                "[map] warning: {} states have empty owner tag",
+                empty_owner_count
+            );
+        }
+        println!(
+            "[map] total merged states (unique by id): {}",
+            states_by_id.len()
+        );
     }
 
     let mut states: Vec<_> = states_by_id.into_values().collect();
@@ -951,16 +1101,31 @@ fn load_merged_states_from_roots(roots: &[PathBuf]) -> Vec<StateDefinition> {
 fn load_merged_country_colors_from_roots(roots: &[PathBuf]) -> HashMap<String, RGBColor> {
     let mut colors = HashMap::new();
 
+    #[cfg(debug_assertions)]
+    println!(
+        "[map] load_merged_country_colors_from_roots: {} search roots",
+        roots.len()
+    );
+
     for root in roots.iter().rev() {
         let path = root.join("common/countries/colors.txt");
         if !path.exists() {
+            #[cfg(debug_assertions)]
+            println!("[map]   colors file not found: {}", path.display());
             continue;
         }
 
-        for (tag, color) in load_country_colors(path.to_string_lossy().to_string()) {
+        let loaded = load_country_colors(path.to_string_lossy().to_string());
+        let count = loaded.len();
+        for (tag, color) in loaded {
             colors.insert(tag, color);
         }
+        #[cfg(debug_assertions)]
+        println!("[map]   loaded {} colors from {}", count, path.display());
     }
+
+    #[cfg(debug_assertions)]
+    println!("[map] total merged country colors: {}", colors.len());
 
     colors
 }
@@ -1675,6 +1840,18 @@ pub fn initialize_map_context_with_fallback(
         search_roots.clone()
     };
 
+    #[cfg(debug_assertions)]
+    {
+        println!("[map] search_roots ({}):", search_roots.len());
+        for (i, r) in search_roots.iter().enumerate() {
+            println!("[map]   {}: {}", i, r.display());
+        }
+        println!("[map] map_roots ({}):", map_roots.len());
+        for (i, r) in map_roots.iter().enumerate() {
+            println!("[map]   {}: {}", i, r.display());
+        }
+    }
+
     let default_map_path = resolve_existing_path("map/default.map", &map_roots)
         .ok_or_else(|| "鏃犳硶鍦ㄩ」鐩€佷緷璧栨垨鍘熺増涓壘鍒?map/default.map".to_string())?;
     let default_map = parse_default_map(&default_map_path).map_err(|e| {
@@ -2127,17 +2304,8 @@ EEE = {
                 a: 255
             })
         );
-        assert_eq!(
-            colors.get("CCC"),
-            None
-        );
-        assert_eq!(
-            colors.get("DDD"),
-            None
-        );
-        assert_eq!(
-            colors.get("EEE"),
-            None
-        );
+        assert_eq!(colors.get("CCC"), None);
+        assert_eq!(colors.get("DDD"), None);
+        assert_eq!(colors.get("EEE"), None);
     }
 }
