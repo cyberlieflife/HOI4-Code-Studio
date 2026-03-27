@@ -22,7 +22,9 @@ export const changelog: VersionLog[] = [
     changes: [
       { type: 'fix', content: '修复文件树右键菜单在窗口边缘被遮挡的问题' },
       { type: 'fix', content: '修复文件树点击深层目录时错误折叠父级目录的问题' },
-      // { type: 'fix', content: '修复地图预览对 color/colors 与 rgb/RGB 颜色写法的兼容问题' },
+      { type: 'fix', content: '修复地图预览对 color/colors 与 rgb/RGB 颜色写法的兼容问题' },
+      { type: 'fix', content: '修复部分Tag颜色在地图预览中显示错误的问题' },
+      { type: 'improvement', content: '区分右键地图预览和.map地图预览' },
     ]
   },
   {
