@@ -36,6 +36,8 @@
   - [useIdeaRegistry](#useidearegistry)
 - [标签注册表](#标签注册表)
   - [useTagRegistry](#usetagregistry)
+- [地图引擎](#地图引擎)
+  - [useMapEngine](#usemapengine)
 - [语法补全](#语法补全)
   - [useGrammarCompletion](#usegrammarcompletion)
 - [编辑器字体](#编辑器字体)
@@ -836,6 +838,58 @@ await refresh()
 
 // 验证标签
 const result = await validate(fileContent)
+```
+
+## 🗺️ 地图引擎
+
+### useMapEngine
+
+地图引擎 Composable，管理 HOI4 地图数据的加载、搜索和渲染服务。
+
+#### 初始化模式
+
+地图引擎支持两种初始化模式：
+
+1.  **fallback 模式**: 从项目根目录、依赖目录、游戏目录搜索地图资源。搜索优先级为：`projectPath > dependencyRoots > gameDirectory`。在这种模式下，数据会进行合并（例如州和国家颜色）。
+2.  **project-only 模式**: 仅加载项目自身的地图文件，不进行任何覆盖逻辑。适用于编辑器内置预览。
+
+#### 搜索优先级 (project-only 模式)
+
+在 `project-only` 模式下，系统会按以下优先级搜索 `map/default.map`：
+
+1.  **previewSourcePath**: 从预览源文件路径推断出的根目录。
+2.  **projectPath**: 当前打开项目的根目录。
+3.  **dependencyRoots**: 项目已启用的依赖项根目录。
+4.  **gameDirectory**: 游戏安装目录。
+
+系统使用 `Set` 去重并保持原有顺序，取第一个找到有效 `map/default.map` 的目录作为有效根目录。
+
+#### 返回值
+
+| 属性名 | 类型 | 描述 |
+|--------|------|------|
+| `initMap` | `(projectPath: string, gameDirectory?: string, dependencyRoots?: string[], mode?: MapMergeMode, previewSourcePath?: string) => Promise<void>` | 初始化地图上下文 |
+| `isLoading` | `Ref<boolean>` | 是否正在加载 |
+| `error` | `Ref<string \| null>` | 错误信息 |
+| `mapData` | `Ref<MapMetadata \| null>` | 地图元数据（宽高、省份数） |
+| `definitions` | `Ref<ProvinceDefinition[]>` | 省份定义列表 |
+| `states` | `Ref<StateDefinition[]>` | 州定义列表 |
+
+#### 示例
+
+```typescript
+import { useMapEngine } from '@/composables/useMapEngine'
+
+const { initMap, isLoading, error, mapData } = useMapEngine()
+
+// 初始化地图
+await initMap(
+  projectPath,
+  gameDirectory,
+  dependencyRoots,
+  'project-only',
+  previewSourcePath
+)
 ```
 
 ## 🔤 语法补全

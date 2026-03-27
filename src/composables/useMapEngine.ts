@@ -30,12 +30,22 @@ function normalizePath(path?: string) {
 function inferRootFromPreviewSource(path?: string) {
   const normalized = normalizePath(path)
   if (!normalized) return ''
-  if (normalized.endsWith('/map/default.map')) {
+  const lower = normalized.toLowerCase()
+
+  // 1. 如果直接指向 map/default.map，返回其所属根目录
+  if (lower.endsWith('/map/default.map')) {
     return normalized.slice(0, -'/map/default.map'.length)
   }
-  if (normalized.endsWith('/map')) {
+  // 2. 如果指向 map 目录，返回其父目录
+  if (lower.endsWith('/map')) {
     return normalized.slice(0, -'/map'.length)
   }
+  // 3. 尝试从路径中查找 map 关键字并推断根目录（例如在 map/terrain/ 下的文件）
+  const mapIdx = lower.lastIndexOf('/map/')
+  if (mapIdx !== -1) {
+    return normalized.slice(0, mapIdx)
+  }
+
   return ''
 }
 
@@ -98,6 +108,11 @@ export function useMapEngine() {
       } else {
         // project-only 模式：仅使用项目自身的文件
         initData = await measureMapAsync('frontend.initializeMapContext', async () => {
+          // 搜索优先级：previewSourcePath > projectPath > dependencyRoots > gameDirectory
+          // 1. inferRootFromPreviewSource: 从预览源文件路径推断出的根目录
+          // 2. rootPath: 当前项目的根目录
+          // 3. normalizedDependencyRoots: 已启用的依赖项目录
+          // 4. normalizedGameDirectory: 游戏安装目录
           const candidateRoots = Array.from(new Set([
             inferRootFromPreviewSource(normalizedPreviewSourcePath),
             rootPath,

@@ -18,6 +18,8 @@ static RE_STATE_CORE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"add_core_of\s*=\s*([A-Z0-9]{3})").unwrap());
 static RE_STATE_CLAIM: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"add_claim_by\s*=\s*([A-Z0-9]{3})").unwrap());
+
+/// 用于解析 'TAG = "path/to/file.txt"' 格式的国家标签映射文件
 static RE_COUNTRY_TAG_MAPPING: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(?m)^\s*([A-Za-z0-9]{2,4})\s*=\s*"([^"]*)""#).unwrap()
 });
@@ -28,6 +30,17 @@ static RE_COUNTRY_ENTRY: Lazy<Regex> =
 static RE_COUNTRY_COLOR_RGB: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)(color(?:_ui)?)\s*=\s*(?:rgb\s*)?\{\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\}").unwrap()
 });
+
+/// 路径解析缓存，避免重复遍历目录
+static PATH_RESOLVE_CACHE: Lazy<RwLock<HashMap<PathBuf, Vec<(String, PathBuf)>>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
+
+/// 清除路径解析缓存
+pub fn clear_path_resolve_cache() {
+    if let Ok(mut cache) = PATH_RESOLVE_CACHE.write() {
+        cache.clear();
+    }
+}
 
 // HSV 颜色：支持 color / color_ui
 static RE_COUNTRY_COLOR_HSV: Lazy<Regex> = Lazy::new(|| {
@@ -1181,13 +1194,46 @@ fn resolve_case_insensitive_path(path: &Path) -> Option<PathBuf> {
                 } else {
                     current.as_path()
                 };
-                let target = segment.to_string_lossy();
-                let matched = fs::read_dir(search_dir)
-                    .ok()?
-                    .flatten()
-                    .find(|entry| entry.file_name().to_string_lossy().eq_ignore_ascii_case(&target))
-                    .map(|entry| entry.path())?;
-                current = matched;
+
+                let target = segment.to_string_lossy().to_lowercase();
+
+                // 尝试从缓存读取
+                let matched = if let Ok(cache) = PATH_RESOLVE_CACHE.read() {
+                    cache.get(search_dir).and_then(|entries| {
+                        entries
+                            .iter()
+                            .find(|(name, _)| name == &target)
+                            .map(|(_, path)| path.clone())
+                    })
+                } else {
+                    None
+                };
+
+                if let Some(path) = matched {
+                    current = path;
+                } else {
+                    // 缓存未命中，遍历目录
+                    let entries: Vec<(String, PathBuf)> = fs::read_dir(search_dir)
+                        .ok()?
+                        .flatten()
+                        .map(|entry| {
+                            let name = entry.file_name().to_string_lossy().to_lowercase();
+                            (name, entry.path())
+                        })
+                        .collect();
+
+                    let found = entries
+                        .iter()
+                        .find(|(name, _)| name == &target)
+                        .map(|(_, path)| path.clone());
+
+                    // 更新缓存
+                    if let Ok(mut cache) = PATH_RESOLVE_CACHE.write() {
+                        cache.insert(search_dir.to_path_buf(), entries);
+                    }
+
+                    current = found?;
+                }
             }
         }
     }
@@ -1720,6 +1766,7 @@ pub fn initialize_map_context(
     states_path: String,
     country_colors_path: String,
 ) -> Result<MapInitializationData, String> {
+    clear_path_resolve_cache();
     let started_at = Instant::now();
     // 1. Load Definitions
     let definitions_started_at = Instant::now();
@@ -2062,6 +2109,7 @@ pub fn initialize_map_context_with_fallback(
     game_directory: Option<String>,
     dependency_roots: Option<Vec<String>>,
 ) -> Result<MapInitializationData, String> {
+    clear_path_resolve_cache();
     let dependency_roots = dependency_roots.unwrap_or_default();
     let search_roots =
         build_search_roots(&project_root, &dependency_roots, game_directory.as_deref());
