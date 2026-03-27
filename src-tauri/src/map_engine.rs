@@ -1212,25 +1212,37 @@ fn resolve_case_insensitive_path(path: &Path) -> Option<PathBuf> {
                 if let Some(path) = matched {
                     current = path;
                 } else {
-                    // 缓存未命中，遍历目录
-                    let entries: Vec<(String, PathBuf)> = fs::read_dir(search_dir)
-                        .ok()?
-                        .flatten()
-                        .map(|entry| {
-                            let name = entry.file_name().to_string_lossy().to_lowercase();
-                            (name, entry.path())
-                        })
-                        .collect();
+                    // 缓存未命中，获取写锁并二次检查
+                    let found = if let Ok(mut cache) = PATH_RESOLVE_CACHE.write() {
+                        if let Some(entries) = cache.get(search_dir) {
+                            // 二次检查缓存，可能由其他线程并发更新
+                            entries
+                                .iter()
+                                .find(|(name, _)| name == &target)
+                                .map(|(_, path)| path.clone())
+                        } else {
+                            // 遍历目录
+                            let entries: Vec<(String, PathBuf)> = fs::read_dir(search_dir)
+                                .ok()?
+                                .flatten()
+                                .map(|entry| {
+                                    let name = entry.file_name().to_string_lossy().to_lowercase();
+                                    (name, entry.path())
+                                })
+                                .collect();
 
-                    let found = entries
-                        .iter()
-                        .find(|(name, _)| name == &target)
-                        .map(|(_, path)| path.clone());
+                            let found = entries
+                                .iter()
+                                .find(|(name, _)| name == &target)
+                                .map(|(_, path)| path.clone());
 
-                    // 更新缓存
-                    if let Ok(mut cache) = PATH_RESOLVE_CACHE.write() {
-                        cache.insert(search_dir.to_path_buf(), entries);
-                    }
+                            // 更新缓存
+                            cache.insert(search_dir.to_path_buf(), entries);
+                            found
+                        }
+                    } else {
+                        None
+                    };
 
                     current = found?;
                 }
