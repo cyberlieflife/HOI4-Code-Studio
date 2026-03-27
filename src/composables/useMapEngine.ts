@@ -23,15 +23,15 @@ import { logMapEvent, measureMapAsync } from '../utils/mapPerformance'
  */
 export type MapMergeMode = 'fallback' | 'project-only'
 
-function normalizePath(path?: string) {
+function normalizePath(path?: string): string {
   return path?.replace(/\\/g, '/').replace(/\/+$/, '') || ''
 }
 
-function normalizeRoots(paths: string[] = []) {
+function normalizeRoots(paths: string[] = []): string[] {
   return Array.from(new Set(paths.map((path) => normalizePath(path)).filter(Boolean)))
 }
 
-function inferRootFromPreviewSource(path?: string) {
+function inferRootFromPreviewSource(path?: string): string {
   const normalized = normalizePath(path)
   if (!normalized) return ''
   const lower = normalized.toLowerCase()
@@ -53,7 +53,7 @@ function inferRootFromPreviewSource(path?: string) {
   return ''
 }
 
-function normalizeProjectOnlyMapPath(mapDir: string, relativePath: string) {
+function normalizeProjectOnlyMapPath(mapDir: string, relativePath: string): string {
   const normalized = relativePath.trim().replace(/\\/g, '/').replace(/^\/+/, '')
   if (!normalized) return mapDir
   return normalized.includes('/') ? `${mapDir}/${normalized}`.replace(/\/+/g, '/') : `${mapDir}/${normalized}`
