@@ -27,6 +27,10 @@ function normalizePath(path?: string) {
   return path?.replace(/\\/g, '/').replace(/\/+$/, '') || ''
 }
 
+function normalizeRoots(paths: string[] = []) {
+  return Array.from(new Set(paths.map((path) => normalizePath(path)).filter(Boolean)))
+}
+
 function inferRootFromPreviewSource(path?: string) {
   const normalized = normalizePath(path)
   if (!normalized) return ''
@@ -88,8 +92,9 @@ export function useMapEngine() {
 
     const rootPath = normalizePath(projectPath)
     const normalizedGameDirectory = normalizePath(gameDirectory)
-    const normalizedDependencyRoots = dependencyRoots.map((path) => normalizePath(path)).filter(Boolean)
+    const normalizedDependencyRoots = normalizeRoots(dependencyRoots)
     const normalizedPreviewSourcePath = normalizePath(previewSourcePath)
+    const safeGameDirectory = normalizedGameDirectory || undefined
 
     try {
       logMapEvent('initMap:start', { projectPath: rootPath, mode })
@@ -101,8 +106,8 @@ export function useMapEngine() {
         initData = await measureMapAsync('frontend.initializeMapContextWithFallback', async () => (
           await initializeMapContextWithFallback(
             rootPath,
-            gameDirectory,
-            dependencyRoots
+            safeGameDirectory,
+            normalizedDependencyRoots
           )
         ))
       } else {
