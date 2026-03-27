@@ -260,6 +260,13 @@ const props = defineProps<{
   projectPath: string
   gameDirectory?: string
   dependencyRoots?: string[]
+  previewSourcePath?: string
+  /**
+   * 地图覆盖模式
+   * - 'fallback': 使用游戏目录和依赖作为fallback（右键预览）
+   * - 'project-only': 仅使用项目文件（编辑器内置预览）
+   */
+  mergeMode?: 'fallback' | 'project-only'
 }>()
 
 // 加载全局设置
@@ -635,10 +642,16 @@ async function refreshMap() {
   }, 100)
   loadingTimer.value = progressTimer as any
 
-  try {
-    await measureMapAsync('viewer.refreshMap.initMap', async () => {
-      await initMap(props.projectPath, props.gameDirectory, props.dependencyRoots || [])
-    })
+   try {
+     await measureMapAsync('viewer.refreshMap.initMap', async () => {
+       await initMap(
+         props.projectPath,
+         props.gameDirectory,
+         props.dependencyRoots || [],
+         props.mergeMode,
+         props.previewSourcePath
+       )
+     })
     updateProgress('准备渲染', '初始化切片缓存...', 60)
     await measureMapAsync('viewer.refreshMap.resetMapCache', async () => {
       await resetMapCache()

@@ -30,8 +30,14 @@ export interface OpenFile {
   isGuiPreview?: boolean  // 是否为 GUI 预览
   isMioPreview?: boolean  // 是否为 MIO 预览
   isGfxPreview?: boolean  // 是否为 GFX 预览
-  isPreview?: boolean   // 是否为预览文件
+  isPreview?: boolean     // 是否为预览文件
   sourceFilePath?: string // 源文件路径（用于预览文件）
+  /**
+   * 地图预览覆盖模式
+   * - 'fallback': 使用游戏目录和依赖作为fallback，合并多层级文件（右键地图预览使用）
+   * - 'project-only': 仅使用项目自身的文件，不包含game目录和依赖（编辑器内置预览使用）
+   */
+  mergeMode?: 'fallback' | 'project-only'
 }
 
 /**
