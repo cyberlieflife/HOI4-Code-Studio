@@ -23,6 +23,28 @@ import { logMapEvent, measureMapAsync } from '../utils/mapPerformance'
  */
 export type MapMergeMode = 'fallback' | 'project-only'
 
+function normalizePath(path?: string) {
+  return path?.replace(/\\/g, '/').replace(/\/+$/, '') || ''
+}
+
+function inferRootFromPreviewSource(path?: string) {
+  const normalized = normalizePath(path)
+  if (!normalized) return ''
+  if (normalized.endsWith('/map/default.map')) {
+    return normalized.slice(0, -'/map/default.map'.length)
+  }
+  if (normalized.endsWith('/map')) {
+    return normalized.slice(0, -'/map'.length)
+  }
+  return ''
+}
+
+function normalizeProjectOnlyMapPath(mapDir: string, relativePath: string) {
+  const normalized = relativePath.trim().replace(/\\/g, '/').replace(/^\/+/, '')
+  if (!normalized) return mapDir
+  return normalized.includes('/') ? `${mapDir}/${normalized}`.replace(/\/+/g, '/') : `${mapDir}/${normalized}`
+}
+
 /**
  * 地图引擎组合式 API
  *
@@ -43,7 +65,8 @@ export function useMapEngine() {
     projectPath: string,
     gameDirectory?: string,
     dependencyRoots: string[] = [],
-    mode: MapMergeMode = 'fallback'
+    mode: MapMergeMode = 'fallback',
+    previewSourcePath?: string
   ) {
     if (!projectPath) {
       error.value = '未指定项目路径'
@@ -53,8 +76,10 @@ export function useMapEngine() {
     isLoading.value = true
     error.value = null
 
-    const normalize = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '')
-    const rootPath = normalize(projectPath)
+    const rootPath = normalizePath(projectPath)
+    const normalizedGameDirectory = normalizePath(gameDirectory)
+    const normalizedDependencyRoots = dependencyRoots.map((path) => normalizePath(path)).filter(Boolean)
+    const normalizedPreviewSourcePath = normalizePath(previewSourcePath)
 
     try {
       logMapEvent('initMap:start', { projectPath: rootPath, mode })
@@ -73,23 +98,38 @@ export function useMapEngine() {
       } else {
         // project-only 模式：仅使用项目自身的文件
         initData = await measureMapAsync('frontend.initializeMapContext', async () => {
-          // 解析项目内的 default.map
-          const mapDir = `${rootPath}/map`
-          const defaultMapPath = `${mapDir}/default.map`
+          const candidateRoots = Array.from(new Set([
+            inferRootFromPreviewSource(normalizedPreviewSourcePath),
+            rootPath,
+            ...normalizedDependencyRoots,
+            normalizedGameDirectory
+          ].filter(Boolean)))
 
-          // 读取并解析 default.map（使用 Tauri API）
-          const defaultMapResult = await loadDefaultMap(defaultMapPath)
-          if (!defaultMapResult.success || !defaultMapResult.data) {
-            throw new Error(defaultMapResult.message || '无法加载项目 map/default.map')
+          let effectiveRoot = ''
+          let defaultMapResult = null as Awaited<ReturnType<typeof loadDefaultMap>> | null
+
+          for (const candidateRoot of candidateRoots) {
+            const candidateMapPath = `${candidateRoot}/map/default.map`
+            const result = await loadDefaultMap(candidateMapPath)
+            if (result.success && result.data) {
+              effectiveRoot = candidateRoot
+              defaultMapResult = result
+              break
+            }
+          }
+
+          if (!defaultMapResult?.data || !effectiveRoot) {
+            throw new Error('无法定位可预览的 map/default.map')
           }
 
           const defaultMapConfig = defaultMapResult.data
+          const mapDir = `${effectiveRoot}/map`
 
           // 构造完整路径（全部相对于项目 map 目录）
-          const definitionsPath = `${mapDir}/${defaultMapConfig.definitions}`
-          const provincesPath = `${mapDir}/${defaultMapConfig.provinces}`
-          const statesPath = `${rootPath}/history/states`
-          const countryColorsPath = `${rootPath}/common/countries/colors.txt`
+          const definitionsPath = normalizeProjectOnlyMapPath(mapDir, defaultMapConfig.definitions)
+          const provincesPath = normalizeProjectOnlyMapPath(mapDir, defaultMapConfig.provinces)
+          const statesPath = `${effectiveRoot}/history/states`
+          const countryColorsPath = `${effectiveRoot}/common/countries`
 
           // 直接初始化，不使用 fallback
           const result = await initializeMapContext(

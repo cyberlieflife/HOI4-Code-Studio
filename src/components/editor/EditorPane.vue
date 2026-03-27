@@ -708,6 +708,7 @@ defineExpose({
        :project-path="projectPath"
        :game-directory="gameDirectory"
        :dependency-roots="dependencyRoots"
+       :preview-source-path="currentFile?.sourceFilePath || currentFile?.node.path"
        :merge-mode="currentMergeMode"
      />
 

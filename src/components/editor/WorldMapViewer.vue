@@ -260,6 +260,7 @@ const props = defineProps<{
   projectPath: string
   gameDirectory?: string
   dependencyRoots?: string[]
+  previewSourcePath?: string
   /**
    * 地图覆盖模式
    * - 'fallback': 使用游戏目录和依赖作为fallback（右键预览）
@@ -647,7 +648,8 @@ async function refreshMap() {
          props.projectPath,
          props.gameDirectory,
          props.dependencyRoots || [],
-         props.mergeMode
+         props.mergeMode,
+         props.previewSourcePath
        )
      })
     updateProgress('准备渲染', '初始化切片缓存...', 60)

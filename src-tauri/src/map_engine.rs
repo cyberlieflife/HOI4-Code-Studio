@@ -6,7 +6,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
@@ -18,9 +18,11 @@ static RE_STATE_CORE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"add_core_of\s*=\s*([A-Z0-9]{3})").unwrap());
 static RE_STATE_CLAIM: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"add_claim_by\s*=\s*([A-Z0-9]{3})").unwrap());
-// 国家条目：TAG = { ... }
+static RE_COUNTRY_TAG_MAPPING: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?m)^\s*([A-Za-z0-9]{2,4})\s*=\s*"([^"]*)""#).unwrap()
+});
 static RE_COUNTRY_ENTRY: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?im)^([A-Za-z0-9]{3})\s*=\s*\{").unwrap());
+    Lazy::new(|| Regex::new(r"(?im)^[ \t]*([A-Za-z0-9]{3})\s*=\s*\{").unwrap());
 
 // RGB 颜色：支持 color / color_ui，支持可选 rgb 前缀，支持负值和小数
 static RE_COUNTRY_COLOR_RGB: Lazy<Regex> = Lazy::new(|| {
@@ -666,23 +668,192 @@ pub fn get_definition_color_map(definitions: Vec<ProvinceDefinition>) -> HashMap
 /// 颜色定义优先级：color > color_ui；格式：RGB 或 HSV
 #[tauri::command]
 pub fn load_country_colors(path: String) -> HashMap<String, RGBColor> {
-    let mut colors = HashMap::new();
-    let p = Path::new(&path);
-    let content = read_file_with_encoding(p).unwrap_or_default();
+    load_country_colors_from_path(Path::new(&path))
+}
 
-    // 先识别顶层 TAG 块，再在块内解析 color 定义
-    for cap in RE_COUNTRY_ENTRY.captures_iter(&content) {
+fn load_country_colors_from_path(path: &Path) -> HashMap<String, RGBColor> {
+    if let Some(root) = infer_root_from_country_colors_path(path) {
+        return load_country_colors_from_root(&root);
+    }
+
+    load_country_colors_from_entries(path)
+}
+
+fn load_country_colors_from_root(root: &Path) -> HashMap<String, RGBColor> {
+    let mut colors = HashMap::new();
+    let countries_dir = root.join("common/countries");
+
+    for (tag, color) in load_country_colors_from_entries(&countries_dir) {
+        colors.insert(tag, color);
+    }
+
+    for (tag, file_path) in collect_country_tag_mapped_files(root) {
+        if let Some(color) = load_single_country_color(&file_path) {
+            colors.insert(tag, color);
+        }
+    }
+
+    colors
+}
+
+fn load_country_colors_from_entries(path: &Path) -> HashMap<String, RGBColor> {
+    let mut colors = HashMap::new();
+
+    for file_path in collect_country_color_files(path) {
+        let content = read_file_with_encoding(&file_path).unwrap_or_default();
+        for (tag, color) in parse_country_colors(&content) {
+            colors.insert(tag, color);
+        }
+    }
+
+    colors
+}
+
+fn infer_root_from_country_colors_path(path: &Path) -> Option<PathBuf> {
+    let countries_dir = if path.is_dir() {
+        path.to_path_buf()
+    } else {
+        path.parent()?.to_path_buf()
+    };
+    let countries_name = countries_dir.file_name()?.to_string_lossy();
+    if !countries_name.eq_ignore_ascii_case("countries") {
+        return None;
+    }
+
+    let common_dir = countries_dir.parent()?;
+    let common_name = common_dir.file_name()?.to_string_lossy();
+    if !common_name.eq_ignore_ascii_case("common") {
+        return None;
+    }
+
+    Some(common_dir.parent()?.to_path_buf())
+}
+
+fn collect_country_color_files(path: &Path) -> Vec<PathBuf> {
+    let resolved_path = if path.exists() {
+        Some(path.to_path_buf())
+    } else {
+        resolve_case_insensitive_path(path)
+    };
+    let Some(resolved_path) = resolved_path else {
+        return Vec::new();
+    };
+
+    if resolved_path.is_file() {
+        return vec![resolved_path];
+    }
+
+    if !resolved_path.is_dir() {
+        return Vec::new();
+    }
+
+    let mut files: Vec<_> = fs::read_dir(&resolved_path)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|entry_path| {
+            entry_path.is_file()
+                && entry_path
+                    .extension()
+                    .map(|ext| ext.to_string_lossy().eq_ignore_ascii_case("txt"))
+                    .unwrap_or(false)
+        })
+        .collect();
+    files.sort();
+    files
+}
+
+fn collect_country_tag_mapped_files(root: &Path) -> Vec<(String, PathBuf)> {
+    let tags_dir = match resolve_case_insensitive_path(&root.join("common/country_tags")) {
+        Some(path) => path,
+        None => return Vec::new(),
+    };
+    let common_dir = match resolve_case_insensitive_path(&root.join("common")) {
+        Some(path) => path,
+        None => return Vec::new(),
+    };
+
+    let mut tag_files = collect_text_files_recursively(&tags_dir);
+    tag_files.sort();
+
+    let mut mappings = HashMap::new();
+    for tag_file in tag_files {
+        let content = read_file_with_encoding(&tag_file).unwrap_or_default();
+        for cap in RE_COUNTRY_TAG_MAPPING.captures_iter(&content) {
+            let Some(tag_match) = cap.get(1) else {
+                continue;
+            };
+            let Some(path_match) = cap.get(2) else {
+                continue;
+            };
+
+            let tag = tag_match.as_str().trim().to_uppercase();
+            let relative_path = normalize_relative_path(path_match.as_str());
+            let Some(file_path) = resolve_case_insensitive_path(&common_dir.join(relative_path))
+            else {
+                continue;
+            };
+            mappings.insert(tag, file_path);
+        }
+    }
+
+    let mut entries: Vec<_> = mappings.into_iter().collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    entries
+}
+
+fn collect_text_files_recursively(dir: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return files;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            files.extend(collect_text_files_recursively(&path));
+            continue;
+        }
+
+        let is_text = path
+            .extension()
+            .map(|ext| ext.to_string_lossy().eq_ignore_ascii_case("txt"))
+            .unwrap_or(false);
+        if is_text {
+            files.push(path);
+        }
+    }
+
+    files
+}
+
+fn load_single_country_color(path: &Path) -> Option<RGBColor> {
+    let content = read_file_with_encoding(path).ok()?;
+    find_color_in_block(&content, false).or_else(|| find_color_in_block(&content, true))
+}
+
+fn parse_country_colors(content: &str) -> HashMap<String, RGBColor> {
+    let mut colors = HashMap::new();
+    let mut scanned_until = 0usize;
+    let mut brace_depth = 0usize;
+
+    for cap in RE_COUNTRY_ENTRY.captures_iter(content) {
         let Some(full_match) = cap.get(0) else {
             continue;
         };
+        if !advance_brace_depth(content, &mut scanned_until, &mut brace_depth, full_match.start())
+            || brace_depth != 0
+        {
+            continue;
+        }
+
         let tag = cap[1].to_string().to_uppercase();
         let open_brace_index = full_match.end() - 1;
-        let Some(close_brace_index) = find_matching_brace(&content, open_brace_index) else {
+        let Some(close_brace_index) = find_matching_brace(content, open_brace_index) else {
             continue;
         };
         let block_content = &content[open_brace_index + 1..close_brace_index];
-
-        // 优先查找 color（而非 color_ui）
         let color = find_color_in_block(block_content, false)
             .or_else(|| find_color_in_block(block_content, true));
 
@@ -721,6 +892,29 @@ fn find_color_in_block(block_content: &str, allow_color_ui: bool) -> Option<RGBC
     }
 
     None
+}
+
+fn advance_brace_depth(
+    content: &str,
+    scanned_until: &mut usize,
+    brace_depth: &mut usize,
+    target_index: usize,
+) -> bool {
+    let bytes = content.as_bytes();
+    if target_index > bytes.len() {
+        return false;
+    }
+
+    while *scanned_until < target_index {
+        match bytes[*scanned_until] {
+            b'{' => *brace_depth += 1,
+            b'}' => *brace_depth = brace_depth.saturating_sub(1),
+            _ => {}
+        }
+        *scanned_until += 1;
+    }
+
+    true
 }
 
 fn find_matching_brace(content: &str, open_brace_index: usize) -> Option<usize> {
@@ -954,12 +1148,51 @@ fn build_search_roots(
 fn resolve_existing_path(relative_path: &str, roots: &[PathBuf]) -> Option<PathBuf> {
     let normalized = normalize_relative_path(relative_path);
     for root in roots {
-        let candidate = root.join(&normalized);
-        if candidate.exists() {
+        if let Some(candidate) = resolve_case_insensitive_path(&root.join(&normalized)) {
             return Some(candidate);
         }
     }
     None
+}
+
+fn resolve_case_insensitive_path(path: &Path) -> Option<PathBuf> {
+    if path.exists() {
+        return Some(path.to_path_buf());
+    }
+
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => current.push(prefix.as_os_str()),
+            Component::RootDir => current.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                current.pop();
+            }
+            Component::Normal(segment) => {
+                let exact = current.join(segment);
+                if exact.exists() {
+                    current = exact;
+                    continue;
+                }
+
+                let search_dir = if current.as_os_str().is_empty() {
+                    Path::new(".")
+                } else {
+                    current.as_path()
+                };
+                let target = segment.to_string_lossy();
+                let matched = fs::read_dir(search_dir)
+                    .ok()?
+                    .flatten()
+                    .find(|entry| entry.file_name().to_string_lossy().eq_ignore_ascii_case(&target))
+                    .map(|entry| entry.path())?;
+                current = matched;
+            }
+        }
+    }
+
+    current.exists().then_some(current)
 }
 
 fn descriptor_replaces_map(project_root: &Path) -> bool {
@@ -1108,20 +1341,23 @@ fn load_merged_country_colors_from_roots(roots: &[PathBuf]) -> HashMap<String, R
     );
 
     for root in roots.iter().rev() {
-        let path = root.join("common/countries/colors.txt");
-        if !path.exists() {
+        let has_countries = resolve_existing_path("common/countries", std::slice::from_ref(root))
+            .is_some();
+        let has_country_tags = resolve_existing_path("common/country_tags", std::slice::from_ref(root))
+            .is_some();
+        if !has_countries && !has_country_tags {
             #[cfg(debug_assertions)]
-            println!("[map]   colors file not found: {}", path.display());
+            println!("[map]   no country color sources under {}", root.display());
             continue;
         }
 
-        let loaded = load_country_colors(path.to_string_lossy().to_string());
+        let loaded = load_country_colors_from_root(root);
         let count = loaded.len();
         for (tag, color) in loaded {
             colors.insert(tag, color);
         }
         #[cfg(debug_assertions)]
-        println!("[map]   loaded {} colors from {}", count, path.display());
+        println!("[map]   loaded {} colors from {}", count, root.display());
     }
 
     #[cfg(debug_assertions)]
@@ -2249,6 +2485,7 @@ pub fn get_map_tile_direct(
 mod tests {
     use super::{load_country_colors, RGBColor};
     use std::fs;
+    use tempfile::tempdir;
 
     fn write_temp_colors_file(content: &str) -> String {
         let unique = format!(
@@ -2304,8 +2541,153 @@ EEE = {
                 a: 255
             })
         );
-        assert_eq!(colors.get("CCC"), None);
+        assert_eq!(
+            colors.get("CCC"),
+            Some(&RGBColor {
+                r: 7,
+                g: 8,
+                b: 9,
+                a: 255
+            })
+        );
         assert_eq!(colors.get("DDD"), None);
-        assert_eq!(colors.get("EEE"), None);
+        assert_eq!(
+            colors.get("EEE"),
+            Some(&RGBColor {
+                r: 13,
+                g: 14,
+                b: 15,
+                a: 255
+            })
+        );
+    }
+
+    #[test]
+    fn load_country_colors_supports_indented_country_entries() {
+        let path = write_temp_colors_file(
+            r#"
+    aaa = {
+        color = { 16 17 18 }
+    }
+	BBB = {
+        color_ui = { 19 20 21 }
+    }
+"#,
+        );
+
+        let colors = load_country_colors(path.clone());
+        fs::remove_file(path).expect("failed to remove temp colors file");
+
+        assert_eq!(
+            colors.get("AAA"),
+            Some(&RGBColor {
+                r: 16,
+                g: 17,
+                b: 18,
+                a: 255
+            })
+        );
+        assert_eq!(
+            colors.get("BBB"),
+            Some(&RGBColor {
+                r: 19,
+                g: 20,
+                b: 21,
+                a: 255
+            })
+        );
+    }
+
+    #[test]
+    fn load_country_colors_supports_directory_input() {
+        let dir = tempdir().expect("failed to create temp dir");
+        let dir_path = dir.path();
+        fs::write(
+            dir_path.join("00_base.TXT"),
+            "AAA = { color = { 1 2 3 } }\nBBB = { color = { 4 5 6 } }\n",
+        )
+        .expect("failed to write base colors file");
+        fs::write(
+            dir_path.join("zz_override.txt"),
+            "BBB = { color = { 40 50 60 } }\nCCC = { color = { 7 8 9 } }\n",
+        )
+        .expect("failed to write override colors file");
+
+        let colors = load_country_colors(dir_path.to_string_lossy().to_string());
+
+        assert_eq!(
+            colors.get("AAA"),
+            Some(&RGBColor {
+                r: 1,
+                g: 2,
+                b: 3,
+                a: 255
+            })
+        );
+        assert_eq!(
+            colors.get("BBB"),
+            Some(&RGBColor {
+                r: 40,
+                g: 50,
+                b: 60,
+                a: 255
+            })
+        );
+        assert_eq!(
+            colors.get("CCC"),
+            Some(&RGBColor {
+                r: 7,
+                g: 8,
+                b: 9,
+                a: 255
+            })
+        );
+    }
+
+    #[test]
+    fn load_country_colors_supports_country_tag_referenced_files() {
+        let dir = tempdir().expect("failed to create temp dir");
+        let root = dir.path();
+        let country_tags_dir = root.join("common").join("country_tags");
+        let countries_dir = root.join("common").join("countries");
+        fs::create_dir_all(&country_tags_dir).expect("failed to create country_tags dir");
+        fs::create_dir_all(&countries_dir).expect("failed to create countries dir");
+
+        fs::write(
+            country_tags_dir.join("00_countries.txt"),
+            "ROA = \"countries/ROA.txt\"\nROX = \"countries/ROX.txt\"\n",
+        )
+        .expect("failed to write country_tags file");
+        fs::write(
+            countries_dir.join("ROA.txt"),
+            "graphical_culture = asian_gfx\ncolor = RGB { 130 136 123 }\n",
+        )
+        .expect("failed to write ROA file");
+        fs::write(
+            countries_dir.join("ROX.txt"),
+            "graphical_culture = asian_gfx\ncolor = RGB { 176 169 123 }\n",
+        )
+        .expect("failed to write ROX file");
+
+        let colors = load_country_colors(countries_dir.to_string_lossy().to_string());
+
+        assert_eq!(
+            colors.get("ROA"),
+            Some(&RGBColor {
+                r: 130,
+                g: 136,
+                b: 123,
+                a: 255
+            })
+        );
+        assert_eq!(
+            colors.get("ROX"),
+            Some(&RGBColor {
+                r: 176,
+                g: 169,
+                b: 123,
+                a: 255
+            })
+        );
     }
 }
