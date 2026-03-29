@@ -4,6 +4,42 @@
 
 use crate::json_decoder::JsonResult;
 use crate::models::*;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
+
+// ==================== GFX 索引缓存数据结构 ====================
+
+/// GFX 索引缓存条目
+/// 存储单个图标的纹理路径和文件修改时间
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GfxIndexEntry {
+    /// 纹理文件路径
+    pub texture_path: String,
+    /// GFX 文件修改时间（Unix 时间戳）
+    pub gfx_mtime: u64,
+    /// 纹理文件修改时间（Unix 时间戳）
+    pub texture_mtime: u64,
+}
+
+/// GFX 索引缓存
+/// 存储 icon_name → texture_path 的映射
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GfxIndexCache {
+    /// 索引条目映射
+    pub entries: HashMap<String, GfxIndexEntry>,
+    /// 缓存创建时间
+    pub created_at: u64,
+    /// 缓存版本号（用于兼容性检查）
+    pub version: u32,
+}
+
+/// 全局 GFX 索引缓存实例
+static GFX_INDEX_CACHE: Lazy<Mutex<Option<GfxIndexCache>>> = Lazy::new(|| Mutex::new(None));
+
+/// 当前缓存版本号
+const GFX_INDEX_CACHE_VERSION: u32 = 1;
 
 /// 解析 GFX 预览
 #[tauri::command]
@@ -207,6 +243,145 @@ pub fn write_icon_cache(icon_name: String, base64: String, mime_type: String) ->
 #[tauri::command]
 pub fn clear_icon_cache() -> serde_json::Value {
     clear_icon_cache_impl()
+}
+
+/// 构建 GFX 索引缓存 Tauri 命令
+#[tauri::command]
+pub fn build_gfx_index_cache_command(
+    project_root: Option<String>,
+    game_root: Option<String>,
+) -> serde_json::Value {
+    let mut roots: Vec<std::path::PathBuf> = Vec::new();
+    
+    if let Some(root) = project_root.as_ref() {
+        if !root.is_empty() {
+            roots.push(std::path::PathBuf::from(root));
+        }
+    }
+    
+    if let Some(root) = game_root.as_ref() {
+        if !root.is_empty() {
+            roots.push(std::path::PathBuf::from(root));
+        }
+    }
+    
+    if roots.is_empty() {
+        return serde_json::json!({
+            "success": false,
+            "message": "未提供有效的项目或游戏目录"
+        });
+    }
+    
+    match build_gfx_index_cache(&roots) {
+        Ok(cache) => {
+            serde_json::json!({
+                "success": true,
+                "message": format!("索引构建成功，共索引 {} 个图标", cache.entries.len()),
+                "icon_count": cache.entries.len()
+            })
+        }
+        Err(e) => {
+            serde_json::json!({
+                "success": false,
+                "message": format!("索引构建失败: {}", e)
+            })
+        }
+    }
+}
+
+/// 增量更新 GFX 索引缓存 Tauri 命令
+#[tauri::command]
+pub fn update_gfx_index_cache_command(
+    project_root: Option<String>,
+    game_root: Option<String>,
+) -> serde_json::Value {
+    let mut roots: Vec<std::path::PathBuf> = Vec::new();
+    
+    if let Some(root) = project_root.as_ref() {
+        if !root.is_empty() {
+            roots.push(std::path::PathBuf::from(root));
+        }
+    }
+    
+    if let Some(root) = game_root.as_ref() {
+        if !root.is_empty() {
+            roots.push(std::path::PathBuf::from(root));
+        }
+    }
+    
+    if roots.is_empty() {
+        return serde_json::json!({
+            "success": false,
+            "message": "未提供有效的项目或游戏目录"
+        });
+    }
+    
+    match update_gfx_index_cache_incremental(&roots) {
+        Ok(cache) => {
+            serde_json::json!({
+                "success": true,
+                "message": format!("索引更新成功，共索引 {} 个图标", cache.entries.len()),
+                "icon_count": cache.entries.len()
+            })
+        }
+        Err(e) => {
+            serde_json::json!({
+                "success": false,
+                "message": format!("索引更新失败: {}", e)
+            })
+        }
+    }
+}
+
+/// 清除 GFX 索引缓存 Tauri 命令
+#[tauri::command]
+pub fn clear_gfx_index_cache_command() -> serde_json::Value {
+    match clear_gfx_index_cache() {
+        Ok(_) => {
+            serde_json::json!({
+                "success": true,
+                "message": "索引缓存已清除"
+            })
+        }
+        Err(e) => {
+            serde_json::json!({
+                "success": false,
+                "message": format!("清除索引缓存失败: {}", e)
+            })
+        }
+    }
+}
+
+/// 获取 GFX 索引缓存统计信息 Tauri 命令
+#[tauri::command]
+pub fn get_gfx_index_cache_stats() -> serde_json::Value {
+    let cache_lock = match GFX_INDEX_CACHE.lock() {
+        Ok(lock) => lock,
+        Err(e) => {
+            return serde_json::json!({
+                "success": false,
+                "message": format!("获取缓存锁失败: {}", e)
+            });
+        }
+    };
+    
+    match cache_lock.as_ref() {
+        Some(cache) => {
+            serde_json::json!({
+                "success": true,
+                "icon_count": cache.entries.len(),
+                "created_at": cache.created_at,
+                "version": cache.version
+            })
+        }
+        None => {
+            serde_json::json!({
+                "success": true,
+                "icon_count": 0,
+                "message": "缓存未初始化"
+            })
+        }
+    }
 }
 
 /// 获取修改器列表
@@ -786,6 +961,22 @@ fn load_focus_icon_impl(
         };
     }
 
+    // 优先使用索引缓存查找图标
+    match get_or_build_gfx_index_cache(&roots) {
+        Ok(cache) => {
+            if let Some(texture_path) = find_icon_in_index_cache(&icon_name_trimmed, &cache) {
+                println!("[gfx-index] 从索引缓存命中: {} -> {}", icon_name_trimmed, texture_path);
+                return super::file::read_image_as_base64(texture_path);
+            }
+        }
+        Err(e) => {
+            println!("[gfx-index] 获取索引缓存失败: {}", e);
+        }
+    }
+
+    // 如果索引缓存未命中，回退到原有扫描逻辑
+    println!("[gfx-index] 索引缓存未命中，回退到扫描模式: {}", icon_name_trimmed);
+    
     for root in roots.iter() {
         // HOI4 习惯把 gfx 定义放在 root/gfx/**/**.gfx
         // 旧逻辑只扫 root/interface/*.gfx，导致 MIO trait 等图标无法命中。
@@ -842,4 +1033,428 @@ fn load_focus_icon_impl(
         base64: None,
         mime_type: None,
     }
+}
+
+// ==================== GFX 索引缓存函数 ====================
+
+/// 获取 GFX 索引缓存文件路径
+fn get_gfx_index_cache_path() -> std::path::PathBuf {
+    let cache_dir = get_cache_dir();
+    cache_dir.join("gfx_index_cache.json")
+}
+
+/// 获取文件修改时间（Unix 时间戳）
+fn get_file_mtime(path: &std::path::Path) -> Result<u64, String> {
+    let metadata = std::fs::metadata(path)
+        .map_err(|e| format!("获取文件元数据失败: {} ({})", path.display(), e))?;
+    
+    let modified = metadata
+        .modified()
+        .map_err(|e| format!("获取文件修改时间失败: {} ({})", path.display(), e))?;
+    
+    let duration = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("计算时间戳失败: {} ({})", path.display(), e))?;
+    
+    Ok(duration.as_secs())
+}
+
+/// 从磁盘加载 GFX 索引缓存
+fn load_gfx_index_cache_from_disk() -> Result<Option<GfxIndexCache>, String> {
+    let cache_path = get_gfx_index_cache_path();
+    
+    if !cache_path.exists() {
+        return Ok(None);
+    }
+    
+    let content = std::fs::read_to_string(&cache_path)
+        .map_err(|e| format!("读取索引缓存文件失败: {} ({})", cache_path.display(), e))?;
+    
+    let cache: GfxIndexCache = serde_json::from_str(&content)
+        .map_err(|e| format!("解析索引缓存文件失败: {} ({})", cache_path.display(), e))?;
+    
+    // 检查版本号
+    if cache.version != GFX_INDEX_CACHE_VERSION {
+        println!("[gfx-index] 缓存版本不匹配，需要重建索引");
+        return Ok(None);
+    }
+    
+    Ok(Some(cache))
+}
+
+/// 将 GFX 索引缓存保存到磁盘
+fn save_gfx_index_cache_to_disk(cache: &GfxIndexCache) -> Result<(), String> {
+    let cache_path = get_gfx_index_cache_path();
+    
+    let content = serde_json::to_string_pretty(cache)
+        .map_err(|e| format!("序列化索引缓存失败: {}", e))?;
+    
+    std::fs::write(&cache_path, content)
+        .map_err(|e| format!("写入索引缓存文件失败: {} ({})", cache_path.display(), e))?;
+    
+    println!("[gfx-index] 索引缓存已保存到: {}", cache_path.display());
+    Ok(())
+}
+
+/// 扫描单个 GFX 文件并提取图标映射
+fn scan_gfx_file(
+    gfx_path: &std::path::Path,
+    root: &std::path::Path,
+) -> Result<Vec<(String, GfxIndexEntry)>, String> {
+    let content = std::fs::read_to_string(gfx_path)
+        .map_err(|e| format!("读取 GFX 文件失败: {} ({})", gfx_path.display(), e))?;
+    
+    let gfx_mtime = get_file_mtime(gfx_path)?;
+    
+    let mut entries = Vec::new();
+    let mut in_block = false;
+    let mut block_lines: Vec<String> = Vec::new();
+    
+    for line in content.lines() {
+        let trimmed = line.trim();
+        
+        if !in_block {
+            // 支持 SpriteType 和 spriteType 两种写法
+            if trimmed.starts_with("SpriteType") || trimmed.starts_with("spriteType") {
+                in_block = true;
+                block_lines.clear();
+                block_lines.push(line.to_string());
+            }
+            continue;
+        }
+        
+        block_lines.push(line.to_string());
+        
+        if trimmed.starts_with('}') {
+            let mut name_value: Option<String> = None;
+            let mut texture_value: Option<String> = None;
+            
+            for bline in &block_lines {
+                let t = bline.trim();
+                
+                if name_value.is_none() && t.starts_with("name") {
+                    if let Some(eq_pos) = t.find('=') {
+                        let value_str = t[eq_pos + 1..].trim();
+                        let cleaned = value_str.trim_matches('"').trim_matches('\'').to_string();
+                        name_value = Some(cleaned);
+                    }
+                } else if texture_value.is_none() && t.starts_with("texturefile") {
+                    if let Some(eq_pos) = t.find('=') {
+                        let value_str = t[eq_pos + 1..].trim();
+                        let cleaned = value_str.trim_matches('"').trim_matches('\'').to_string();
+                        texture_value = Some(cleaned);
+                    }
+                }
+            }
+            
+            if let (Some(name), Some(texture)) = (name_value, texture_value) {
+                let normalized_rel = texture.replace('\\', "/");
+                let texture_path = root.join(&normalized_rel);
+                
+                // 获取纹理文件修改时间
+                let texture_mtime = if texture_path.exists() {
+                    get_file_mtime(&texture_path).unwrap_or(0)
+                } else {
+                    0
+                };
+                
+                entries.push((
+                    name,
+                    GfxIndexEntry {
+                        texture_path: texture_path.to_string_lossy().to_string(),
+                        gfx_mtime,
+                        texture_mtime,
+                    },
+                ));
+            }
+            
+            in_block = false;
+            block_lines.clear();
+        }
+    }
+    
+    Ok(entries)
+}
+
+/// 构建 GFX 索引缓存
+/// 扫描所有 GFX 文件并建立 icon_name → texture_path 的映射
+fn build_gfx_index_cache(roots: &[std::path::PathBuf]) -> Result<GfxIndexCache, String> {
+    use walkdir::WalkDir;
+    
+    println!("[gfx-index] 开始构建 GFX 索引缓存...");
+    let start_time = std::time::Instant::now();
+    
+    let mut entries: HashMap<String, GfxIndexEntry> = HashMap::new();
+    let mut scanned_files = 0;
+    let mut total_icons = 0;
+    
+    for root in roots {
+        // HOI4 习惯把 gfx 定义放在 root/gfx/**/**.gfx
+        let mut scan_roots: Vec<std::path::PathBuf> = vec![root.join("gfx")];
+        // 兼容某些工程把 gfx 直接放在 interface 下的情况
+        scan_roots.push(root.join("interface"));
+        
+        for scan_root in scan_roots {
+            if !scan_root.exists() || !scan_root.is_dir() {
+                continue;
+            }
+            
+            for entry in WalkDir::new(&scan_root)
+                .follow_links(false)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
+                if !entry.file_type().is_file() {
+                    continue;
+                }
+                
+                let path = entry.path();
+                let ext = path
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+                
+                if ext != "gfx" {
+                    continue;
+                }
+                
+                scanned_files += 1;
+                
+                match scan_gfx_file(path, root) {
+                    Ok(file_entries) => {
+                        for (icon_name, entry) in file_entries {
+                            entries.insert(icon_name, entry);
+                            total_icons += 1;
+                        }
+                    }
+                    Err(e) => {
+                        println!("[gfx-index] 扫描文件失败: {} - {}", path.display(), e);
+                    }
+                }
+            }
+        }
+    }
+    
+    let elapsed = start_time.elapsed();
+    println!(
+        "[gfx-index] 索引构建完成: 扫描 {} 个文件, 索引 {} 个图标, 耗时 {:.2}s",
+        scanned_files,
+        total_icons,
+        elapsed.as_secs_f64()
+    );
+    
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("获取系统时间失败: {}", e))?;
+    
+    Ok(GfxIndexCache {
+        entries,
+        created_at: now.as_secs(),
+        version: GFX_INDEX_CACHE_VERSION,
+    })
+}
+
+/// 获取或构建 GFX 索引缓存
+fn get_or_build_gfx_index_cache(
+    roots: &[std::path::PathBuf],
+) -> Result<GfxIndexCache, String> {
+    // 尝试从内存缓存获取
+    {
+        let cache_lock = GFX_INDEX_CACHE.lock()
+            .map_err(|e| format!("获取内存缓存锁失败: {}", e))?;
+        
+        if let Some(cache) = cache_lock.as_ref() {
+            println!("[gfx-index] 使用内存缓存");
+            return Ok(cache.clone());
+        }
+    }
+    
+    // 尝试从磁盘缓存加载
+    if let Some(cache) = load_gfx_index_cache_from_disk()? {
+        println!("[gfx-index] 从磁盘加载缓存");
+        
+        // 验证缓存是否仍然有效（检查根目录是否存在）
+        let mut cache_valid = true;
+        for root in roots {
+            if !root.exists() {
+                cache_valid = false;
+                break;
+            }
+        }
+        
+        if cache_valid {
+            // 更新内存缓存
+            let mut cache_lock = GFX_INDEX_CACHE.lock()
+                .map_err(|e| format!("获取内存缓存锁失败: {}", e))?;
+            *cache_lock = Some(cache.clone());
+            return Ok(cache);
+        } else {
+            println!("[gfx-index] 缓存无效，需要重建");
+        }
+    }
+    
+    // 构建新的索引缓存
+    let cache = build_gfx_index_cache(roots)?;
+    
+    // 保存到磁盘
+    if let Err(e) = save_gfx_index_cache_to_disk(&cache) {
+        println!("[gfx-index] 保存缓存到磁盘失败: {}", e);
+    }
+    
+    // 更新内存缓存
+    let mut cache_lock = GFX_INDEX_CACHE.lock()
+        .map_err(|e| format!("获取内存缓存锁失败: {}", e))?;
+    *cache_lock = Some(cache.clone());
+    
+    Ok(cache)
+}
+
+/// 增量更新 GFX 索引缓存
+/// 只扫描修改过的文件
+fn update_gfx_index_cache_incremental(
+    roots: &[std::path::PathBuf],
+) -> Result<GfxIndexCache, String> {
+    use walkdir::WalkDir;
+    
+    println!("[gfx-index] 开始增量更新 GFX 索引缓存...");
+    let start_time = std::time::Instant::now();
+    
+    // 获取现有缓存
+    let mut cache = {
+        let cache_lock = GFX_INDEX_CACHE.lock()
+            .map_err(|e| format!("获取内存缓存锁失败: {}", e))?;
+        
+        match cache_lock.as_ref() {
+            Some(c) => c.clone(),
+            None => {
+                // 如果没有缓存，执行完整构建
+                return build_gfx_index_cache(roots);
+            }
+        }
+    };
+    
+    let mut updated_files = 0;
+    let mut updated_icons = 0;
+    
+    for root in roots {
+        let mut scan_roots: Vec<std::path::PathBuf> = vec![root.join("gfx")];
+        scan_roots.push(root.join("interface"));
+        
+        for scan_root in scan_roots {
+            if !scan_root.exists() || !scan_root.is_dir() {
+                continue;
+            }
+            
+            for entry in WalkDir::new(&scan_root)
+                .follow_links(false)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
+                if !entry.file_type().is_file() {
+                    continue;
+                }
+                
+                let path = entry.path();
+                let ext = path
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+                
+                if ext != "gfx" {
+                    continue;
+                }
+                
+                // 检查文件是否修改过
+                let gfx_mtime = match get_file_mtime(path) {
+                    Ok(mtime) => mtime,
+                    Err(_) => continue,
+                };
+                
+                // 检查缓存中是否有该文件的条目，且修改时间是否一致
+                let mut need_rescan = false;
+                for entry in cache.entries.values() {
+                    // 如果缓存中的 gfx_mtime 与当前文件修改时间不同，需要重新扫描
+                    if entry.gfx_mtime != gfx_mtime {
+                        need_rescan = true;
+                        break;
+                    }
+                }
+                
+                if !need_rescan {
+                    continue;
+                }
+                
+                updated_files += 1;
+                
+                // 重新扫描该文件
+                match scan_gfx_file(path, root) {
+                    Ok(file_entries) => {
+                        for (icon_name, entry) in file_entries {
+                            cache.entries.insert(icon_name, entry);
+                            updated_icons += 1;
+                        }
+                    }
+                    Err(e) => {
+                        println!("[gfx-index] 扫描文件失败: {} - {}", path.display(), e);
+                    }
+                }
+            }
+        }
+    }
+    
+    let elapsed = start_time.elapsed();
+    println!(
+        "[gfx-index] 增量更新完成: 更新 {} 个文件, {} 个图标, 耗时 {:.2}s",
+        updated_files,
+        updated_icons,
+        elapsed.as_secs_f64()
+    );
+    
+    // 更新缓存时间
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("获取系统时间失败: {}", e))?;
+    cache.created_at = now.as_secs();
+    
+    // 保存到磁盘
+    if let Err(e) = save_gfx_index_cache_to_disk(&cache) {
+        println!("[gfx-index] 保存缓存到磁盘失败: {}", e);
+    }
+    
+    // 更新内存缓存
+    let mut cache_lock = GFX_INDEX_CACHE.lock()
+        .map_err(|e| format!("获取内存缓存锁失败: {}", e))?;
+    *cache_lock = Some(cache.clone());
+    
+    Ok(cache)
+}
+
+/// 清除 GFX 索引缓存
+fn clear_gfx_index_cache() -> Result<(), String> {
+    // 清除内存缓存
+    {
+        let mut cache_lock = GFX_INDEX_CACHE.lock()
+            .map_err(|e| format!("获取内存缓存锁失败: {}", e))?;
+        *cache_lock = None;
+    }
+    
+    // 删除磁盘缓存文件
+    let cache_path = get_gfx_index_cache_path();
+    if cache_path.exists() {
+        std::fs::remove_file(&cache_path)
+            .map_err(|e| format!("删除索引缓存文件失败: {} ({})", cache_path.display(), e))?;
+        println!("[gfx-index] 已清除索引缓存");
+    }
+    
+    Ok(())
+}
+
+/// 从索引缓存中查找图标纹理路径
+fn find_icon_in_index_cache(
+    icon_name: &str,
+    cache: &GfxIndexCache,
+) -> Option<String> {
+    cache.entries.get(icon_name).map(|entry| entry.texture_path.clone())
 }
