@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
+use std::time::SystemTime;
 
 // ==================== GFX 索引缓存数据结构 ====================
 
@@ -40,6 +41,40 @@ static GFX_INDEX_CACHE: Lazy<Mutex<Option<GfxIndexCache>>> = Lazy::new(|| Mutex:
 
 /// 当前缓存版本号
 const GFX_INDEX_CACHE_VERSION: u32 = 1;
+
+// ==================== DDS 转换缓存数据结构 ====================
+
+/// DDS 转换缓存条目
+/// 存储单个DDS文件的转换信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DdsConversionEntry {
+    /// 源DDS文件路径
+    pub source_path: String,
+    /// 源文件修改时间（Unix 时间戳）
+    pub source_mtime: u64,
+    /// 转换后的PNG文件路径
+    pub png_path: String,
+    /// 转换时间（Unix 时间戳）
+    pub converted_at: u64,
+}
+
+/// DDS 转换缓存
+/// 存储源文件路径哈希 → 转换条目的映射
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DdsConversionCache {
+    /// 缓存条目映射（键为源文件路径的哈希值）
+    pub entries: HashMap<String, DdsConversionEntry>,
+    /// 缓存创建时间
+    pub created_at: u64,
+    /// 缓存版本号（用于兼容性检查）
+    pub version: u32,
+}
+
+/// 全局 DDS 转换缓存实例
+static DDS_CONVERSION_CACHE: Lazy<Mutex<Option<DdsConversionCache>>> = Lazy::new(|| Mutex::new(None));
+
+/// 当前 DDS 转换缓存版本号
+const DDS_CONVERSION_CACHE_VERSION: u32 = 1;
 
 /// 解析 GFX 预览
 #[tauri::command]
@@ -529,6 +564,13 @@ fn write_png_cache_from_texture(
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
+    // 首先检查 DDS 转换缓存
+    if let Some(cached_png_path) = find_dds_conversion_in_cache(&src, mtime) {
+        println!("[gfx-preview] DDS 转换缓存命中: {} -> {}", src, cached_png_path);
+        return Ok(std::path::PathBuf::from(cached_png_path));
+    }
+
+    // 如果缓存未命中，使用原有的缓存机制
     let cache_dir = get_gfx_preview_cache_dir();
     let key = format!("{}@{}", src, mtime);
     let file_name = format!("{}.png", hash_string(&key));
@@ -536,6 +578,10 @@ fn write_png_cache_from_texture(
 
     if out_path.exists() {
         println!("[gfx-preview] cache hit: {} -> {}", src, out_path.display());
+        // 将现有缓存添加到 DDS 转换缓存
+        if let Err(e) = add_dds_conversion_to_cache(&src, mtime, &out_path.to_string_lossy()) {
+            println!("[gfx-preview] 添加到 DDS 转换缓存失败: {}", e);
+        }
         return Ok(out_path);
     }
 
@@ -576,6 +622,12 @@ fn write_png_cache_from_texture(
     fs::write(&out_path, png_bytes)
         .map_err(|e| format!("Failed to write png cache: {} ({})", out_path.display(), e))?;
     println!("[gfx-preview] wrote png cache: {}", out_path.display());
+    
+    // 将新生成的缓存添加到 DDS 转换缓存
+    if let Err(e) = add_dds_conversion_to_cache(&src, mtime, &out_path.to_string_lossy()) {
+        println!("[gfx-preview] 添加到 DDS 转换缓存失败: {}", e);
+    }
+    
     Ok(out_path)
 }
 
@@ -1457,4 +1509,368 @@ fn find_icon_in_index_cache(
     cache: &GfxIndexCache,
 ) -> Option<String> {
     cache.entries.get(icon_name).map(|entry| entry.texture_path.clone())
+}
+
+// ==================== DDS 转换缓存函数 ====================
+
+/// 获取 DDS 转换缓存目录
+fn get_dds_conversion_cache_dir() -> std::path::PathBuf {
+    let config_dir = dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let dir = config_dir
+        .join("HOI4_GUI_Editor")
+        .join("dds-conversion-cache");
+
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        println!("[dds-cache] 创建 DDS 转换缓存目录失败: {}", e);
+    }
+
+    dir
+}
+
+/// 获取 DDS 转换缓存文件路径
+fn get_dds_conversion_cache_path() -> std::path::PathBuf {
+    let cache_dir = get_dds_conversion_cache_dir();
+    cache_dir.join("dds_conversion_cache.json")
+}
+
+/// 从磁盘加载 DDS 转换缓存
+fn load_dds_conversion_cache_from_disk() -> Result<Option<DdsConversionCache>, String> {
+    let cache_path = get_dds_conversion_cache_path();
+    
+    if !cache_path.exists() {
+        return Ok(None);
+    }
+    
+    let content = std::fs::read_to_string(&cache_path)
+        .map_err(|e| format!("[dds-cache] 读取转换缓存文件失败: {} ({})", cache_path.display(), e))?;
+    
+    let cache: DdsConversionCache = serde_json::from_str(&content)
+        .map_err(|e| format!("[dds-cache] 解析转换缓存文件失败: {} ({})", cache_path.display(), e))?;
+    
+    // 检查版本号
+    if cache.version != DDS_CONVERSION_CACHE_VERSION {
+        println!("[dds-cache] 缓存版本不匹配，需要重建");
+        return Ok(None);
+    }
+    
+    Ok(Some(cache))
+}
+
+/// 将 DDS 转换缓存保存到磁盘
+fn save_dds_conversion_cache_to_disk(cache: &DdsConversionCache) -> Result<(), String> {
+    let cache_path = get_dds_conversion_cache_path();
+    
+    let content = serde_json::to_string_pretty(cache)
+        .map_err(|e| format!("[dds-cache] 序列化转换缓存失败: {}", e))?;
+    
+    std::fs::write(&cache_path, content)
+        .map_err(|e| format!("[dds-cache] 写入转换缓存文件失败: {} ({})", cache_path.display(), e))?;
+    
+    println!("[dds-cache] 转换缓存已保存到: {}", cache_path.display());
+    Ok(())
+}
+
+/// 获取或构建 DDS 转换缓存
+fn get_or_build_dds_conversion_cache() -> Result<DdsConversionCache, String> {
+    // 尝试从内存缓存获取
+    {
+        let cache_lock = DDS_CONVERSION_CACHE.lock()
+            .map_err(|e| format!("[dds-cache] 获取内存缓存锁失败: {}", e))?;
+        
+        if let Some(cache) = cache_lock.as_ref() {
+            println!("[dds-cache] 使用内存缓存");
+            return Ok(cache.clone());
+        }
+    }
+    
+    // 尝试从磁盘缓存加载
+    if let Some(cache) = load_dds_conversion_cache_from_disk()? {
+        println!("[dds-cache] 从磁盘加载缓存");
+        
+        // 更新内存缓存
+        let mut cache_lock = DDS_CONVERSION_CACHE.lock()
+            .map_err(|e| format!("[dds-cache] 获取内存缓存锁失败: {}", e))?;
+        *cache_lock = Some(cache.clone());
+        return Ok(cache);
+    }
+    
+    // 创建新的转换缓存
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("[dds-cache] 获取系统时间失败: {}", e))?;
+    
+    let cache = DdsConversionCache {
+        entries: HashMap::new(),
+        created_at: now.as_secs(),
+        version: DDS_CONVERSION_CACHE_VERSION,
+    };
+    
+    // 保存到磁盘
+    if let Err(e) = save_dds_conversion_cache_to_disk(&cache) {
+        println!("[dds-cache] 保存缓存到磁盘失败: {}", e);
+    }
+    
+    // 更新内存缓存
+    let mut cache_lock = DDS_CONVERSION_CACHE.lock()
+        .map_err(|e| format!("[dds-cache] 获取内存缓存锁失败: {}", e))?;
+    *cache_lock = Some(cache.clone());
+    
+    Ok(cache)
+}
+
+/// 清除 DDS 转换缓存
+fn clear_dds_conversion_cache() -> Result<(), String> {
+    // 清除内存缓存
+    {
+        let mut cache_lock = DDS_CONVERSION_CACHE.lock()
+            .map_err(|e| format!("[dds-cache] 获取内存缓存锁失败: {}", e))?;
+        *cache_lock = None;
+    }
+    
+    // 删除磁盘缓存文件
+    let cache_path = get_dds_conversion_cache_path();
+    if cache_path.exists() {
+        std::fs::remove_file(&cache_path)
+            .map_err(|e| format!("[dds-cache] 删除转换缓存文件失败: {} ({})", cache_path.display(), e))?;
+        println!("[dds-cache] 已清除转换缓存");
+    }
+    
+    // 删除缓存目录中的所有 PNG 文件
+    let cache_dir = get_dds_conversion_cache_dir();
+    if cache_dir.exists() {
+        match std::fs::read_dir(&cache_dir) {
+            Ok(entries) => {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        let path = entry.path();
+                        if path.extension().and_then(|s| s.to_str()) == Some("png") {
+                            if let Err(e) = std::fs::remove_file(&path) {
+                                println!("[dds-cache] 删除缓存文件失败: {} ({})", path.display(), e);
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                println!("[dds-cache] 读取缓存目录失败: {}", e);
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+/// 从 DDS 转换缓存中查找转换结果
+fn find_dds_conversion_in_cache(
+    source_path: &str,
+    source_mtime: u64,
+) -> Option<String> {
+    let cache = match get_or_build_dds_conversion_cache() {
+        Ok(c) => c,
+        Err(_) => return None,
+    };
+    
+    let key = hash_string(source_path);
+    
+    if let Some(entry) = cache.entries.get(&key) {
+        // 检查修改时间是否匹配
+        if entry.source_mtime == source_mtime {
+            // 检查 PNG 文件是否存在
+            let png_path = std::path::PathBuf::from(&entry.png_path);
+            if png_path.exists() {
+                println!("[dds-cache] 缓存命中: {} -> {}", source_path, entry.png_path);
+                return Some(entry.png_path.clone());
+            } else {
+                println!("[dds-cache] 缓存文件不存在: {}", entry.png_path);
+            }
+        } else {
+            println!("[dds-cache] 缓存过期: {} (mtime: {} != {})", source_path, entry.source_mtime, source_mtime);
+        }
+    }
+    
+    None
+}
+
+/// 将 DDS 转换结果添加到缓存
+fn add_dds_conversion_to_cache(
+    source_path: &str,
+    source_mtime: u64,
+    png_path: &str,
+) -> Result<(), String> {
+    let mut cache = get_or_build_dds_conversion_cache()?;
+    
+    let key = hash_string(source_path);
+    
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("[dds-cache] 获取系统时间失败: {}", e))?;
+    
+    let entry = DdsConversionEntry {
+        source_path: source_path.to_string(),
+        source_mtime,
+        png_path: png_path.to_string(),
+        converted_at: now.as_secs(),
+    };
+    
+    cache.entries.insert(key, entry);
+    
+    // 保存到磁盘
+    if let Err(e) = save_dds_conversion_cache_to_disk(&cache) {
+        println!("[dds-cache] 保存缓存到磁盘失败: {}", e);
+    }
+    
+    // 更新内存缓存
+    let mut cache_lock = DDS_CONVERSION_CACHE.lock()
+        .map_err(|e| format!("[dds-cache] 获取内存缓存锁失败: {}", e))?;
+    *cache_lock = Some(cache);
+    
+    println!("[dds-cache] 已添加到缓存: {} -> {}", source_path, png_path);
+    Ok(())
+}
+
+/// 清理过期的 DDS 转换缓存条目
+fn cleanup_expired_dds_conversion_cache() -> Result<usize, String> {
+    let mut cache = get_or_build_dds_conversion_cache()?;
+    let mut removed_count = 0;
+    
+    let keys_to_remove: Vec<String> = cache
+        .entries
+        .iter()
+        .filter(|(_, entry)| {
+            // 检查源文件是否存在
+            let source_path = std::path::PathBuf::from(&entry.source_path);
+            if !source_path.exists() {
+                println!("[dds-cache] 源文件不存在，移除缓存: {}", entry.source_path);
+                return true;
+            }
+            
+            // 检查 PNG 文件是否存在
+            let png_path = std::path::PathBuf::from(&entry.png_path);
+            if !png_path.exists() {
+                println!("[dds-cache] PNG 文件不存在，移除缓存: {}", entry.png_path);
+                return true;
+            }
+            
+            // 检查源文件修改时间是否变化
+            match get_file_mtime(&source_path) {
+                Ok(current_mtime) => {
+                    if current_mtime != entry.source_mtime {
+                        println!("[dds-cache] 源文件已修改，移除缓存: {} (mtime: {} != {})",
+                            entry.source_path, entry.source_mtime, current_mtime);
+                        return true;
+                    }
+                }
+                Err(_) => {
+                    println!("[dds-cache] 无法获取源文件修改时间，移除缓存: {}", entry.source_path);
+                    return true;
+                }
+            }
+            
+            false
+        })
+        .map(|(key, _)| key.clone())
+        .collect();
+    
+    for key in &keys_to_remove {
+        if let Some(entry) = cache.entries.remove(key) {
+            // 删除 PNG 文件
+            let png_path = std::path::PathBuf::from(&entry.png_path);
+            if png_path.exists() {
+                if let Err(e) = std::fs::remove_file(&png_path) {
+                    println!("[dds-cache] 删除缓存文件失败: {} ({})", png_path.display(), e);
+                }
+            }
+            removed_count += 1;
+        }
+    }
+    
+    if removed_count > 0 {
+        // 保存到磁盘
+        if let Err(e) = save_dds_conversion_cache_to_disk(&cache) {
+            println!("[dds-cache] 保存缓存到磁盘失败: {}", e);
+        }
+        
+        // 更新内存缓存
+        let mut cache_lock = DDS_CONVERSION_CACHE.lock()
+            .map_err(|e| format!("[dds-cache] 获取内存缓存锁失败: {}", e))?;
+        *cache_lock = Some(cache);
+    }
+    
+    Ok(removed_count)
+}
+
+/// 获取 DDS 转换缓存统计信息
+fn get_dds_conversion_cache_stats() -> serde_json::Value {
+    let cache_lock = match DDS_CONVERSION_CACHE.lock() {
+        Ok(lock) => lock,
+        Err(e) => {
+            return serde_json::json!({
+                "success": false,
+                "message": format!("获取缓存锁失败: {}", e)
+            });
+        }
+    };
+    
+    match cache_lock.as_ref() {
+        Some(cache) => {
+            serde_json::json!({
+                "success": true,
+                "entry_count": cache.entries.len(),
+                "created_at": cache.created_at,
+                "version": cache.version
+            })
+        }
+        None => {
+            serde_json::json!({
+                "success": true,
+                "entry_count": 0,
+                "message": "缓存未初始化"
+            })
+        }
+    }
+}
+
+/// DDS 转换缓存 Tauri 命令
+#[tauri::command]
+pub fn get_dds_conversion_cache_stats_command() -> serde_json::Value {
+    get_dds_conversion_cache_stats()
+}
+
+/// 清除 DDS 转换缓存 Tauri 命令
+#[tauri::command]
+pub fn clear_dds_conversion_cache_command() -> serde_json::Value {
+    match clear_dds_conversion_cache() {
+        Ok(_) => {
+            serde_json::json!({
+                "success": true,
+                "message": "DDS 转换缓存已清除"
+            })
+        }
+        Err(e) => {
+            serde_json::json!({
+                "success": false,
+                "message": format!("清除 DDS 转换缓存失败: {}", e)
+            })
+        }
+    }
+}
+
+/// 清理过期的 DDS 转换缓存 Tauri 命令
+#[tauri::command]
+pub fn cleanup_dds_conversion_cache_command() -> serde_json::Value {
+    match cleanup_expired_dds_conversion_cache() {
+        Ok(count) => {
+            serde_json::json!({
+                "success": true,
+                "message": format!("已清理 {} 个过期缓存条目", count),
+                "removed_count": count
+            })
+        }
+        Err(e) => {
+            serde_json::json!({
+                "success": false,
+                "message": format!("清理 DDS 转换缓存失败: {}", e)
+            })
+        }
+    }
 }
