@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import {
   type ProvinceDefinition,
   type DefaultMap,
@@ -74,6 +74,146 @@ export function useMapEngine() {
   const countryColors = ref<Record<string, RGBColor>>({})
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+
+  // ==================== Web Worker 相关 ====================
+  
+  /**
+   * Worker实例
+   */
+  let mapWorker: Worker | null = null
+  
+  /**
+   * Worker是否可用
+   */
+  const workerAvailable = ref(false)
+  
+  /**
+   * 待处理的任务队列
+   */
+  const pendingTasks = new Map<string, {
+    resolve: (value: any) => void
+    reject: (reason: any) => void
+  }>()
+  
+  /**
+   * 任务ID计数器
+   */
+  let taskIdCounter = 0
+  
+  /**
+   * 初始化Worker
+   */
+  function initWorker() {
+    try {
+      // 动态导入Worker
+      mapWorker = new Worker(
+        new URL('../workers/mapWorker.ts', import.meta.url),
+        { type: 'module' }
+      )
+      
+      // 监听Worker消息
+      mapWorker.onmessage = (event: MessageEvent) => {
+        const { type, result } = event.data
+        
+        if (type === 'result' && result) {
+          const task = pendingTasks.get(result.id)
+          if (task) {
+            if (result.success) {
+              task.resolve(result.data)
+            } else {
+              task.reject(new Error(result.error || 'Worker任务失败'))
+            }
+            pendingTasks.delete(result.id)
+          }
+        }
+      }
+      
+      // 监听Worker错误
+      mapWorker.onerror = (error) => {
+        console.error('Map Worker错误:', error)
+        workerAvailable.value = false
+        
+        // 拒绝所有待处理任务
+        pendingTasks.forEach((task) => {
+          task.reject(new Error('Worker发生错误'))
+        })
+        pendingTasks.clear()
+      }
+      
+      workerAvailable.value = true
+      logMapEvent('worker:initialized')
+    } catch (e) {
+      console.warn('Worker初始化失败，将使用主线程:', e)
+      workerAvailable.value = false
+    }
+  }
+  
+  /**
+   * 销毁Worker
+   */
+  function destroyWorker() {
+    if (mapWorker) {
+      mapWorker.terminate()
+      mapWorker = null
+      workerAvailable.value = false
+      
+      // 拒绝所有待处理任务
+      pendingTasks.forEach((task) => {
+        task.reject(new Error('Worker已销毁'))
+      })
+      pendingTasks.clear()
+      
+      logMapEvent('worker:destroyed')
+    }
+  }
+  
+  /**
+   * 向Worker发送任务
+   */
+  function sendTaskToWorker(task: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!mapWorker || !workerAvailable.value) {
+        reject(new Error('Worker不可用'))
+        return
+      }
+      
+      const taskId = `task_${++taskIdCounter}_${Date.now()}`
+      pendingTasks.set(taskId, { resolve, reject })
+      
+      mapWorker.postMessage({
+        type: 'task',
+        task: { ...task, id: taskId }
+      })
+      
+      // 设置超时
+      setTimeout(() => {
+        if (pendingTasks.has(taskId)) {
+          pendingTasks.delete(taskId)
+          reject(new Error('Worker任务超时'))
+        }
+      }, 5000)
+    })
+  }
+  
+  /**
+   * 向Worker添加缓存
+   */
+  function addCacheToWorker(key: string, data: number | Uint32Array) {
+    if (mapWorker && workerAvailable.value) {
+      mapWorker.postMessage({
+        type: 'cache',
+        cacheData: { key, data }
+      })
+    }
+  }
+  
+  // 初始化Worker
+  initWorker()
+  
+  // 组件卸载时销毁Worker
+  onUnmounted(() => {
+    destroyWorker()
+  })
 
   async function initMap(
     projectPath: string,
@@ -197,22 +337,110 @@ export function useMapEngine() {
     ))
   }
 
+  /**
+   * 获取省份ID（支持Worker回退）
+   */
   async function getProvinceId(x: number, y: number): Promise<number | null> {
-    return await measureMapAsync('frontend.getProvinceAtPoint', async () => (
-      await getProvinceAtPoint(x, y)
-    ))
+    try {
+      // 优先使用Worker
+      if (workerAvailable.value) {
+        try {
+          const result = await sendTaskToWorker({
+            type: 'getProvinceId',
+            x,
+            y
+          })
+          
+          // 缓存结果
+          if (result !== null) {
+            addCacheToWorker(`province_${x}_${y}`, result)
+          }
+          
+          return result
+        } catch (workerError) {
+          console.warn('Worker查询失败，回退到主线程:', workerError)
+        }
+      }
+      
+      // 回退到主线程
+      return await measureMapAsync('frontend.getProvinceAtPoint', async () => (
+        await getProvinceAtPoint(x, y)
+      ))
+    } catch (e: any) {
+      console.error('获取省份ID失败:', e)
+      alert(`获取省份ID失败: ${e.message}`)
+      return null
+    }
   }
 
+  /**
+   * 获取省份轮廓（支持Worker回退）
+   */
   async function getOutline(provinceId: number): Promise<Uint32Array> {
-    return await measureMapAsync('frontend.getProvinceOutline', async () => (
-      await getProvinceOutline(provinceId)
-    ))
+    try {
+      // 优先使用Worker
+      if (workerAvailable.value) {
+        try {
+          const result = await sendTaskToWorker({
+            type: 'getProvinceOutline',
+            provinceId
+          })
+          
+          // 缓存结果
+          if (result) {
+            addCacheToWorker(`outline_${provinceId}`, result)
+          }
+          
+          return result
+        } catch (workerError) {
+          console.warn('Worker计算失败，回退到主线程:', workerError)
+        }
+      }
+      
+      // 回退到主线程
+      return await measureMapAsync('frontend.getProvinceOutline', async () => (
+        await getProvinceOutline(provinceId)
+      ))
+    } catch (e: any) {
+      console.error('获取省份轮廓失败:', e)
+      alert(`获取省份轮廓失败: ${e.message}`)
+      return new Uint32Array()
+    }
   }
 
+  /**
+   * 获取地区轮廓（支持Worker回退）
+   */
   async function getStateOutlineWrapper(stateId: number): Promise<Uint32Array> {
-    return await measureMapAsync('frontend.getStateOutline', async () => (
-      await getStateOutline(stateId)
-    ))
+    try {
+      // 优先使用Worker
+      if (workerAvailable.value) {
+        try {
+          const result = await sendTaskToWorker({
+            type: 'getStateOutline',
+            stateId
+          })
+          
+          // 缓存结果
+          if (result) {
+            addCacheToWorker(`state_${stateId}`, result)
+          }
+          
+          return result
+        } catch (workerError) {
+          console.warn('Worker计算失败，回退到主线程:', workerError)
+        }
+      }
+      
+      // 回退到主线程
+      return await measureMapAsync('frontend.getStateOutline', async () => (
+        await getStateOutline(stateId)
+      ))
+    } catch (e: any) {
+      console.error('获取地区轮廓失败:', e)
+      alert(`获取地区轮廓失败: ${e.message}`)
+      return new Uint32Array()
+    }
   }
 
   return {
@@ -223,6 +451,7 @@ export function useMapEngine() {
     countryColors,
     isLoading,
     error,
+    workerAvailable,
     initMap,
     renderTile,
     getPreview,
