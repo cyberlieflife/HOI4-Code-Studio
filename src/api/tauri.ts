@@ -1139,6 +1139,7 @@ export interface ProvinceDefinition {
   coastal: boolean
   terrain: string
   continent: number
+  name?: string
 }
 
 export interface DefaultMap {
@@ -1335,6 +1336,13 @@ export async function getProvinceOutline(provinceId: number): Promise<Uint32Arra
 export async function getStateOutline(stateId: number): Promise<Uint32Array> {
   const res = await invoke<number[]>('get_state_outline', { stateId })
   return new Uint32Array(new Uint8Array(res).buffer)
+}
+
+/**
+ * 加载省份中文本地化名字
+ */
+export async function loadProvinceLocalizations(roots: string[]): Promise<Record<string, string>> {
+  return await invoke('load_province_localizations', { roots })
 }
 
 // ==================== MIO 预览 ====================

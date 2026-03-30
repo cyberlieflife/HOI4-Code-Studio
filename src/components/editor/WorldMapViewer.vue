@@ -157,8 +157,11 @@
         <!-- 地块视图 -->
         <template v-else-if="!hoverInfo.isState">
           <div class="text-hoi4-text font-bold text-sm tracking-wide mb-2 flex items-center justify-between">
-            <span>地块 #{{ hoverInfo.id }}</span>
+            <span>{{ hoverInfo.name || `地块 #${hoverInfo.id}` }}</span>
             <span class="text-[10px] bg-hoi4-comment/20 text-hoi4-comment px-1.5 py-0.5 rounded uppercase tracking-tighter">PROVINCE</span>
+          </div>
+          <div v-if="hoverInfo.localizedName" class="text-hoi4-text-dim text-[10px] mb-2">
+            地块 #{{ hoverInfo.id }}
           </div>
           <div class="h-px bg-hoi4-border/30 mb-3"></div>
           <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
@@ -253,7 +256,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useMapEngine } from '../../composables/useMapEngine'
-import { loadSettings, type ProvinceDefinition, type StateDefinition } from '../../api/tauri'
+import { loadSettings, loadProvinceLocalizations, type ProvinceDefinition, type StateDefinition } from '../../api/tauri'
 import { logMapEvent, measureMapAsync, measureMapSync } from '../../utils/mapPerformance'
 
 const props = defineProps<{
@@ -332,6 +335,9 @@ const outlineCache = new Map<string, Uint32Array>()
 let hoverLookupTimer: number | null = null
 let hoverLookupSequence = 0
 let lastHoverLookupKey = ''
+
+// 省份中文本地化名字
+const provinceLocalizations = ref<Record<string, string>>({})
 
 // 渲染缓存与分块 (LOD & LRU)
 const TILE_SIZE = 512
@@ -416,6 +422,7 @@ interface StateHoverInfo {
 interface ProvinceHoverInfo extends ProvinceDefinition {
   stateName?: string
   owner?: string
+  localizedName?: string
   isState: false
 }
 
@@ -450,9 +457,11 @@ const hoverInfo = computed<HoverInfo | null>(() => {
   // 根据高亮模式（highlightMode）而非视图模式（currentMode）来决定预览框内容
   if (highlightMode.value === 'province') {
     if (!state) return null
+    // 获取州中文本地化名字
+    const localizedStateName = provinceLocalizations.value[`STATE_${state.id}`]
     return {
       id: state.id,
-      name: state.name,
+      name: localizedStateName || state.name,
       owner: state.owner,
       cores: state.cores || [],
       claims: state.claims || [],
@@ -460,8 +469,13 @@ const hoverInfo = computed<HoverInfo | null>(() => {
     }
   }
 
+  // 获取省份中文本地化名字
+  const localizedName = provinceLocalizations.value[`STATE_${def.id}`]
+
   return {
     ...def,
+    name: localizedName || def.name,
+    localizedName,
     stateName: state?.name,
     owner: state?.owner,
     isState: false
@@ -662,6 +676,20 @@ async function refreshMap() {
     }).catch((error) => {
       console.error('Failed to draw minimap:', error)
     })
+    
+    // 加载省份中文本地化名字
+    void measureMapAsync('viewer.refreshMap.loadProvinceLocalizations', async () => {
+      try {
+        const roots = [props.projectPath]
+        if (props.gameDirectory) roots.push(props.gameDirectory)
+        if (props.dependencyRoots) roots.push(...props.dependencyRoots)
+        provinceLocalizations.value = await loadProvinceLocalizations(roots)
+        logMapEvent('viewer.refreshMap:localizationsLoaded', { count: Object.keys(provinceLocalizations.value).length })
+      } catch (error) {
+        console.error('Failed to load province localizations:', error)
+      }
+    })
+    
     updateProgress('就绪', '完成', 100)
     logMapEvent('viewer.refreshMap:done', {
       width: mapData.value?.width,

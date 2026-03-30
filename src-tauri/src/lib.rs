@@ -181,6 +181,7 @@ pub fn run() {
             map_engine::get_map_preview,
             map_engine::get_province_outline,
             map_engine::get_state_outline,
+            map_engine::load_province_localizations,
             gui_engine::parse_gui_file,
             gui_engine::parse_gui_content,
             gui_engine::parse_gfx_file,

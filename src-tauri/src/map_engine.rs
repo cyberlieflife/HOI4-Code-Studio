@@ -2541,6 +2541,133 @@ pub fn get_map_tile_direct(
     Ok(pixels)
 }
 
+/// 加载省份中文本地化名字
+#[tauri::command]
+pub fn load_province_localizations(roots: Vec<String>) -> HashMap<String, String> {
+    let mut map: HashMap<String, String> = HashMap::new();
+
+    for root in roots {
+        if root.trim().is_empty() {
+            continue;
+        }
+        let base = Path::new(&root).join("localisation").join("simp_chinese");
+        if !base.exists() || !base.is_dir() {
+            continue;
+        }
+
+        for entry in walkdir::WalkDir::new(&base)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let path = entry.path();
+            let ext = path
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            if ext != "yml" {
+                continue;
+            }
+
+            let content = match fs::read_to_string(path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+
+            parse_province_localization_yml(&content, &mut map);
+        }
+    }
+
+    map
+}
+
+/// 解析省份本地化 YML 文件
+fn parse_province_localization_yml(content: &str, out: &mut HashMap<String, String>) {
+    for raw_line in content.lines() {
+        let mut line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        // 去 BOM
+        if line.starts_with('\u{feff}') {
+            line = line.trim_start_matches('\u{feff}');
+        }
+
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('#') {
+            continue;
+        }
+
+        // header
+        if line.ends_with(':') {
+            continue;
+        }
+
+        let Some(colon_pos) = line.find(':') else {
+            continue;
+        };
+
+        let key = line[..colon_pos].trim();
+        if key.is_empty() {
+            continue;
+        }
+
+        // 处理 PROV_ 或 STATE_ 开头的省份本地化
+        if !key.starts_with("STATE_") {
+            continue;
+        }
+
+        let mut rest = line[colon_pos + 1..].trim_start();
+
+        // optional numeric like :0
+        if let Some(first) = rest.as_bytes().first().copied() {
+            if first.is_ascii_digit() {
+                let mut idx = 0usize;
+                let bytes = rest.as_bytes();
+                while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+                    idx += 1;
+                }
+                rest = rest[idx..].trim_start();
+            }
+        }
+
+        if !rest.starts_with('"') {
+            continue;
+        }
+        rest = &rest[1..];
+
+        let mut value = String::new();
+        let mut chars = rest.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch == '"' {
+                break;
+            }
+            if ch == '\\' {
+                // 简单处理转义，保留后续字符
+                if let Some(next) = chars.next() {
+                    value.push(next);
+                    continue;
+                }
+            }
+            value.push(ch);
+        }
+
+        if value.trim().is_empty() {
+            continue;
+        }
+
+        // 不覆盖已有 key（优先让前面的文件生效，保持稳定）
+        out.entry(key.to_string()).or_insert(value);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{load_country_colors, RGBColor};
