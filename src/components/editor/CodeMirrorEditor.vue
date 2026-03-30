@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { EditorState } from '@codemirror/state'
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view'
+import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, scrollPastEnd } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess } from '@codemirror/commands'
 import { bracketMatching, indentOnInput, indentUnit } from '@codemirror/language'
 import { closeBrackets, autocompletion, type CompletionContext } from '@codemirror/autocomplete'
@@ -220,6 +220,7 @@ async function initEditor() {
     autoIndentOnEnter,
     smartTab,
     keymap.of([...defaultKeymap, ...historyKeymap]),
+    scrollPastEnd(), // 启用滚动过冲功能
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         const newContent = update.state.doc.toString()
@@ -499,7 +500,7 @@ defineExpose({
 <style>
 .codemirror-editor {
   height: 100%;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .codemirror-editor .cm-editor {

@@ -700,7 +700,7 @@ defineExpose({
     </div>
 
     <!-- 编辑器 / 图片预览 / 事件关系图预览 -->
-    <div v-if="currentFile" class="flex-1 overflow-hidden relative bg-hoi4-dark">
+    <div v-if="currentFile" class="flex-1 overflow-auto relative bg-hoi4-dark">
      <!-- 世界地图预览 (使用 v-if 进行首次初始化，v-show 保持状态并避免重新加载) -->
      <WorldMapViewer
        v-if="hasMapLoaded"
