@@ -184,7 +184,7 @@ pub fn build_file_tree_parallel(path: &str, max_depth: usize) -> FileTreeResult 
 
     match build_tree_parallel_recursive(&path_buf, 0, max_depth, result.clone()) {
         Ok(_) => {
-            let nodes = result.lock().unwrap().clone();
+            let nodes = result.lock().unwrap_or_else(|e| e.into_inner()).clone();
             success_result!(nodes)
         }
         Err(e) => error_result!(format!("构建文件树失败: {}", e)),
@@ -231,7 +231,7 @@ fn build_tree_parallel_recursive(
                 )
                 .is_ok()
                 {
-                    let children = child_result.lock().unwrap().clone();
+                    let children = child_result.lock().unwrap_or_else(|e| e.into_inner()).clone();
                     Some(FileNode {
                         name,
                         path: path_str,
@@ -268,7 +268,7 @@ fn build_tree_parallel_recursive(
         _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
     });
 
-    *result.lock().unwrap() = sorted_nodes;
+    *result.lock().unwrap_or_else(|e| e.into_inner()) = sorted_nodes;
     Ok(())
 }
 

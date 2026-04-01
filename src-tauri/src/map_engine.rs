@@ -10,25 +10,25 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
-static RE_STATE_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"id\s*=\s*(\d+)").unwrap());
-static RE_STATE_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r#"name\s*=\s*"([^"]*)""#).unwrap());
+static RE_STATE_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"id\s*=\s*(\d+)").expect("RE_STATE_ID 正则编译失败"));
+static RE_STATE_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r#"name\s*=\s*"([^"]*)""#).expect("RE_STATE_NAME 正则编译失败"));
 static RE_STATE_OWNER: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?i)owner\s*=\s*['"]?([A-Za-z0-9]{3})['"]?"#).unwrap());
+    Lazy::new(|| Regex::new(r#"(?i)owner\s*=\s*['"]?([A-Za-z0-9]{3})['"]?"#).expect("RE_STATE_OWNER 正则编译失败"));
 static RE_STATE_CORE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"add_core_of\s*=\s*([A-Z0-9]{3})").unwrap());
+    Lazy::new(|| Regex::new(r"add_core_of\s*=\s*([A-Z0-9]{3})").expect("RE_STATE_CORE 正则编译失败"));
 static RE_STATE_CLAIM: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"add_claim_by\s*=\s*([A-Z0-9]{3})").unwrap());
+    Lazy::new(|| Regex::new(r"add_claim_by\s*=\s*([A-Z0-9]{3})").expect("RE_STATE_CLAIM 正则编译失败"));
 
 /// 用于解析 'TAG = "path/to/file.txt"' 格式的国家标签映射文件
 static RE_COUNTRY_TAG_MAPPING: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"(?m)^\s*([A-Za-z0-9]{2,4})\s*=\s*"([^"]*)""#).unwrap()
+    Regex::new(r#"(?m)^\s*([A-Za-z0-9]{2,4})\s*=\s*"([^"]*)""#).expect("RE_COUNTRY_TAG_MAPPING 正则编译失败")
 });
 static RE_COUNTRY_ENTRY: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?im)^[ \t]*([A-Za-z0-9]{3})\s*=\s*\{").unwrap());
+    Lazy::new(|| Regex::new(r"(?im)^[ \t]*([A-Za-z0-9]{3})\s*=\s*\{").expect("RE_COUNTRY_ENTRY 正则编译失败"));
 
 // RGB 颜色：支持 color / color_ui，支持可选 rgb 前缀，支持负值和小数
 static RE_COUNTRY_COLOR_RGB: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)(color(?:_ui)?)\s*=\s*(?:rgb\s*)?\{\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\}").unwrap()
+    Regex::new(r"(?i)(color(?:_ui)?)\s*=\s*(?:rgb\s*)?\{\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\}").expect("RE_COUNTRY_COLOR_RGB 正则编译失败")
 });
 
 /// 路径解析缓存，避免重复遍历目录
@@ -44,7 +44,7 @@ pub fn clear_path_resolve_cache() {
 
 // HSV 颜色：支持 color / color_ui
 static RE_COUNTRY_COLOR_HSV: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)(color(?:_ui)?)\s*=\s*HSV\s*\{\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\}").unwrap()
+    Regex::new(r"(?i)(color(?:_ui)?)\s*=\s*HSV\s*\{\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\}").expect("RE_COUNTRY_COLOR_HSV 正则编译失败")
 });
 
 /// 地图上下文状态 (常驻内存)

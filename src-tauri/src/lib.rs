@@ -206,5 +206,9 @@ pub fn run() {
             commands::stop_terminal_session,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .map_err(|e| {
+            eprintln!("❌ Tauri 应用启动失败: {}", e);
+            e
+        })
+        .ok();
 }

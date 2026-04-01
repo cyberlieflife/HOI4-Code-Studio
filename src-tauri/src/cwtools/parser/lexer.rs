@@ -170,8 +170,8 @@ impl<'a> Lexer<'a> {
             self.peeked = Some(self.next_token());
         }
 
-        // 安全：我们刚刚确保了 peeked 不是 None
-        self.peeked.as_ref().expect("peeked should be Some").clone()
+        // 确保 peeked 不是 None
+        self.peeked.as_ref().cloned().expect("peeked should be Some: 内部不变量违反，peek_token 在 peeked 为 None 时被调用")
     }
 
     /// 跳过空白字符（除了换行符）

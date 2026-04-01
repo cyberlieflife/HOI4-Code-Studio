@@ -208,7 +208,7 @@ impl ValidationService {
 
     /// 获取当前配置的克隆
     pub fn get_config(&self) -> ValidationConfig {
-        self.config.lock().unwrap().clone()
+        self.config.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// 更新配置
@@ -225,13 +225,13 @@ impl ValidationService {
         let new_paths = &new_config.rule_paths;
 
         if old_paths != new_paths {
-            let mut rule_loader = self.rule_loader.lock().unwrap();
+            let mut rule_loader = self.rule_loader.lock().unwrap_or_else(|e| e.into_inner());
             let new_rule_set = rule_loader.load_all_rules(new_paths).map_err(|errors| {
                 let error_messages: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
                 ServiceError::RuleLoadError(error_messages.join("; "))
             })?;
 
-            let mut rule_set = self.rule_set.lock().unwrap();
+            let mut rule_set = self.rule_set.lock().unwrap_or_else(|e| e.into_inner());
             *rule_set = new_rule_set;
             self.rule_paths = new_paths.clone();
         }
@@ -240,12 +240,12 @@ impl ValidationService {
         if let (Some(ref project_root), game_root) =
             (&new_config.project_root, new_config.game_root.as_ref())
         {
-            let mut reference_checker = self.reference_checker.lock().unwrap();
+            let mut reference_checker = self.reference_checker.lock().unwrap_or_else(|e| e.into_inner());
             reference_checker.load_references(project_root, game_root.unwrap_or(project_root));
         }
 
         // 更新配置
-        let mut config = self.config.lock().unwrap();
+        let mut config = self.config.lock().unwrap_or_else(|e| e.into_inner());
         *config = new_config;
 
         Ok(())
@@ -253,13 +253,13 @@ impl ValidationService {
 
     /// 启用规则
     pub fn enable_rule(&self, rule_name: String) {
-        let mut config = self.config.lock().unwrap();
+        let mut config = self.config.lock().unwrap_or_else(|e| e.into_inner());
         config.enable_rule(rule_name);
     }
 
     /// 禁用规则
     pub fn disable_rule(&self, rule_name: String) {
-        let mut config = self.config.lock().unwrap();
+        let mut config = self.config.lock().unwrap_or_else(|e| e.into_inner());
         config.disable_rule(rule_name);
     }
 
@@ -269,13 +269,13 @@ impl ValidationService {
         rule_name: String,
         severity: crate::cwtools::diagnostic::Severity,
     ) {
-        let mut config = self.config.lock().unwrap();
+        let mut config = self.config.lock().unwrap_or_else(|e| e.into_inner());
         config.set_rule_severity(rule_name, severity);
     }
 
     /// 检查规则是否启用
     pub fn is_rule_enabled(&self, rule_name: &str) -> bool {
-        let config = self.config.lock().unwrap();
+        let config = self.config.lock().unwrap_or_else(|e| e.into_inner());
         config.is_rule_enabled(rule_name)
     }
 
@@ -294,7 +294,7 @@ impl ValidationService {
         // 解析文件
         let parse_start = Instant::now();
         let ast = {
-            let mut parser_service = self.parser_service.lock().unwrap();
+            let mut parser_service = self.parser_service.lock().unwrap_or_else(|e| e.into_inner());
             parser_service.parse_file(path, content, version)
         };
         let parse_time_ms = parse_start.elapsed().as_millis() as u64;
@@ -343,7 +343,7 @@ impl ValidationService {
         // 增量解析文件
         let parse_start = Instant::now();
         let ast = {
-            let mut parser_service = self.parser_service.lock().unwrap();
+            let mut parser_service = self.parser_service.lock().unwrap_or_else(|e| e.into_inner());
             parser_service.parse_incremental(path, content, version, changes)
         };
         let parse_time_ms = parse_start.elapsed().as_millis() as u64;
@@ -381,14 +381,14 @@ impl ValidationService {
     /// 验证结果
     fn validate_ast(&self, ast: &AST) -> ValidationResult {
         // 获取配置
-        let config = self.config.lock().unwrap().clone();
+        let config = self.config.lock().unwrap_or_else(|e| e.into_inner()).clone();
 
         // 获取规则集
-        let rule_set = self.rule_set.lock().unwrap().clone();
+        let rule_set = self.rule_set.lock().unwrap_or_else(|e| e.into_inner()).clone();
 
         // 获取引用检查器（克隆以避免借用冲突）
         let reference_checker = {
-            let _checker = self.reference_checker.lock().unwrap();
+            let _checker = self.reference_checker.lock().unwrap_or_else(|e| e.into_inner());
             ReferenceChecker::new() // 暂时创建新实例，后续可以实现 Clone
         };
 
@@ -432,7 +432,7 @@ impl ValidationService {
     /// * `Err(ServiceError)` - 重新加载失败
     pub fn reload_rules(&self) -> Result<(), ServiceError> {
         // 获取规则加载器
-        let mut rule_loader = self.rule_loader.lock().unwrap();
+        let mut rule_loader = self.rule_loader.lock().unwrap_or_else(|e| e.into_inner());
 
         // 重新加载所有规则文件
         let new_rule_set = rule_loader
@@ -443,7 +443,7 @@ impl ValidationService {
             })?;
 
         // 更新规则集
-        let mut rule_set = self.rule_set.lock().unwrap();
+        let mut rule_set = self.rule_set.lock().unwrap_or_else(|e| e.into_inner());
         *rule_set = new_rule_set;
 
         Ok(())
@@ -459,7 +459,7 @@ impl ValidationService {
     /// * `Err(ServiceError)` - 重新加载失败
     pub fn reload_rule_file(&self, rule_path: &PathBuf) -> Result<(), ServiceError> {
         // 获取规则加载器
-        let mut rule_loader = self.rule_loader.lock().unwrap();
+        let mut rule_loader = self.rule_loader.lock().unwrap_or_else(|e| e.into_inner());
 
         // 重新加载指定的规则文件
         let partial_rule_set = rule_loader.load_rules(rule_path).map_err(|errors| {
@@ -468,7 +468,7 @@ impl ValidationService {
         })?;
 
         // 合并到现有规则集
-        let mut rule_set = self.rule_set.lock().unwrap();
+        let mut rule_set = self.rule_set.lock().unwrap_or_else(|e| e.into_inner());
         rule_set.merge(partial_rule_set);
 
         Ok(())
@@ -482,7 +482,7 @@ impl ValidationService {
     /// * `project_root` - 项目根目录
     /// * `game_root` - 游戏根目录（可选）
     pub fn load_references(&self, project_root: &PathBuf, game_root: Option<&PathBuf>) {
-        let mut reference_checker = self.reference_checker.lock().unwrap();
+        let mut reference_checker = self.reference_checker.lock().unwrap_or_else(|e| e.into_inner());
 
         // 加载项目引用
         reference_checker.load_references(project_root, game_root.unwrap_or(project_root));
@@ -492,7 +492,7 @@ impl ValidationService {
     ///
     /// 清空所有解析结果的缓存
     pub fn clear_cache(&self) {
-        let mut parser_service = self.parser_service.lock().unwrap();
+        let mut parser_service = self.parser_service.lock().unwrap_or_else(|e| e.into_inner());
         parser_service.clear_cache();
     }
 
@@ -501,7 +501,7 @@ impl ValidationService {
     /// # 参数
     /// * `path` - 文件路径
     pub fn invalidate_cache(&self, path: &str) {
-        let mut parser_service = self.parser_service.lock().unwrap();
+        let mut parser_service = self.parser_service.lock().unwrap_or_else(|e| e.into_inner());
         parser_service.invalidate(path);
     }
 
@@ -510,7 +510,7 @@ impl ValidationService {
     /// # 返回
     /// (当前缓存条目数, 最大缓存条目数, 当前内存使用字节数, 最大内存字节数)
     pub fn cache_stats(&self) -> (usize, usize, usize, usize) {
-        let parser_service = self.parser_service.lock().unwrap();
+        let parser_service = self.parser_service.lock().unwrap_or_else(|e| e.into_inner());
         parser_service.cache_stats()
     }
 
@@ -560,7 +560,7 @@ impl ValidationService {
     /// # 返回
     /// (类型定义数, 枚举定义数, 别名数, 修饰符数)
     pub fn rule_stats(&self) -> (usize, usize, usize, usize) {
-        let rule_set = self.rule_set.lock().unwrap();
+        let rule_set = self.rule_set.lock().unwrap_or_else(|e| e.into_inner());
         (
             rule_set.types.len(),
             rule_set.enums.len(),
@@ -572,7 +572,20 @@ impl ValidationService {
 
 impl Default for ValidationService {
     fn default() -> Self {
-        Self::new(Vec::new()).expect("Failed to create default ValidationService")
+        Self::new(Vec::new()).unwrap_or_else(|_| {
+            // 创建默认验证服务失败时，使用空配置重试
+            // 正常情况下 RuleLoader::new() 和 load_all_rules(vec![]) 不应失败
+            eprintln!("⚠️ ValidationService::default() 首次创建失败，尝试降级创建");
+            // 直接构造最小可用实例，跳过规则加载
+            Self {
+                parser_service: Arc::new(Mutex::new(ParserService::new())),
+                rule_set: Arc::new(Mutex::new(RuleSet::new())),
+                rule_loader: Arc::new(Mutex::new(RuleLoader::new())),
+                reference_checker: Arc::new(Mutex::new(ReferenceChecker::new())),
+                rule_paths: Vec::new(),
+                config: Arc::new(Mutex::new(ValidationConfig::new())),
+            }
+        })
     }
 }
 

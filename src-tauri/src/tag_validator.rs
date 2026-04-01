@@ -37,7 +37,7 @@ static TAG_CACHE: Lazy<RwLock<Option<TagCache>>> = Lazy::new(|| RwLock::new(None
 /// ：匹配各种需要检查的模式。
 static TARGET_BLOCK_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?is)\b[a-zA-Z0-9_\.]+\s*=\s*\{[^{}]*?target\s*=\s*([A-Za-z0-9]{2,4})")
-        .expect("无效的 TARGET_BLOCK_REGEX 正则表达式模式")
+        .expect("无效的 TARGET_BLOCK_REGEX 正则表达式模式: 静态字面量编译失败")
 });
 
 /// ：匹配原始等号形式。
@@ -45,13 +45,13 @@ static DIRECT_ASSIGN_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r"(?i)\b(original_tag|tag|add_core_of|owner|ROOT/[A-Za-z0-9_]+|FROM/[A-Za-z0-9_]+)\s*=\s*([A-Za-z0-9]{2,4})",
     )
-    .expect("无效的 DIRECT_ASSIGN_REGEX 正则表达式模式")
+    .expect("无效的 DIRECT_ASSIGN_REGEX 正则表达式模式: 静态字面量编译失败")
 });
 
 /// ：匹配作用域块 `ROOT/X = {` 或 `FROM/X = {`。
 static SCOPE_BLOCK_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)\b(ROOT|FROM)/([A-Za-z0-9]{2,4})\s*=\s*\{")
-        .expect("无效的 SCOPE_BLOCK_REGEX 正则表达式模式")
+        .expect("无效的 SCOPE_BLOCK_REGEX 正则表达式模式: 静态字面量编译失败")
 });
 
 fn normalize_tag(tag: &str) -> String {
@@ -68,7 +68,7 @@ fn ensure_tag_cache(
     dependency_roots: Option<Vec<String>>,
 ) -> HashSet<String> {
     let current_version = {
-        let cache = TAG_CACHE.read().expect("tag cache poisoned");
+        let cache = TAG_CACHE.read().unwrap_or_else(|e| e.into_inner());
         cache.as_ref().map(|c| c.version).unwrap_or(0)
     };
 
@@ -90,7 +90,7 @@ fn ensure_tag_cache(
     }
 
     // 如果加载失败，仍然返回现有缓存
-    let cache = TAG_CACHE.read().expect("tag cache poisoned");
+    let cache = TAG_CACHE.read().unwrap_or_else(|e| e.into_inner());
     cache.as_ref().map(|c| c.tags.clone()).unwrap_or_default()
 }
 
