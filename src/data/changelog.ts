@@ -17,6 +17,16 @@ export interface VersionLog {
 
 export const changelog: VersionLog[] = [
   {
+    version: 'v0.3.12-dev',
+    description: '整体优化',
+    changes: [
+      { type: 'improvement', content: '优化国策加载' },
+      { type: 'improvement', content: 'svg在文件树的图标修改为图像' },
+      { type: 'feature', content: '地图预览省份支持本地化显示' },
+      { type: 'feature', content: '支持滚动过冲' },
+    ]
+  },
+  {
     version: 'v0.3.11-dev',
     description: '编辑器交互与地图预览修复',
     changes: [
