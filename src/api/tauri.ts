@@ -534,6 +534,20 @@ export async function loadSettingsSnapshot(): Promise<Settings> {
 }
 
 /**
+ * 获取默认缓存目录
+ */
+export async function getDefaultCacheDirectory(): Promise<JsonResult> {
+  return await invoke('get_default_cache_directory')
+}
+
+/**
+ * 迁移缓存目录
+ */
+export async function migrateCacheDirectory(newCacheDir: string): Promise<JsonResult> {
+  return await invoke('migrate_cache_directory', { newCacheDir })
+}
+
+/**
  * 验证游戏目录
  */
 export async function validateGameDirectory(path: string): Promise<{ valid: boolean; message: string }> {

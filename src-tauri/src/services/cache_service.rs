@@ -16,13 +16,50 @@ impl CacheService {
         CacheService
     }
 
+    /// 获取应用数据根目录
+    ///
+    /// # 返回值
+    /// 返回应用数据根目录路径（如 `{config_dir}/HOI4_GUI_Editor/`）
+    fn get_app_data_dir(&self) -> PathBuf {
+        let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+        config_dir.join("HOI4_GUI_Editor")
+    }
+
     /// 获取配置文件路径
     ///
     /// # 返回值
     /// 返回应用配置文件的路径
     fn get_config_path(&self) -> PathBuf {
-        let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
-        config_dir.join("HOI4_GUI_Editor").join("settings.json")
+        self.get_app_data_dir().join("settings.json")
+    }
+
+    /// 获取默认缓存根目录（不含子目录）
+    ///
+    /// # 返回值
+    /// 返回默认缓存根目录路径（如 `{config_dir}/HOI4_GUI_Editor/`）
+    pub fn get_default_cache_root(&self) -> PathBuf {
+        self.get_app_data_dir()
+    }
+
+    /// 获取当前缓存根目录（考虑用户自定义设置）
+    ///
+    /// # 返回值
+    /// 返回当前缓存根目录路径。如果用户设置了自定义缓存目录，则返回自定义目录；否则返回默认目录。
+    pub fn get_cache_root(&self) -> PathBuf {
+        // 尝试从设置中读取自定义缓存目录
+        let config_path = self.get_config_path();
+        if config_path.exists() {
+            if let Ok(content) = fs::read_to_string(&config_path) {
+                if let Ok(settings) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(cache_dir) = settings.get("cacheDirectory").and_then(|v| v.as_str()) {
+                        if !cache_dir.is_empty() {
+                            return PathBuf::from(cache_dir);
+                        }
+                    }
+                }
+            }
+        }
+        self.get_default_cache_root()
     }
 
     /// 获取缓存目录路径
@@ -30,17 +67,8 @@ impl CacheService {
     /// # 返回值
     /// 返回缓存目录的路径
     pub fn get_cache_dir(&self) -> PathBuf {
-        let config_path = self.get_config_path();
-        let cache_dir = config_path
-            .parent()
-            .map(|p| p.join("temp").join("focus-icon-cache"))
-            .unwrap_or_else(|| {
-                let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
-                config_dir
-                    .join("HOI4_GUI_Editor")
-                    .join("temp")
-                    .join("focus-icon-cache")
-            });
+        let cache_root = self.get_cache_root();
+        let cache_dir = cache_root.join("temp").join("focus-icon-cache");
 
         // 确保缓存目录存在
         if let Err(e) = fs::create_dir_all(&cache_dir) {
@@ -55,17 +83,141 @@ impl CacheService {
     /// # 返回值
     /// 返回 GFX 预览缓存目录的路径
     pub fn get_gfx_preview_cache_dir(&self) -> PathBuf {
-        let base = self.get_cache_dir();
-        let dir = base
-            .parent()
-            .map(|p| p.join("gfx-preview-cache"))
-            .unwrap_or_else(|| base.join("gfx-preview-cache"));
+        let cache_root = self.get_cache_root();
+        let dir = cache_root.join("temp").join("gfx-preview-cache");
 
         if let Err(e) = fs::create_dir_all(&dir) {
             println!("创建 GFX 预览缓存目录失败: {}", e);
         }
 
         dir
+    }
+
+    /// 获取 DDS 转换缓存目录
+    ///
+    /// # 返回值
+    /// 返回 DDS 转换缓存目录的路径
+    pub fn get_dds_conversion_cache_dir(&self) -> PathBuf {
+        let cache_root = self.get_cache_root();
+        let dir = cache_root.join("dds-conversion-cache");
+
+        if let Err(e) = fs::create_dir_all(&dir) {
+            println!("创建 DDS 转换缓存目录失败: {}", e);
+        }
+
+        dir
+    }
+
+    /// 迁移缓存目录
+    ///
+    /// 将旧缓存目录下的所有内容移动到新目录
+    ///
+    /// # 参数
+    /// * `new_cache_dir` - 新的缓存根目录路径
+    ///
+    /// # 返回值
+    /// 返回操作结果的 JSON 对象
+    pub fn migrate_cache_directory(&self, new_cache_dir: &str) -> serde_json::Value {
+        let new_root = PathBuf::from(new_cache_dir);
+        let old_root = self.get_cache_root();
+
+        // 如果新旧目录相同，无需迁移
+        if old_root == new_root {
+            return serde_json::json!({
+                "success": true,
+                "message": "缓存目录未变更，无需迁移"
+            });
+        }
+
+        // 需要迁移的子目录和文件
+        let items_to_migrate = [
+            "temp",              // 包含 focus-icon-cache 和 gfx-preview-cache
+            "dds-conversion-cache",
+        ];
+
+        let mut migrated_count = 0u32;
+        let mut errors = Vec::new();
+
+        for item in &items_to_migrate {
+            let old_path = old_root.join(item);
+            let new_path = new_root.join(item);
+
+            if !old_path.exists() {
+                continue;
+            }
+
+            // 确保新目录的父目录存在
+            if let Some(parent) = new_path.parent() {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    errors.push(format!("创建目录 {} 失败: {}", parent.display(), e));
+                    continue;
+                }
+            }
+
+            // 移动目录
+            if old_path.is_dir() {
+                match Self::move_dir_recursive(&old_path, &new_path) {
+                    Ok(count) => migrated_count += count,
+                    Err(e) => errors.push(format!("迁移 {} 失败: {}", item, e)),
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            serde_json::json!({
+                "success": true,
+                "message": format!("缓存迁移成功，共迁移 {} 个文件/目录", migrated_count)
+            })
+        } else {
+            serde_json::json!({
+                "success": false,
+                "message": format!("迁移完成但有错误: {}", errors.join("; ")),
+                "migratedCount": migrated_count
+            })
+        }
+    }
+
+    /// 递归移动目录内容
+    ///
+    /// 将源目录下的所有内容移动到目标目录。
+    /// 如果目标目录已存在同名项，则合并（覆盖文件，递归合并目录）。
+    fn move_dir_recursive(src: &Path, dst: &Path) -> Result<u32, String> {
+        let mut count = 0u32;
+
+        // 确保目标目录存在
+        fs::create_dir_all(dst)
+            .map_err(|e| format!("创建目标目录 {} 失败: {}", dst.display(), e))?;
+
+        let entries = fs::read_dir(src)
+            .map_err(|e| format!("读取源目录 {} 失败: {}", src.display(), e))?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("读取目录项失败: {}", e))?;
+            let src_path = entry.path();
+            let file_name = src_path
+                .file_name()
+                .ok_or_else(|| "无法获取文件名".to_string())?;
+            let dst_path = dst.join(&file_name);
+
+            if src_path.is_dir() {
+                // 递归移动子目录
+                count += Self::move_dir_recursive(&src_path, &dst_path)?;
+            } else {
+                // 移动文件
+                if dst_path.exists() {
+                    // 目标已存在，先删除再移动
+                    let _ = fs::remove_file(&dst_path);
+                }
+                fs::rename(&src_path, &dst_path)
+                    .map_err(|e| format!("移动文件 {} -> {} 失败: {}", src_path.display(), dst_path.display(), e))?;
+                count += 1;
+            }
+        }
+
+        // 尝试删除空的源目录
+        let _ = fs::remove_dir(src);
+
+        Ok(count)
     }
 
     /// 计算字符串的哈希值，用于缓存文件名

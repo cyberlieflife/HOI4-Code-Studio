@@ -89,6 +89,19 @@ export const settingsMenuData: SettingsMenuCategory[] = [
     ]
   },
   {
+    id: 'cache',
+    title: '缓存设置',
+    items: [
+      {
+        id: 'cache-directory',
+        title: '缓存目录',
+        icon: 'cache',
+        description: '配置缓存存储位置',
+        category: 'cache'
+      }
+    ]
+  },
+  {
     id: 'appearance',
     title: '外观',
     items: [

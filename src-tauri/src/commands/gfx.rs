@@ -645,40 +645,15 @@ fn count_line_number(content: &str, byte_pos: usize) -> i32 {
 }
 
 fn get_gfx_preview_cache_dir() -> std::path::PathBuf {
-    let base = get_cache_dir();
-    let dir = base
-        .parent()
-        .map(|p| p.join("gfx-preview-cache"))
-        .unwrap_or_else(|| base.join("gfx-preview-cache"));
-
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        println!("创建 GFX 预览缓存目录失败: {}", e);
-    }
-
-    dir
+    use crate::services::CacheService;
+    let service = CacheService::new();
+    service.get_gfx_preview_cache_dir()
 }
 
 fn get_cache_dir() -> std::path::PathBuf {
-    // 获取配置目录
-    let config_path = get_config_path();
-    // 缓存目录位于配置目录的temp子目录
-    let cache_dir = config_path
-        .parent()
-        .map(|p| p.join("temp").join("focus-icon-cache"))
-        .unwrap_or_else(|| {
-            let config_dir = dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-            config_dir
-                .join("HOI4_GUI_Editor")
-                .join("temp")
-                .join("focus-icon-cache")
-        });
-
-    // 确保缓存目录存在
-    if let Err(e) = std::fs::create_dir_all(&cache_dir) {
-        println!("创建缓存目录失败: {}", e);
-    }
-
-    cache_dir
+    use crate::services::CacheService;
+    let service = CacheService::new();
+    service.get_cache_dir()
 }
 
 fn get_config_path() -> std::path::PathBuf {
@@ -1515,16 +1490,9 @@ fn find_icon_in_index_cache(
 
 /// 获取 DDS 转换缓存目录
 fn get_dds_conversion_cache_dir() -> std::path::PathBuf {
-    let config_dir = dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-    let dir = config_dir
-        .join("HOI4_GUI_Editor")
-        .join("dds-conversion-cache");
-
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        println!("[dds-cache] 创建 DDS 转换缓存目录失败: {}", e);
-    }
-
-    dir
+    use crate::services::CacheService;
+    let service = CacheService::new();
+    service.get_dds_conversion_cache_dir()
 }
 
 /// 获取 DDS 转换缓存文件路径

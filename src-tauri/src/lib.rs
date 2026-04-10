@@ -119,6 +119,8 @@ pub fn run() {
             commands::delete_path,
             commands::load_settings,
             commands::save_settings,
+            commands::get_default_cache_directory,
+            commands::migrate_cache_directory,
             commands::validate_game_directory,
             commands::launch_game,
             parse_json,

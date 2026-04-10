@@ -67,7 +67,8 @@ function getIconComponent(iconName: string) {
     palette: PaletteIcon,
     icons: IconsIcon,
     refresh: RefreshIcon,
-    info: InfoIcon
+    info: InfoIcon,
+    cache: CacheIcon
   }
   
   return icons[iconName] || DefaultIcon
@@ -177,6 +178,14 @@ const DefaultIcon = {
   template: `
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+    </svg>
+  `
+}
+
+const CacheIcon = {
+  template: `
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m2 0h6"></path>
     </svg>
   `
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { loadSettings, saveSettings, openUrl } from '../api/tauri'
+import { loadSettings, saveSettings, openUrl, migrateCacheDirectory } from '../api/tauri'
 import { useTheme } from '../composables/useTheme'
 import { useFileTreeIcons, iconSets } from '../composables/useFileTreeIcons'
 import { getDefaultMenuItem } from '../data/settingsMenu'
@@ -20,6 +20,7 @@ import IconSettings from '../components/settings/IconSettings.vue'
 import UpdateSettings from '../components/settings/UpdateSettings.vue'
 import VersionInfoSettings from '../components/settings/VersionInfoSettings.vue'
 import AISettings from '../components/settings/AISettings.vue'
+import CacheSettings from '../components/settings/CacheSettings.vue'
 
 // 主题系统
 const { currentThemeId } = useTheme()
@@ -71,6 +72,10 @@ const useSteamVersion = ref(true)
 const usePirateVersion = ref(false)
 const pirateExecutable = ref<'dowser' | 'hoi4'>('dowser')
 const launchWithDebug = ref(false)
+
+// 缓存目录设置
+const cacheDirectory = ref('')
+const previousCacheDirectory = ref('')
 
 // 状态
 const showStatus = ref(false)
@@ -166,6 +171,10 @@ async function loadUserSettings() {
     if (data.iconSet && iconSets.some(set => set.id === data.iconSet)) {
       currentIconSetId.value = data.iconSet
     }
+
+    // 加载缓存目录设置
+    cacheDirectory.value = data.cacheDirectory || ''
+    previousCacheDirectory.value = data.cacheDirectory || ''
   }
 }
 
@@ -198,7 +207,10 @@ async function handleSave() {
 
     // 地图设置
     mapPerformanceMode: mapPerformanceMode.value,
-    mapSamplingRate: mapSamplingRate.value
+    mapSamplingRate: mapSamplingRate.value,
+
+    // 缓存目录设置
+    cacheDirectory: cacheDirectory.value
   }
   
   const result = await saveSettings(settings)
@@ -226,10 +238,26 @@ function closeUpdateDialog() {
   showUpdateDialog.value = false
 }
 
-// 返回主界面（自动保存）
+// 返回主界面（自动保存 + 缓存迁移）
 async function goBack() {
   // 自动保存设置
   await handleSave()
+
+  // 如果缓存目录有变更，触发迁移
+  if (cacheDirectory.value && cacheDirectory.value !== previousCacheDirectory.value) {
+    try {
+      const result = await migrateCacheDirectory(cacheDirectory.value)
+      if (result.success) {
+        displayStatus('缓存目录迁移成功', 3000)
+      } else {
+        displayStatus(`缓存迁移失败: ${result.message}`, 5000)
+      }
+    } catch (e: any) {
+      displayStatus(`缓存迁移出错: ${e}`, 5000)
+    }
+    previousCacheDirectory.value = cacheDirectory.value
+  }
+
   router.push('/')
 }
 
@@ -429,6 +457,19 @@ onMounted(async () => {
                 <p class="text-xs text-hoi4-text/50 mt-2">调整性能模式下的采样率。采样率越低，地图加载和操作越流畅，但图像细节越模糊。</p>
               </div>
             </div>
+          </SettingsCard>
+
+          <!-- 缓存目录设置 -->
+          <SettingsCard 
+            v-if="activeMenuItem === 'cache-directory'"
+            title="缓存目录设置"
+            description="配置缓存文件的存储位置"
+          >
+            <CacheSettings 
+              :cache-directory="cacheDirectory"
+              @update:cacheDirectory="cacheDirectory = $event"
+              @status-message="displayStatus"
+            />
           </SettingsCard>
 
           <!-- 保存设置 -->

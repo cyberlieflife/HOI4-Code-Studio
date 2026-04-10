@@ -83,6 +83,38 @@ pub fn save_settings(settings: serde_json::Value) -> JsonResult {
     }
 }
 
+/// 获取默认缓存目录
+#[tauri::command]
+pub fn get_default_cache_directory() -> JsonResult {
+    use crate::services::CacheService;
+    let service = CacheService::new();
+    let default_path = service.get_default_cache_root();
+
+    JsonResult {
+        success: true,
+        message: "获取默认缓存目录成功".to_string(),
+        data: Some(serde_json::Value::String(
+            default_path.to_string_lossy().to_string(),
+        )),
+    }
+}
+
+/// 迁移缓存目录
+///
+/// 将旧缓存目录下的所有内容移动到新目录
+#[tauri::command]
+pub fn migrate_cache_directory(new_cache_dir: String) -> JsonResult {
+    use crate::services::CacheService;
+    let service = CacheService::new();
+    let result = service.migrate_cache_directory(&new_cache_dir);
+
+    JsonResult {
+        success: result["success"].as_bool().unwrap_or(false),
+        message: result["message"].as_str().unwrap_or("").to_string(),
+        data: Some(result),
+    }
+}
+
 /// 退出应用程序
 #[tauri::command]
 pub fn exit_application() {
