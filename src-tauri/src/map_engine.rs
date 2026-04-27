@@ -26,9 +26,9 @@ static RE_COUNTRY_TAG_MAPPING: Lazy<Regex> = Lazy::new(|| {
 static RE_COUNTRY_ENTRY: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?im)^[ \t]*([A-Za-z0-9]{3})\s*=\s*\{").expect("RE_COUNTRY_ENTRY 正则编译失败"));
 
-// RGB 颜色：支持 color / color_ui，支持可选 rgb 前缀，支持负值和小数
+// RGB 颜色：只匹配 color = rgb {R G B} / color_ui = rgb {R G B} 格式（必须有 rgb/RGB 前缀）
 static RE_COUNTRY_COLOR_RGB: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)(color(?:_ui)?)\s*=\s*(?:rgb\s*)?\{\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\}").expect("RE_COUNTRY_COLOR_RGB 正则编译失败")
+    Regex::new(r"(?i)(color(?:_ui)?)\s*=\s*rgb\s*\{\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\}").expect("RE_COUNTRY_COLOR_RGB 正则编译失败")
 });
 
 /// 路径解析缓存，避免重复遍历目录
@@ -42,7 +42,7 @@ pub fn clear_path_resolve_cache() {
     }
 }
 
-// HSV 颜色：支持 color / color_ui
+// HSV 颜色：匹配 color = {H S V}（无前缀）或 color = HSV {H S V}（有HSV前缀）格式
 static RE_COUNTRY_COLOR_HSV: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)(color(?:_ui)?)\s*=\s*HSV\s*\{\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\}").expect("RE_COUNTRY_COLOR_HSV 正则编译失败")
 });
@@ -159,8 +159,9 @@ impl RGBColor {
             let val: f64 = s.parse().unwrap_or(0.0);
             ((val.clamp(0.0, 1.0) * 255.0).round().clamp(0.0, 255.0)) as u8
         } else {
-            let val: i32 = s.parse().unwrap_or(0);
-            val.clamp(0, 255) as u8
+            // 支持小数 RGB 值（如 1.5 → 2），先解析为 f64 再四舍五入
+            let val: f64 = s.parse().unwrap_or(0.0);
+            (val.round().clamp(0.0, 255.0)) as u8
         }
     }
 }
@@ -898,9 +899,16 @@ fn find_color_in_block(block_content: &str, allow_color_ui: bool) -> Option<RGBC
         if !allow_color_ui && name.eq_ignore_ascii_case("color_ui") {
             continue;
         }
-        let h: f64 = cap.get(2)?.as_str().parse().unwrap_or(0.0);
-        let s: f64 = cap.get(3)?.as_str().parse().unwrap_or(0.0);
-        let v: f64 = cap.get(4)?.as_str().parse().unwrap_or(0.0);
+        let h_raw: f64 = cap.get(2)?.as_str().parse().unwrap_or(0.0);
+        let s_raw: f64 = cap.get(3)?.as_str().parse().unwrap_or(0.0);
+        let v_raw: f64 = cap.get(4)?.as_str().parse().unwrap_or(0.0);
+        
+        // HOI4 Clausewitz 引擎只使用标准 HSV 格式：H 0-360, S 0-100, V 0-100
+        // 始终按标准格式归一化到 0.0-1.0 范围
+        let h = h_raw / 360.0;
+        let s = s_raw / 100.0;
+        let v = v_raw / 100.0;
+        
         return Some(RGBColor::from_hsv(h, s, v));
     }
 
@@ -2876,5 +2884,75 @@ EEE = {
                 a: 255
             })
         );
+    }
+
+    #[test]
+    fn load_country_colors_supports_hsv_format() {
+        let path = write_temp_colors_file(
+            r#"
+AAA = { color = HSV { 180 80 90 } }
+BBB = { color = HSV { 300 75 85 } }
+CCC = { color_ui = HSV { 120 100 100 } }
+"#,
+        );
+
+        let colors = load_country_colors(path.clone());
+        fs::remove_file(path).expect("failed to remove temp colors file");
+
+        // AAA: HSV (180, 80, 90) -> H=180/360=0.5(青色), S=80/100=0.8, V=90/100=0.9
+        let aaa = colors.get("AAA").unwrap();
+        assert!(aaa.r < 50, "AAA red should be low for cyan, got {}", aaa.r);
+        assert!(aaa.g > 150, "AAA green should be high for cyan, got {}", aaa.g);
+        assert!(aaa.b > 150, "AAA blue should be high for cyan, got {}", aaa.b);
+        
+        // BBB: HSV (300, 75, 85) -> H=300/360=0.833, S=75/100=0.75, V=85/100=0.85
+        // 0.833色相 -> 品红色 (R高, G低, B高)
+        let bbb = colors.get("BBB").unwrap();
+        assert!(bbb.r > 150, "BBB red should be high for magenta, got {}", bbb.r);
+        assert!(bbb.g < 100, "BBB green should be low for magenta, got {}", bbb.g);
+        assert!(bbb.b > 150, "BBB blue should be high for magenta, got {}", bbb.b);
+        
+        // CCC: color_ui 格式，当 allow_color_ui=true 时应该被解析
+        let ccc = colors.get("CCC").unwrap();
+        // HSV (120, 100, 100) -> H=120/360=0.333, S=1.0, V=1.0
+        // 0.333色相 -> 纯绿色 (R=0, G=255, B=0)
+        assert!(ccc.r < 50, "CCC red should be low for green, got {}", ccc.r);
+        assert!(ccc.g > 200, "CCC green should be high for green, got {}", ccc.g);
+        assert!(ccc.b < 50, "CCC blue should be low for green, got {}", ccc.b);
+    }
+
+    #[test]
+    fn load_country_colors_hsv_standard_format_edge_cases() {
+        // 测试标准 HSV 格式的边界场景
+        // HOI4 Clausewitz 引擎始终使用 H:0-360, S:0-100, V:0-100 标准格式
+        let path = write_temp_colors_file(
+            r#"
+DDD = { color = HSV { 0.5 80 90 } }
+EEE = { color = HSV { 0.0 100 100 } }
+FFF = { color = HSV { 0.333 100 100 } }
+"#,
+        );
+
+        let colors = load_country_colors(path.clone());
+        fs::remove_file(path).expect("failed to remove temp colors file");
+
+        // DDD: HSV (0.5, 80, 90) -> 标准格式
+        // H=0.5/360≈0.0014(接近红色), S=80/100=0.8, V=90/100=0.9
+        let ddd = colors.get("DDD").unwrap();
+        assert!(ddd.r > 150, "DDD red should be high (near red hue), got {}", ddd.r);
+        assert!(ddd.g < 100, "DDD green should be low, got {}", ddd.g);
+        assert!(ddd.b < 100, "DDD blue should be low, got {}", ddd.b);
+
+        // EEE: HSV (0.0, 100, 100) -> H=0(纯红), S=1.0, V=1.0 -> 纯红色 (255, 0, 0)
+        let eee = colors.get("EEE").unwrap();
+        assert!(eee.r > 200, "EEE red should be high for pure red, got {}", eee.r);
+        assert!(eee.g < 30, "EEE green should be near 0, got {}", eee.g);
+        assert!(eee.b < 30, "EEE blue should be near 0, got {}", eee.b);
+
+        // FFF: HSV (0.333, 100, 100) -> H=0.333/360≈0.0009(接近红色), S=1.0, V=1.0
+        let fff = colors.get("FFF").unwrap();
+        assert!(fff.r > 200, "FFF red should be high (near red hue), got {}", fff.r);
+        assert!(fff.g < 30, "FFF green should be near 0, got {}", fff.g);
+        assert!(fff.b < 30, "FFF blue should be near 0, got {}", fff.b);
     }
 }
