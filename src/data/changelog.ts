@@ -22,6 +22,11 @@ export const changelog: VersionLog[] = [
     changes: [
       { type: 'feature', content: '新增缓存设置菜单及缓存目录自定义与迁移功能' },
       { type: 'fix', content: '修正地图引擎HSV颜色解析' },
+      { type: 'fix', content: '下方为v0.3.12-dev更新内容' },
+      { type: 'improvement', content: '优化国策加载' },
+      { type: 'improvement', content: 'svg在文件树的图标修改为图像' },
+      { type: 'feature', content: '地图预览省份支持本地化显示' },
+      { type: 'feature', content: '支持滚动过冲' },
     ]
   },
   {
