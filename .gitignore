@@ -30,6 +30,7 @@ src-tauri/target/*
 .trae/*
 .roo
 .kilocode
+.kilo
 .orchids
 .DS_Store
 *.suo
