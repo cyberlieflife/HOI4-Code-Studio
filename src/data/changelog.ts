@@ -17,6 +17,14 @@ export interface VersionLog {
 
 export const changelog: VersionLog[] = [
   {
+    version: 'v0.3.13-dev',
+    description: '缓存管理与地图引擎修复',
+    changes: [
+      { type: 'feature', content: '新增缓存设置菜单及缓存目录自定义与迁移功能' },
+      { type: 'fix', content: '修正地图引擎HSV颜色解析' },
+    ]
+  },
+  {
     version: 'v0.3.12-dev',
     description: '整体优化',
     changes: [
