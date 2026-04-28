@@ -11,7 +11,7 @@
   </p>
 </div>
 
-HOI4 Code Studio 是一个基于 Tauri + Vue 3 + Rust 的跨平台桌面应用，目标是提供接近 IDE 的 HOI4 Mod 开发体验：项目管理、脚本编辑、预览工具、依赖管理、插件扩展与 AI 辅助在同一工作区内完成。
+HOI4 Code Studio 是一个基于 Tauri + Vue 3 + Rust 的Windows桌面应用，目标是提供接近 IDE 的 HOI4 Mod 开发体验：项目管理、脚本编辑、预览工具、依赖管理、插件扩展与 AI 辅助在同一工作区内完成。
 
 ## 核心能力
 
