@@ -123,10 +123,10 @@ describe('HOI4语言模块测试', () => {
 describe('设置菜单数据模块测试', () => {
   describe('数据结构验证', () => {
     it('应该包含正确的菜单分类', () => {
-      expect(settingsMenuData).toHaveLength(6)
+      expect(settingsMenuData).toHaveLength(7)
       
       const categories = settingsMenuData.map(cat => cat.id)
-      expect(categories).toEqual(['general', 'extensions', 'ai', 'editor', 'appearance', 'updates'])
+      expect(categories).toEqual(['general', 'extensions', 'ai', 'editor', 'cache', 'appearance', 'updates'])
     })
 
     it('每个分类应该有正确的结构', () => {
@@ -190,7 +190,7 @@ describe('设置菜单数据模块测试', () => {
 
     it('getAllMenuItems 应该返回所有菜单项的扁平化列表', () => {
       const allItems = getAllMenuItems()
-      expect(allItems).toHaveLength(11) // 根据实际数据结构
+      expect(allItems).toHaveLength(12) // 根据实际数据结构
       
       allItems.forEach(item => {
         expect(item).toHaveProperty('id')
