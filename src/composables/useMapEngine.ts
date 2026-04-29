@@ -91,8 +91,8 @@ export function useMapEngine() {
    * 待处理的任务队列
    */
   const pendingTasks = new Map<string, {
-    resolve: (value: any) => void
-    reject: (reason: any) => void
+    resolve: (value: Uint32Array | number | null) => void
+    reject: (reason: Error) => void
   }>()
   
   /**
@@ -167,10 +167,21 @@ export function useMapEngine() {
     }
   }
   
+interface WorkerTask {
+  type: 'getProvinceId' | 'getProvinceOutline' | 'getStateOutline' | 'addCache'
+  id?: string
+  x?: number
+  y?: number
+  provinceId?: number
+  stateId?: number
+  cacheKey?: string
+  cacheData?: unknown
+}
+
   /**
    * 向Worker发送任务
    */
-  function sendTaskToWorker(task: any): Promise<any> {
+  function sendTaskToWorker(task: WorkerTask): Promise<unknown> {
     return new Promise((resolve, reject) => {
       if (!mapWorker || !workerAvailable.value) {
         reject(new Error('Worker不可用'))
@@ -317,8 +328,9 @@ export function useMapEngine() {
         states: states.value.length,
         mode
       })
-    } catch (e: any) {
-      error.value = e.message
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e)
+      error.value = errorMessage
       console.error('Map init error:', e)
     } finally {
       isLoading.value = false
@@ -349,7 +361,7 @@ export function useMapEngine() {
             type: 'getProvinceId',
             x,
             y
-          })
+          }) as number | null
           
           // 缓存结果
           if (result !== null) {
@@ -366,9 +378,10 @@ export function useMapEngine() {
       return await measureMapAsync('frontend.getProvinceAtPoint', async () => (
         await getProvinceAtPoint(x, y)
       ))
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e)
       console.error('获取省份ID失败:', e)
-      alert(`获取省份ID失败: ${e.message}`)
+      alert(`获取省份ID失败: ${errorMessage}`)
       return null
     }
   }
@@ -384,14 +397,14 @@ export function useMapEngine() {
           const result = await sendTaskToWorker({
             type: 'getProvinceOutline',
             provinceId
-          })
+          }) as Uint32Array | null
           
           // 缓存结果
           if (result) {
             addCacheToWorker(`outline_${provinceId}`, result)
           }
           
-          return result
+          return result ?? new Uint32Array()
         } catch (workerError) {
           console.warn('Worker计算失败，回退到主线程:', workerError)
         }
@@ -401,9 +414,10 @@ export function useMapEngine() {
       return await measureMapAsync('frontend.getProvinceOutline', async () => (
         await getProvinceOutline(provinceId)
       ))
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e)
       console.error('获取省份轮廓失败:', e)
-      alert(`获取省份轮廓失败: ${e.message}`)
+      alert(`获取省份轮廓失败: ${errorMessage}`)
       return new Uint32Array()
     }
   }
@@ -419,14 +433,14 @@ export function useMapEngine() {
           const result = await sendTaskToWorker({
             type: 'getStateOutline',
             stateId
-          })
+          }) as Uint32Array | null
           
           // 缓存结果
           if (result) {
             addCacheToWorker(`state_${stateId}`, result)
           }
           
-          return result
+          return result ?? new Uint32Array()
         } catch (workerError) {
           console.warn('Worker计算失败，回退到主线程:', workerError)
         }
@@ -436,9 +450,10 @@ export function useMapEngine() {
       return await measureMapAsync('frontend.getStateOutline', async () => (
         await getStateOutline(stateId)
       ))
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e)
       console.error('获取地区轮廓失败:', e)
-      alert(`获取地区轮廓失败: ${e.message}`)
+      alert(`获取地区轮廓失败: ${errorMessage}`)
       return new Uint32Array()
     }
   }

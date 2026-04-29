@@ -26,7 +26,6 @@ export interface OpenFileInfo {
   isFocusTree?: boolean
   isGfxPreview?: boolean
   isMioPreview?: boolean
-  [key: string]: any
 }
 
 export interface OpenFileFunc {
@@ -84,7 +83,7 @@ export async function jumpFromPreview(
 
   // 延迟跳转到指定行
   setTimeout(() => {
-    const paneRef = (editorGroupRef as any)?.paneRefs as PaneRefsLike | undefined
+    const paneRef = (editorGroupRef as unknown as { paneRefs?: PaneRefsLike })?.paneRefs
     const paneRefInstance = paneRef?.get?.(targetPane!.id)
     if (paneRefInstance?.jumpToLine) {
       paneRefInstance.jumpToLine(line)

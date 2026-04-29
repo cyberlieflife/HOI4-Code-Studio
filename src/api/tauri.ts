@@ -968,14 +968,23 @@ export interface ImageReadResult {
   mime_type?: string
 }
 
-function normalizeImageReadResult(result: any): ImageReadResult {
+interface RawImageReadResult {
+  success?: boolean
+  message?: string
+  base64?: string
+  mimeType?: string
+  mime_type?: string
+}
+
+function normalizeImageReadResult(result: unknown): ImageReadResult {
   if (!result || typeof result !== 'object') return { success: false, message: 'invalid response' }
+  const raw = result as RawImageReadResult
   return {
-    success: !!result.success,
-    message: result.message,
-    base64: result.base64,
-    mimeType: result.mimeType ?? result.mime_type,
-    mime_type: result.mime_type ?? result.mimeType
+    success: !!raw.success,
+    message: raw.message,
+    base64: raw.base64,
+    mimeType: raw.mimeType ?? raw.mime_type,
+    mime_type: raw.mime_type ?? raw.mimeType
   }
 }
 
@@ -1037,7 +1046,7 @@ export interface GfxSpritePreviewItem {
   name: string
   texturefile?: string | null
   noOfFrames: number
-  borderSize?: any
+  borderSize?: { x: number; y: number } | null
   sourceLine: number
   resolvedPath?: string | null
   cachedPngPath?: string | null
@@ -1084,12 +1093,21 @@ export async function parseGfxPreview(params: {
 /**
  * 解析 GUI 资源
  */
+export interface GuiResourceResult {
+  success: boolean
+  path?: string
+  content?: string
+  error?: string
+  noOfFrames?: number
+  borderSize?: { x: number; y: number }
+}
+
 export async function resolveGuiResource(
   name: string,
   projectPath: string,
   gameDirectory: string,
   dependencyRoots: string[]
-): Promise<any> {
+): Promise<GuiResourceResult> {
   return await invoke('resolve_gui_resource', { name, projectPath, gameDirectory, dependencyRoots })
 }
 

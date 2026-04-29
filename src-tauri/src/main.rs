@@ -10,6 +10,14 @@
 /// 该函数负责初始化并启动 Tauri 应用程序。它通过调用库中的 run() 函数来完成这一任务。
 /// 在 Tauri 应用中，main() 函数是必需的，它是程序执行的起点。
 fn main() {
+    // 初始化 tracing 日志系统
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
+
     // 调用库中的 run() 函数启动 Tauri 应用
     // hoi4_code_studio_lib 是一个自定义库，提供了运行应用所需的核心功能
     hoi4_code_studio_lib::run()

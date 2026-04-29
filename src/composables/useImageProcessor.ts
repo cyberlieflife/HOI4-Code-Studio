@@ -28,6 +28,18 @@ interface ProcessingStats {
   cacheMisses: number
 }
 
+interface WorkerMessage {
+  type: 'load' | 'result' | 'error' | 'cache'
+  task?: ImageLoadTask
+  result?: {
+    id: string
+    success: boolean
+    dataUrl?: string
+    error?: string
+  }
+  cacheData?: { iconName: string; dataUrl: string }
+}
+
 // Worker池管理
 class WorkerPool {
   private workers: Worker[] = []
@@ -67,7 +79,7 @@ class WorkerPool {
   /**
    * 处理Worker消息
    */
-  private handleWorkerMessage(worker: Worker, message: any) {
+  private handleWorkerMessage(worker: Worker, message: WorkerMessage) {
     const { type, result } = message
 
     if (type === 'result' && result) {
@@ -242,7 +254,7 @@ function loadIconAsync(
 
       // 尝试从磁盘缓存读取
       const cacheResult = await readIconCache(iconName)
-      const cacheMime = (cacheResult as any).mimeType || (cacheResult as any).mime_type
+      const cacheMime = cacheResult.mimeType || cacheResult.mime_type
       if (cacheResult.success && cacheResult.base64 && cacheMime) {
         console.info(`[icon] cache hit: ${iconName}`)
         const dataUrl = `data:${cacheMime};base64,${cacheResult.base64}`
@@ -271,10 +283,10 @@ function loadIconAsync(
         // 异步写入磁盘缓存
         writeIconCache(iconName, result.base64, result.mimeType)
           .then((resp) => {
-            if ((resp as any)?.success) {
+            if (resp?.success) {
               console.info(`[icon] cache write ok: ${iconName}`)
             } else {
-              console.warn(`[icon] cache write fail: ${iconName}`, (resp as any)?.message)
+              console.warn(`[icon] cache write fail: ${iconName}`, resp?.message)
             }
           })
           .catch(error => {

@@ -6,6 +6,7 @@ use crate::file_tree::FileTreeResult;
 use crate::models::*;
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
+use tracing::{info, warn, debug};
 
 /// 读取目录内容
 #[tauri::command]
@@ -13,7 +14,7 @@ pub fn read_directory(dir_path: String) -> serde_json::Value {
     use std::fs;
     use std::path::Path;
 
-    println!("读取目录: {}", dir_path);
+    debug!("读取目录: {}", dir_path);
 
     let dir = Path::new(&dir_path);
 
@@ -86,7 +87,7 @@ pub fn read_file_content(file_path: String) -> serde_json::Value {
     use std::fs;
     use std::path::Path;
 
-    println!("读取文件: {}", file_path);
+    debug!("读取文件: {}", file_path);
 
     let path = Path::new(&file_path);
 
@@ -138,7 +139,7 @@ pub fn read_file_content(file_path: String) -> serde_json::Value {
     detector.feed(&bytes, true);
     let detected_encoding = detector.guess(None, true);
 
-    println!("检测到编码: {}", detected_encoding.name());
+    debug!("检测到编码: {}", detected_encoding.name());
 
     // 3. 尝试使用检测到的编码解码
     let (decoded, encoding_used, had_errors) = detected_encoding.decode(&bytes);
@@ -194,7 +195,7 @@ pub fn write_file_content(file_path: String, content: String) -> serde_json::Val
     use std::fs;
     use std::path::Path;
 
-    println!("写入文件: {}", file_path);
+    debug!("写入文件: {}", file_path);
 
     let path = Path::new(&file_path);
 
@@ -217,7 +218,7 @@ pub fn create_file(file_path: String, content: String, use_bom: bool) -> serde_j
     use std::fs;
     use std::path::Path;
 
-    println!("创建文件: {}, 使用BOM: {}", file_path, use_bom);
+    debug!("创建文件: {}, 使用BOM: {}", file_path, use_bom);
 
     let path = Path::new(&file_path);
 
@@ -280,7 +281,7 @@ pub fn create_folder(folder_path: String) -> serde_json::Value {
     use std::path::Path;
 
     // 打印日志：显示正在创建的文件夹路径
-    println!("创建文件夹: {}", folder_path);
+    debug!("创建文件夹: {}", folder_path);
 
     // 将字符串路径转换为 Path 对象
     let path = Path::new(&folder_path);
@@ -316,7 +317,7 @@ pub fn rename_path(old_path: String, new_path: String) -> serde_json::Value {
     use std::fs;
     use std::path::Path;
 
-    println!("重命名: {} -> {}", old_path, new_path);
+    debug!("重命名: {} -> {}", old_path, new_path);
 
     let old = Path::new(&old_path);
     let new = Path::new(&new_path);
@@ -353,7 +354,7 @@ pub fn delete_path(target_path: String) -> serde_json::Value {
     use std::fs;
     use std::path::Path;
 
-    println!("删除路径: {}", target_path);
+    debug!("删除路径: {}", target_path);
 
     let path = Path::new(&target_path);
 
@@ -600,7 +601,7 @@ pub fn move_paths(source_paths: Vec<String>, target_dir: String) -> serde_json::
 pub fn open_folder(path: String) -> serde_json::Value {
     use std::process::Command;
 
-    println!("打开文件夹: {}", path);
+    debug!("打开文件夹: {}", path);
 
     // 根据操作系统使用不同的命令
     #[cfg(target_os = "windows")]
@@ -646,7 +647,7 @@ pub fn search_files(
     use std::fs;
     use std::path::Path;
 
-    println!("搜索目录: {}, 关键词: {}", directory_path, query);
+    debug!("搜索目录: {}, 关键词: {}", directory_path, query);
 
     // 验证目录是否存在
     let dir_path = Path::new(&directory_path);
@@ -666,7 +667,7 @@ pub fn search_files(
     let file_service = FileService::new();
     file_service.collect_files(dir_path, &mut all_files, include_all_files);
 
-    println!("找到 {} 个文件", all_files.len());
+    info!("找到 {} 个文件", all_files.len());
 
     // 使用Arc和Mutex来安全地共享结果
     let results = Arc::new(Mutex::new(Vec::new()));
@@ -750,7 +751,7 @@ pub fn search_files(
         Err(_) => Vec::new(),
     };
 
-    println!("搜索完成，找到 {} 个匹配项", final_results.len());
+    info!("搜索完成，找到 {} 个匹配项", final_results.len());
 
     serde_json::json!({
         "success": true,
@@ -767,7 +768,7 @@ pub fn search_files(
 #[tauri::command]
 pub fn build_directory_tree(path: String, max_depth: usize) -> FileTreeResult {
     use crate::file_tree::build_file_tree;
-    println!("构建文件树: {}, 最大深度: {}", path, max_depth);
+    debug!("构建文件树: {}, 最大深度: {}", path, max_depth);
     build_file_tree(&path, max_depth)
 }
 
@@ -793,7 +794,7 @@ pub fn read_image_as_base64(file_path: String) -> ImageReadResult {
     use std::fs;
     use std::io::Cursor;
 
-    println!("读取图片为 base64: {}", file_path);
+    debug!("读取图片为 base64: {}", file_path);
 
     // 检查文件是否存在
     if !std::path::Path::new(&file_path).exists() {
@@ -814,7 +815,7 @@ pub fn read_image_as_base64(file_path: String) -> ImageReadResult {
 
     // 对于 DDS 文件，使用 image_dds 库处理
     if ext.as_str() == "dds" {
-        println!("转换 DDS 图片为 PNG: {}", file_path);
+        debug!("转换 DDS 图片为 PNG: {}", file_path);
 
         match fs::read(&file_path) {
             Ok(dds_data) => {
@@ -841,29 +842,29 @@ pub fn read_image_as_base64(file_path: String) -> ImageReadResult {
                                         };
                                     }
                                     Err(e) => {
-                                        println!("转换 DDS 为 PNG 失败: {}", e);
+                                        warn!("转换 DDS 为 PNG 失败: {}", e);
                                     }
                                 }
                             }
                             Err(e) => {
-                                println!("无法从 DDS 创建图片: {}", e);
+                                warn!("无法从 DDS 创建图片: {}", e);
                             }
                         }
                     }
                     Err(e) => {
-                        println!("无法解析 DDS 文件: {}", e);
+                        warn!("无法解析 DDS 文件: {}", e);
                     }
                 }
             }
             Err(e) => {
-                println!("无法读取 DDS 文件: {}", e);
+                warn!("无法读取 DDS 文件: {}", e);
             }
         }
     }
 
     // 对于 TGA 文件，使用 image crate 转换为 PNG
     if ext.as_str() == "tga" {
-        println!("转换 TGA 图片为 PNG: {}", file_path);
+        debug!("转换 TGA 图片为 PNG: {}", file_path);
 
         // 打开图片
         match image::open(&file_path) {
@@ -884,13 +885,13 @@ pub fn read_image_as_base64(file_path: String) -> ImageReadResult {
                         };
                     }
                     Err(e) => {
-                        println!("转换图片格式失败: {}", e);
+                        warn!("转换图片格式失败: {}", e);
                         // 如果转换失败，尝试直接读取（可能前端有办法处理，或者只是为了显示错误）
                     }
                 }
             }
             Err(e) => {
-                println!("无法使用 image crate 打开图片: {}", e);
+                warn!("无法使用 image crate 打开图片: {}", e);
                 // 失败后继续，尝试直接读取
             }
         }

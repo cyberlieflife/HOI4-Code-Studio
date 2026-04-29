@@ -1,6 +1,8 @@
 // 禁止使用 unwrap()，避免 panic
 #![deny(clippy::unwrap_used)]
 
+use tracing::{info, warn, error};
+
 // 本地模块
 mod bracket_matcher;
 mod commands;
@@ -86,15 +88,15 @@ pub fn run() {
             if let Some(config_dir) = dirs::config_dir() {
                 let plugins_dir = config_dir.join("HOI4_GUI_Editor").join("plugins");
                 if let Err(e) = std::fs::create_dir_all(&plugins_dir) {
-                    println!("创建插件目录失败: {} ({})", plugins_dir.display(), e);
+                    warn!("创建插件目录失败: {} ({})", plugins_dir.display(), e);
                 }
 
-                println!(
+                info!(
                     "当前 Tauri 版本不支持运行时 asset protocol scope，已跳过目录放行：{}",
                     plugins_dir.display()
                 );
             } else {
-                println!("无法解析 config_dir，无法为插件目录添加 asset protocol scope");
+                warn!("无法解析 config_dir，无法为插件目录添加 asset protocol scope");
             }
 
             Ok(())
@@ -209,7 +211,7 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .map_err(|e| {
-            eprintln!("❌ Tauri 应用启动失败: {}", e);
+            error!("Tauri 应用启动失败: {}", e);
             e
         })
         .ok();

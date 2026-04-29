@@ -37,6 +37,8 @@ base64 = "0.22"
 image = { version = "0.25.9", features = ["tga", "jpeg", "png", "bmp", "webp"] }
 image_dds = "0.7.2"
 memmap2 = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 mockall = "0.13"

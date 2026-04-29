@@ -49,12 +49,20 @@ export function isPathUnder(target: string, base: string): boolean {
   return t === b || t.startsWith(b + '/')
 }
 
+interface RustFileNode {
+  name: string
+  path: string
+  is_directory: boolean
+  children?: RustFileNode[]
+  expanded?: boolean
+}
+
 /**
  * 转换 Rust 返回的文件节点格式为前端格式
  * @param node Rust 返回的文件节点
  * @returns 前端格式的文件节点
  */
-export function convertRustFileNode(node: any): FileNode {
+export function convertRustFileNode(node: RustFileNode): FileNode {
   return {
     name: node.name,
     path: node.path,

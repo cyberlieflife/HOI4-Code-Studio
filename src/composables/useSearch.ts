@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { searchFiles, type SearchResult as ApiSearchResult } from '../api/tauri'
 import { escapeRegExp } from '../utils/fileUtils'
 import { logger } from '../utils/logger'
+import type { EditorView } from '@codemirror/view'
 
 /**
  * 搜索结果接口
@@ -181,7 +182,7 @@ export function useSearch() {
   /**
    * 跳转到搜索结果（CodeMirror 6 版本）
    */
-  function jumpToResult(result: SearchResult, editorView: any) {
+  function jumpToResult(result: SearchResult, editorView: EditorView) {
     if (!editorView) return
     
     try {

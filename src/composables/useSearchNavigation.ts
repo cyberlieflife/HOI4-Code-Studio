@@ -2,7 +2,7 @@ import type { Ref } from 'vue'
 import type { FileNode } from './useFileManager'
 
 interface EditorGroupLike {
-  jumpToSearchResult: (result: any) => void
+  jumpToSearchResult: (result: SearchResultLike) => void
 }
 
 interface SearchResultLike {
@@ -14,11 +14,10 @@ interface SearchResultLike {
   matchStart?: number
   matchEnd?: number
   content?: string
-  [key: string]: any
 }
 
 interface OpenFileLike {
-  (node: FileNode, paneId?: string, jumpInfo?: any): Promise<void>
+  (node: FileNode, paneId?: string, jumpInfo?: SearchResultLike): Promise<void>
 }
 
 export function useSearchNavigation(

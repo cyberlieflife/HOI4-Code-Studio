@@ -13,8 +13,8 @@ export interface FocusNode {
   prerequisite?: string[][]    // 前置条件（二维数组：OR关系）
   mutually_exclusive?: string[] // 互斥国策
   relative_position_id?: string // 相对定位基准
-  completion_reward?: any
-  available?: any
+  completion_reward?: Record<string, unknown>
+  available?: Record<string, unknown>
   modifierText?: string
   completionRewardText?: string
   line: number                 // 源文件行号
@@ -24,7 +24,7 @@ export interface FocusNode {
 
 export interface FocusTree {
   id: string
-  country?: any
+  country?: string
   default?: boolean
   focuses: Map<string, FocusNode>
 }

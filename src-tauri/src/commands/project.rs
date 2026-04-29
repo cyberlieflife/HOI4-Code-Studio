@@ -3,6 +3,7 @@
 // 包含项目创建、打开、保存、关闭等命令函数
 
 use crate::models::*;
+use tracing::{info, warn, debug};
 
 /// 创建新项目
 #[tauri::command]
@@ -15,11 +16,11 @@ pub fn create_new_project(
     use std::fs;
     use std::path::Path;
 
-    println!(
+    info!(
         "创建新项目: {} v{} 于 {}",
         project_name, version, project_path
     );
-    println!("Replace Path 目录: {:?}", replace_path);
+    debug!("Replace Path 目录: {:?}", replace_path);
 
     if project_name.is_empty() {
         return CreateProjectResult {
@@ -145,7 +146,7 @@ pub fn initialize_project(project_path: String) -> OpenProjectResult {
     use std::fs;
     use std::path::Path;
 
-    println!("初始化项目: {}", project_path);
+    info!("初始化项目: {}", project_path);
 
     // 验证项目路径是否存在
     let project_dir = Path::new(&project_path);
@@ -236,7 +237,7 @@ pub fn initialize_project(project_path: String) -> OpenProjectResult {
 
     // 更新最近项目列表
     if let Err(e) = update_recent_projects(&project_path, &mod_name) {
-        println!("更新最近项目失败: {}", e);
+        warn!("更新最近项目失败: {}", e);
     }
 
     OpenProjectResult {
@@ -252,7 +253,7 @@ pub fn open_project(project_path: String) -> OpenProjectResult {
     use std::fs;
     use std::path::Path;
 
-    println!("打开项目: {}", project_path);
+    info!("打开项目: {}", project_path);
 
     // 验证项目路径是否存在
     let project_dir = Path::new(&project_path);
@@ -316,7 +317,7 @@ pub fn open_project(project_path: String) -> OpenProjectResult {
             .and_then(|v| v.as_str())
             .unwrap_or("未命名项目"),
     ) {
-        println!("更新最近项目失败: {}", e);
+        warn!("更新最近项目失败: {}", e);
     }
 
     OpenProjectResult {
@@ -331,7 +332,7 @@ pub fn open_project(project_path: String) -> OpenProjectResult {
 pub fn get_recent_projects() -> RecentProjectsResult {
     use std::fs;
 
-    println!("获取最近项目列表");
+    info!("获取最近项目列表");
 
     // 获取最近项目文件路径
     let recent_path = get_recent_projects_path();
@@ -361,7 +362,7 @@ pub fn get_recent_projects() -> RecentProjectsResult {
                     }
                 }
                 Err(e) => {
-                    println!("解析最近项目文件失败: {}", e);
+                    warn!("解析最近项目文件失败: {}", e);
                     RecentProjectsResult {
                         success: true,
                         projects: vec![],
@@ -370,7 +371,7 @@ pub fn get_recent_projects() -> RecentProjectsResult {
             }
         }
         Err(e) => {
-            println!("读取最近项目文件失败: {}", e);
+            warn!("读取最近项目文件失败: {}", e);
             RecentProjectsResult {
                 success: true,
                 projects: vec![],
@@ -606,7 +607,7 @@ fn compute_project_stats(path: &str) -> ProjectStats {
 /// 打开文件选择对话框
 #[tauri::command]
 pub async fn open_file_dialog(mode: String) -> FileDialogResult {
-    println!("打开文件对话框: {}", mode);
+    debug!("打开文件对话框: {}", mode);
 
     match mode.as_str() {
         "directory" => {
@@ -618,14 +619,14 @@ pub async fn open_file_dialog(mode: String) -> FileDialogResult {
             match folder {
                 Some(handle) => {
                     let path = handle.path().to_string_lossy().to_string();
-                    println!("选择的文件夹: {}", path);
+                    info!("选择的文件夹: {}", path);
                     FileDialogResult {
                         success: true,
                         path: Some(path),
                     }
                 }
                 None => {
-                    println!("用户取消了选择");
+                    debug!("用户取消了选择");
                     FileDialogResult {
                         success: false,
                         path: None,
@@ -642,14 +643,14 @@ pub async fn open_file_dialog(mode: String) -> FileDialogResult {
             match file {
                 Some(handle) => {
                     let path = handle.path().to_string_lossy().to_string();
-                    println!("选择的文件: {}", path);
+                    info!("选择的文件: {}", path);
                     FileDialogResult {
                         success: true,
                         path: Some(path),
                     }
                 }
                 None => {
-                    println!("用户取消了选择");
+                    debug!("用户取消了选择");
                     FileDialogResult {
                         success: false,
                         path: None,
@@ -658,7 +659,7 @@ pub async fn open_file_dialog(mode: String) -> FileDialogResult {
             }
         }
         _ => {
-            println!("无效的 mode: {}", mode);
+            warn!("无效的 mode: {}", mode);
             FileDialogResult {
                 success: false,
                 path: None,
@@ -716,8 +717,8 @@ fn package_project_impl(opts: PackageOptions) -> PackageResult {
     use zip::write::SimpleFileOptions;
     use zip::ZipWriter;
 
-    println!("开始打包项目: {}", opts.project_path);
-    println!("输出文件名: {}", opts.output_name);
+    info!("开始打包项目: {}", opts.project_path);
+    debug!("输出文件名: {}", opts.output_name);
 
     let project_path_obj = Path::new(&opts.project_path);
     if !project_path_obj.exists() {
@@ -867,19 +868,19 @@ fn package_project_impl(opts: PackageOptions) -> PackageResult {
         let file_content = match fs::read(path) {
             Ok(content) => content,
             Err(e) => {
-                println!("警告: 无法读取文件 {}: {}", path.display(), e);
+                warn!("无法读取文件 {}: {}", path.display(), e);
                 continue;
             }
         };
 
         // 添加到 ZIP
         if let Err(e) = zip.start_file(&zip_path, file_options) {
-            println!("警告: 无法添加文件到 ZIP {}: {}", zip_path, e);
+            warn!("无法添加文件到 ZIP {}: {}", zip_path, e);
             continue;
         }
 
         if let Err(e) = zip.write_all(&file_content) {
-            println!("警告: 无法写入文件内容 {}: {}", zip_path, e);
+            warn!("无法写入文件内容 {}: {}", zip_path, e);
             continue;
         }
 
@@ -899,7 +900,7 @@ fn package_project_impl(opts: PackageOptions) -> PackageResult {
     // 获取文件大小
     let file_size = fs::metadata(&output_path).ok().map(|m| m.len());
 
-    println!("打包完成: {} 个文件", file_count);
+    info!("打包完成: {} 个文件", file_count);
 
     PackageResult {
         success: true,

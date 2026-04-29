@@ -516,7 +516,7 @@ const loadResource = async () => {
       if (imgRes.success && imgRes.base64) {
         // 先设置元信息，再设置 url，避免图片 onload 早于 spriteMeta 更新导致宽度按 1 帧计算
         spriteMeta.value = { 
-          noOfFrames: res.noOfFrames,
+          noOfFrames: res.noOfFrames ?? 1,
           borderSize: res.borderSize
         }
         spriteUrl.value = `data:${imgRes.mimeType || 'image/png'};base64,${imgRes.base64}`

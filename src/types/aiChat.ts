@@ -13,6 +13,13 @@ export interface ChatMessage {
   pending?: boolean
 }
 
+export interface TodoItem {
+  id: string
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+  priority: 'low' | 'medium' | 'high'
+}
+
 export interface ChatSession {
   id: string
   title: string
@@ -21,7 +28,7 @@ export interface ChatSession {
   messages: ChatMessage[]
   projectTree?: string
   projectTreeInjected?: boolean
-  todos?: any[]
+  todos?: TodoItem[]
 }
 
 export type ToolName = 'list_dir' | 'read_file' | 'edit_file' | 'search_field' | 'update_todos'
@@ -65,7 +72,7 @@ export interface ToolCallSearchField extends ToolCallBase {
 
 export interface ToolCallUpdateTodos extends ToolCallBase {
   tool: 'update_todos'
-  todos: any[]
+  todos: TodoItem[]
 }
 
 export type ToolCall =
