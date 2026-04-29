@@ -16,7 +16,8 @@ fn main() {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
-        .init();
+        .try_init()
+        .unwrap_or_else(|e| eprintln!("Failed to initialize tracing: {}", e));
 
     // 调用库中的 run() 函数启动 Tauri 应用
     // hoi4_code_studio_lib 是一个自定义库，提供了运行应用所需的核心功能
