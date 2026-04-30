@@ -82,9 +82,10 @@ export async function jumpFromPreview(
   await openFileFunc(node, targetPane.id)
 
   // 延迟跳转到指定行
+  const paneId = targetPane.id
   setTimeout(() => {
     const paneRef = (editorGroupRef as unknown as { paneRefs?: PaneRefsLike })?.paneRefs
-    const paneRefInstance = paneRef?.get?.(targetPane!.id)
+    const paneRefInstance = paneRef?.get?.(paneId)
     if (paneRefInstance?.jumpToLine) {
       paneRefInstance.jumpToLine(line)
     }

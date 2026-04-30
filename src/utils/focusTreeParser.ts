@@ -235,7 +235,7 @@ function calculateAbsolutePositions(focuses: Map<string, FocusNode>) {
 
     // 如果已经计算过，直接返回
     if (calculated.has(focusId)) {
-      return { x: focus.absoluteX!, y: focus.absoluteY! }
+      return { x: focus.absoluteX ?? focus.x, y: focus.absoluteY ?? focus.y }
     }
 
     // 检测循环依赖
@@ -294,14 +294,15 @@ export function parseFocusTreeFile(content: string): FocusTree | null {
   const focusTreeRegex = /focus_tree\s*=\s*\{/
   const match = contentWithoutComments.match(focusTreeRegex)
   
-  if (!match) return null
+  if (!match || match.index === undefined) return null
 
-  const treeStart = match.index! + match[0].length
+  const matchIndex = match.index
+  const treeStart = matchIndex + match[0].length
   const treeEnd = findBlockEnd(contentWithoutComments, treeStart)
   
   if (treeEnd === -1) return null
 
-  const treeContent = contentWithoutComments.substring(match.index!, treeEnd + 1)
+  const treeContent = contentWithoutComments.substring(matchIndex, treeEnd + 1)
   const treeId = extractField(treeContent, 'id') || 'unknown'
 
   const focuses = new Map<string, FocusNode>()
@@ -335,7 +336,7 @@ export function parseFocusTreeFile(content: string): FocusTree | null {
       relative_position_id: extractField(focusContent, 'relative_position_id') || undefined,
       modifierText: extractBlockText(focusContent, 'modifier'),
       completionRewardText: extractBlockText(focusContent, 'completion_reward'),
-      line: getLineNumber(contentWithoutComments, match.index! + focusMatch.index)
+      line: getLineNumber(contentWithoutComments, matchIndex + focusMatch.index)
     }
 
     focuses.set(focusId, node)

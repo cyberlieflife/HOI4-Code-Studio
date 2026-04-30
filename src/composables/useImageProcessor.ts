@@ -94,9 +94,9 @@ class WorkerPool {
 
         // 执行回调
         if (result.success && task.onSuccess) {
-          task.onSuccess(result.dataUrl!)
+          task.onSuccess(result.dataUrl ?? '')
         } else if (!result.success && task.onError) {
-          task.onError(result.error!)
+          task.onError(result.error ?? '未知错误')
         }
 
         // 处理队列中的下一个任务
@@ -231,7 +231,7 @@ function loadIconAsync(
       gameDirectory: options.gameDirectory,
       priority: options.priority || 'normal'
     }).then(dataUrl => {
-      options.onSuccess?.(dataUrl!)
+      options.onSuccess?.(dataUrl ?? '')
       resolve(dataUrl)
     }).catch(error => {
       options.onError?.(error)

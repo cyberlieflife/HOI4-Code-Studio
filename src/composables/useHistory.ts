@@ -86,7 +86,8 @@ export function useHistory() {
     undoStack.value.push(currentState)
     
     // 恢复下一个状态
-    const nextState = redoStack.value.pop()!
+    const nextState = redoStack.value.pop()
+    if (!nextState) return
     
     isApplyingHistory.value = true
     onContentChange(nextState.content)
