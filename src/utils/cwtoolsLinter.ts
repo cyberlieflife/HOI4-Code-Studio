@@ -41,7 +41,9 @@ export interface CWToolsLinterOptions {
 
 /**
  * 存储最新的诊断信息（用于悬停提示和装饰）
+ * 使用 WeakMap 按 EditorView 实例隔离，避免多编辑器竞态
  */
+const diagnosticsMap = new WeakMap<EditorView, CWToolsDiagnostic[]>()
 let latestDiagnostics: CWToolsDiagnostic[] = []
 
 /**
@@ -67,11 +69,13 @@ export function createCWToolsLinter(options: CWToolsLinterOptions): Extension[] 
       const version = getVersion()
       
       const response = await validateScript(content, filePath, version)
+      diagnosticsMap.set(view, response.diagnostics)
       latestDiagnostics = response.diagnostics
       
       return toCodeMirrorDiagnostics(response.diagnostics)
     } catch (error) {
       console.error('cwtools 验证失败:', error)
+      diagnosticsMap.set(view, [])
       latestDiagnostics = []
       return []
     }
@@ -83,8 +87,9 @@ export function createCWToolsLinter(options: CWToolsLinterOptions): Extension[] 
     lintGutter({ hoverTime: 200 }),
     
     // 悬停提示
-    hoverTooltip((_view, pos) => {
-      const diagnosticsAtPos = getDiagnosticsAtPosition(latestDiagnostics, pos)
+    hoverTooltip((view, pos) => {
+      const diagnostics = diagnosticsMap.get(view) ?? latestDiagnostics
+      const diagnosticsAtPos = getDiagnosticsAtPosition(diagnostics, pos)
       
       if (diagnosticsAtPos.length === 0) return null
       
