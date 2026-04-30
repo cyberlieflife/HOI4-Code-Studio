@@ -116,8 +116,8 @@ export function usePluginManager() {
     lastError.value = null
     try {
       installedPlugins.value = await listInstalledPlugins()
-    } catch (e: any) {
-      lastError.value = e?.message || String(e)
+    } catch (e: unknown) {
+      lastError.value = e instanceof Error ? e.message : String(e)
     } finally {
       isLoadingPlugins.value = false
     }
@@ -129,8 +129,8 @@ export function usePluginManager() {
       await installPlugin(path)
       await refreshPlugins()
       return { success: true as const }
-    } catch (e: any) {
-      lastError.value = e?.message || String(e)
+    } catch (e: unknown) {
+      lastError.value = e instanceof Error ? e.message : String(e)
       return { success: false as const, message: lastError.value }
     }
   }
@@ -141,8 +141,8 @@ export function usePluginManager() {
       await uninstallPlugin(pluginId)
       await refreshPlugins()
       return { success: true as const }
-    } catch (e: any) {
-      lastError.value = e?.message || String(e)
+    } catch (e: unknown) {
+      lastError.value = e instanceof Error ? e.message : String(e)
       return { success: false as const, message: lastError.value }
     }
   }
