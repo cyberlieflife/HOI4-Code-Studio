@@ -1,4 +1,5 @@
 import { ref, onUnmounted } from 'vue'
+import { toast } from '../utils/notification'
 import {
   type ProvinceDefinition,
   type DefaultMap,
@@ -389,7 +390,7 @@ interface WorkerTask {
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : String(e)
       console.error('获取省份ID失败:', e)
-      alert(`获取省份ID失败: ${errorMessage}`)
+      toast.error(`获取省份ID失败: ${errorMessage}`)
       return null
     }
   }
@@ -425,7 +426,7 @@ interface WorkerTask {
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : String(e)
       console.error('获取省份轮廓失败:', e)
-      alert(`获取省份轮廓失败: ${errorMessage}`)
+      toast.error(`获取省份轮廓失败: ${errorMessage}`)
       return new Uint32Array()
     }
   }
@@ -461,7 +462,7 @@ interface WorkerTask {
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : String(e)
       console.error('获取地区轮廓失败:', e)
-      alert(`获取地区轮廓失败: ${errorMessage}`)
+      toast.error(`获取地区轮廓失败: ${errorMessage}`)
       return new Uint32Array()
     }
   }

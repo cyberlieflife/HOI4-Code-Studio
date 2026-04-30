@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import type { OpenFile } from './useFileManager'
+import { toast } from '../utils/notification'
 
 /**
  * 编辑器窗格接口
@@ -55,7 +56,7 @@ export function useEditorGroups() {
    */
   function splitPane(sourcePaneId: string, fileIndex?: number): boolean {
     if (panes.value.length >= 3) {
-      alert('最多只能分割为3个窗格')
+      toast.warning('最多只能分割为3个窗格')
       return false
     }
     

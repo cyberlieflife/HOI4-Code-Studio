@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { readFileContent, writeFileContent, readImageAsBase64 } from '../api/tauri'
 import { logger } from '../utils/logger'
+import { toast } from '../utils/notification'
 
 /**
  * 文件节点接口
@@ -103,7 +104,7 @@ export function useFileManager() {
           
           return true
         } else {
-          alert(`打开图片失败: ${imageResult.message || '未知错误'}`)
+          toast.error(`打开图片失败: ${imageResult.message || '未知错误'}`)
           return false
         }
       }
@@ -118,7 +119,7 @@ export function useFileManager() {
         
         // 检查是否为二进制文件
         if (result.is_binary) {
-          alert(`${result.message}\n文件可能包含二进制数据，显示可能不正确。`)
+          toast.warning(`${result.message}\n文件可能包含二进制数据，显示可能不正确。`)
         }
         
         openFiles.value.push({
@@ -138,15 +139,15 @@ export function useFileManager() {
       } else {
         // 检查是否为图片文件
         if (result.is_image) {
-          alert(`${result.message}\n请使用图片查看器打开此文件。`)
+          toast.info(`${result.message}\n请使用图片查看器打开此文件。`)
         } else {
-          alert(`打开文件失败: ${result.message}`)
+          toast.error(`打开文件失败: ${result.message}`)
         }
         return false
       }
     } catch (error) {
       logger.error('打开文件失败:', error)
-      alert(`打开文件失败: ${error}`)
+      toast.error(`打开文件失败: ${error}`)
       return false
     } finally {
       isLoadingFile.value = false
@@ -259,12 +260,12 @@ export function useFileManager() {
         }
         return true
       } else {
-        alert(`保存失败: ${result.message}`)
+        toast.error(`保存失败: ${result.message}`)
         return false
       }
     } catch (error) {
       console.error('保存文件失败:', error)
-      alert(`保存失败: ${error}`)
+      toast.error(`保存失败: ${error}`)
       return false
     }
   }

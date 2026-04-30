@@ -3,6 +3,8 @@
  * 提供 Idea、Tag 初始态定义、权力平衡等模板的插入
  */
 
+import { toast } from '../utils/notification'
+
 export interface EditorMethods {
   insertText?: (text: string) => void
   getSelectedText?: () => string
@@ -153,7 +155,7 @@ export function insertIdeaTemplate(pane: PaneLike, editorMethods: EditorMethods)
   
   // 检查文件是否在 common/ideas/ 目录下
   if (!isInDirectory(filePath, 'common/ideas/')) {
-    alert('错误：只能在 common/ideas/ 目录下的文件中插入 Idea 模板')
+    toast.error('只能在 common/ideas/ 目录下的文件中插入 Idea 模板')
     return false
   }
   
@@ -177,7 +179,7 @@ export function insertTagTemplate(pane: PaneLike, editorMethods: EditorMethods):
   
   // 检查文件是否在 history/countries/ 目录下
   if (!isInDirectory(filePath, 'history/countries/')) {
-    alert('错误：只能在 history/countries/ 目录下的文件中插入 Tag 初始态定义模板')
+    toast.error('只能在 history/countries/ 目录下的文件中插入 Tag 初始态定义模板')
     return false
   }
   
@@ -201,7 +203,7 @@ export function insertBopTemplate(pane: PaneLike, editorMethods: EditorMethods):
   
   // 检查文件是否在 common/bop/ 目录下
   if (!isInDirectory(filePath, 'common/bop/')) {
-    alert('错误：只能在 common/bop/ 目录下的文件中插入权力平衡模板')
+    toast.error('只能在 common/bop/ 目录下的文件中插入权力平衡模板')
     return false
   }
   

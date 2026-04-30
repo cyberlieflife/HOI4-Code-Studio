@@ -1,6 +1,7 @@
 import { ref, type Ref } from 'vue'
 import { readFileContent, readJsonFile, writeJsonFile } from '../api/tauri'
 import { logger } from '../utils/logger'
+import { toast } from '../utils/notification'
 
 type ConfirmType = 'info' | 'warning' | 'danger'
 
@@ -41,7 +42,7 @@ export function useProjectBootstrap(
         const descriptorPath = `${projectPath.value}/descriptor.mod`
         const descriptorResult = await readFileContent(descriptorPath)
         if (!descriptorResult.success) {
-          alert(`无法读取 descriptor.mod 文件: ${descriptorResult.message}`)
+          toast.error(`无法读取 descriptor.mod 文件: ${descriptorResult.message}`)
           return
         }
 
@@ -56,15 +57,15 @@ export function useProjectBootstrap(
 
         const writeResult = await writeJsonFile(projectJsonPath, projectData)
         if (!writeResult.success) {
-          alert(`项目初始化失败: ${writeResult.message}`)
+          toast.error(`项目初始化失败: ${writeResult.message}`)
           return
         }
 
         projectInfo.value = projectData
-        alert(`项目初始化成功，项目名称: ${modName}`)
+        toast.success(`项目初始化成功，项目名称: ${modName}`)
       } catch (error) {
         logger.error('项目初始化失败:', error)
-        alert(`项目初始化失败: ${error}`)
+        toast.error(`项目初始化失败: ${error}`)
       }
     } catch (error) {
       logger.error('加载项目信息失败:', error)

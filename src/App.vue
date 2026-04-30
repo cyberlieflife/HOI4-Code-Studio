@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
+import NotificationContainer from './components/NotificationContainer.vue'
 
 // HOI4 Code Studio - 主应用组件
 
@@ -36,6 +37,7 @@ onUnmounted(() => {
     <Transition name="page-transition" mode="out-in">
       <router-view />
     </Transition>
+    <NotificationContainer />
   </div>
 </template>
 
