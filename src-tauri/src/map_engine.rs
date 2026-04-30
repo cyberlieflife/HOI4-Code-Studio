@@ -47,6 +47,11 @@ static RE_COUNTRY_COLOR_HSV: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)(color(?:_ui)?)\s*=\s*HSV\s*\{\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\}").expect("RE_COUNTRY_COLOR_HSV 正则编译失败")
 });
 
+// RGB 颜色（无前缀）：匹配 color = {R G B} 格式（无rgb前缀）
+static RE_COUNTRY_COLOR_RGB_NO_PREFIX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)(color(?:_ui)?)\s*=\s*\{\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\}").expect("RE_COUNTRY_COLOR_RGB_NO_PREFIX 正则编译失败")
+});
+
 /// 地图上下文状态 (常驻内存)
 #[allow(dead_code)]
 pub struct MapContext {
@@ -881,7 +886,7 @@ fn parse_country_colors(content: &str) -> HashMap<String, RGBColor> {
 
 /// 在块内容中查找颜色定义
 fn find_color_in_block(block_content: &str, allow_color_ui: bool) -> Option<RGBColor> {
-    // 1. 先尝试 RGB 格式
+    // 1. 先尝试 RGB 格式（有rgb前缀）
     for cap in RE_COUNTRY_COLOR_RGB.captures_iter(block_content) {
         let name = cap.get(1)?.as_str();
         if !allow_color_ui && name.eq_ignore_ascii_case("color_ui") {
@@ -910,6 +915,18 @@ fn find_color_in_block(block_content: &str, allow_color_ui: bool) -> Option<RGBC
         let v = v_raw / 100.0;
         
         return Some(RGBColor::from_hsv(h, s, v));
+    }
+
+    // 3. 尝试 RGB 格式（无rgb前缀）
+    for cap in RE_COUNTRY_COLOR_RGB_NO_PREFIX.captures_iter(block_content) {
+        let name = cap.get(1)?.as_str();
+        if !allow_color_ui && name.eq_ignore_ascii_case("color_ui") {
+            continue;
+        }
+        let r = RGBColor::parse_component(cap.get(2)?.as_str(), false);
+        let g = RGBColor::parse_component(cap.get(3)?.as_str(), false);
+        let b = RGBColor::parse_component(cap.get(4)?.as_str(), false);
+        return Some(RGBColor { r, g, b, a: 255 });
     }
 
     None
