@@ -12,12 +12,17 @@ Object.defineProperty(window, 'confirm', {
   writable: true
 })
 
-// Mock window.alert
-const mockAlert = vi.fn()
-Object.defineProperty(window, 'alert', {
-  value: mockAlert,
-  writable: true
-})
+// 模拟 notification
+vi.mock('../../../src/utils/notification', () => ({
+  toast: {
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    success: vi.fn()
+  }
+}))
+
+import { toast } from '../../../src/utils/notification'
 
 describe('useEditorGroups', () => {
   let editorGroups: ReturnType<typeof useEditorGroups>
@@ -67,11 +72,11 @@ describe('useEditorGroups', () => {
     editorGroups.splitPane(initialPaneId)
     
     // 尝试分割第四个窗格
-    mockAlert.mockClear()
+    vi.mocked(toast.warning).mockClear()
     const result = editorGroups.splitPane(initialPaneId)
     
     expect(result).toBe(false)
-    expect(mockAlert).toHaveBeenCalledWith('最多只能分割为3个窗格')
+    expect(toast.warning).toHaveBeenCalledWith('最多只能分割为3个窗格')
     expect(editorGroups.panes.value).toHaveLength(3)
   })
 

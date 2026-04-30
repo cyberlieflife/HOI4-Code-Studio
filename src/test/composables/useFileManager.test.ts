@@ -25,6 +25,18 @@ vi.mock('../../../src/utils/logger', () => ({
 
 import { logger } from '../../../src/utils/logger'
 
+// 模拟 notification
+vi.mock('../../../src/utils/notification', () => ({
+  toast: {
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    success: vi.fn()
+  }
+}))
+
+import { toast } from '../../../src/utils/notification'
+
 describe('useFileManager', () => {
   let fileManager: ReturnType<typeof useFileManager>
 
@@ -209,13 +221,11 @@ describe('useFileManager', () => {
       is_image: false
     })
 
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
     const result = await fileManager.openFile(mockFileNode)
 
     expect(result).toBe(false)
     expect(fileManager.openFiles.value.length).toBe(0)
-    expect(alertSpy).toHaveBeenCalledWith('打开文件失败: 文件不存在')
-    alertSpy.mockRestore()
+    expect(toast.error).toHaveBeenCalledWith('打开文件失败: 文件不存在')
   })
 
   it('应该处理二进制文件警告', async () => {
@@ -234,12 +244,10 @@ describe('useFileManager', () => {
       is_image: false
     })
 
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
     const result = await fileManager.openFile(mockFileNode)
 
     expect(result).toBe(true)
-    expect(alertSpy).toHaveBeenCalledWith('这是二进制文件\n文件可能包含二进制数据，显示可能不正确。')
-    alertSpy.mockRestore()
+    expect(toast.warning).toHaveBeenCalledWith('这是二进制文件\n文件可能包含二进制数据，显示可能不正确。')
   })
 
   it('应该处理图片文件警告', async () => {
@@ -257,12 +265,10 @@ describe('useFileManager', () => {
       mimeType: ''
     })
 
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
     const result = await fileManager.openFile(mockFileNode)
 
     expect(result).toBe(false)
-    expect(alertSpy).toHaveBeenCalledWith('打开图片失败: 这是图片文件')
-    alertSpy.mockRestore()
+    expect(toast.error).toHaveBeenCalledWith('打开图片失败: 这是图片文件')
   })
 
   it('应该能够切换文件', async () => {
@@ -470,13 +476,11 @@ describe('useFileManager', () => {
       message: '保存失败'
     })
 
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
     await fileManager.openFile(mockFileNode)
     const result = await fileManager.saveFile('content')
 
     expect(result).toBe(false)
-    expect(alertSpy).toHaveBeenCalledWith('保存失败: 保存失败')
-    alertSpy.mockRestore()
+    expect(toast.error).toHaveBeenCalledWith('保存失败: 保存失败')
   })
 
   it('应该更新文件状态', () => {
@@ -514,12 +518,10 @@ describe('useFileManager', () => {
       message: '图片读取失败'
     })
 
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
     const result = await fileManager.openFile(mockFileNode)
 
     expect(result).toBe(false)
-    expect(alertSpy).toHaveBeenCalledWith('打开图片失败: 图片读取失败')
-    alertSpy.mockRestore()
+    expect(toast.error).toHaveBeenCalledWith('打开图片失败: 图片读取失败')
   })
 
   it('应该处理文件打开异常', async () => {
@@ -531,13 +533,11 @@ describe('useFileManager', () => {
 
     vi.mocked(readFileContent).mockRejectedValue(new Error('网络错误'))
 
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
     const result = await fileManager.openFile(mockFileNode)
 
     expect(result).toBe(false)
-    expect(alertSpy).toHaveBeenCalledWith('打开文件失败: Error: 网络错误')
+    expect(toast.error).toHaveBeenCalledWith('打开文件失败: Error: 网络错误')
     expect(logger.error).toHaveBeenCalledWith('打开文件失败:', expect.any(Error))
-    alertSpy.mockRestore()
   })
 
   it('应该处理文件切换时的边界情况', () => {
