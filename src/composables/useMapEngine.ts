@@ -66,7 +66,8 @@ function normalizeProjectOnlyMapPath(mapDir: string, relativePath: string): stri
  * 1. fallback 模式：从项目根目录、依赖目录、游戏目录搜索地图资源，后找到的会被先找到的覆盖（state/colors合并）
  * 2. project-only 模式：仅加载项目自身的map文件，不进行任何覆盖逻辑，适用于编辑器内置预览
  */
-export function useMapEngine() {
+export function useMapEngine(options?: { workerTimeout?: number }) {
+  const workerTimeout = options?.workerTimeout ?? 5000
   const definitions = ref<ProvinceDefinition[]>([])
   const defaultMap = ref<DefaultMap | null>(null)
   const mapData = ref<MapMetadata | null>(null)
@@ -93,6 +94,7 @@ export function useMapEngine() {
   const pendingTasks = new Map<string, {
     resolve: (value: Uint32Array | number | null) => void
     reject: (reason: Error) => void
+    timer: ReturnType<typeof setTimeout>
   }>()
   
   /**
@@ -118,6 +120,7 @@ export function useMapEngine() {
         if (type === 'result' && result) {
           const task = pendingTasks.get(result.id)
           if (task) {
+            clearTimeout(task.timer)
             if (result.success) {
               task.resolve(result.data)
             } else {
@@ -189,20 +192,25 @@ interface WorkerTask {
       }
       
       const taskId = `task_${++taskIdCounter}_${Date.now()}`
-      pendingTasks.set(taskId, { resolve, reject })
+      
+      // 设置超时
+      const timer = setTimeout(() => {
+        if (pendingTasks.has(taskId)) {
+          pendingTasks.delete(taskId)
+          // 通知 Worker 取消任务
+          if (mapWorker && workerAvailable.value) {
+            mapWorker.postMessage({ type: 'cancel', taskId })
+          }
+          reject(new Error(`Worker任务超时 (${workerTimeout}ms)`))
+        }
+      }, workerTimeout)
+      
+      pendingTasks.set(taskId, { resolve, reject, timer })
       
       mapWorker.postMessage({
         type: 'task',
         task: { ...task, id: taskId }
       })
-      
-      // 设置超时
-      setTimeout(() => {
-        if (pendingTasks.has(taskId)) {
-          pendingTasks.delete(taskId)
-          reject(new Error('Worker任务超时'))
-        }
-      }, 5000)
     })
   }
   
