@@ -4,6 +4,11 @@
  * 支持 relative_position_id 相对定位
  */
 
+/** 转义正则特殊字符，防止注入 */
+export function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 export interface FocusNode {
   id: string
   icon?: string
@@ -90,7 +95,7 @@ function findBlockEnd(content: string, startPos: number): number {
  * 提取字段值
  */
 function extractField(blockContent: string, fieldName: string): string | null {
-  const regex = new RegExp(`\\b${fieldName}\\s*=\\s*(["\']?)([^"\\n#}]+)\\1`)
+  const regex = new RegExp(`\\b${escapeRegExp(fieldName)}\\s*=\\s*(["\']?)([^"\\n#}]+)\\1`)
   const match = blockContent.match(regex)
   return match ? match[2].trim() : null
 }
@@ -106,8 +111,8 @@ function extractNumber(blockContent: string, fieldName: string): number | undefi
 function extractTopLevelField(blockContent: string, fieldName: string): string | null {
   // 仅在当前 focus 的顶层（花括号深度=1）匹配字段，避免误命中 completion_reward/modifier 等嵌套块
   // 注意：上层 parseFocusTreeFile 已经 removeLineComments，这里无需处理 # 行注释
-  const nameRegex = new RegExp(`\\b${fieldName}\\b`)
-  const valueRegex = new RegExp(`\\b${fieldName}\\s*=\\s*([+-]?(?:\\d+\\.\\d+|\\d+))`)
+  const nameRegex = new RegExp(`\\b${escapeRegExp(fieldName)}\\b`)
+  const valueRegex = new RegExp(`\\b${escapeRegExp(fieldName)}\\s*=\\s*([+-]?(?:\\d+\\.\\d+|\\d+))`)
 
   let depth = 0
   let inString = false
@@ -157,7 +162,7 @@ function extractTopLevelNumber(blockContent: string, fieldName: string): number 
 }
 
 function extractBlockText(blockContent: string, fieldName: string): string | undefined {
-  const regex = new RegExp(`\\b${fieldName}\\s*=\\s*\\{`, 'g')
+  const regex = new RegExp(`\\b${escapeRegExp(fieldName)}\\s*=\\s*\\{`, 'g')
   const match = regex.exec(blockContent)
   if (!match) return undefined
 

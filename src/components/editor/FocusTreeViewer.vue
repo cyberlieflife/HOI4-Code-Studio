@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { parseFocusTreeFile, searchFocuses } from '../../utils/focusTreeParser'
+import { escapeRegExp } from '../../utils/focusTreeParser'
 import cytoscape from 'cytoscape'
 import { useImageProcessor } from '../../composables/useImageProcessor'
 import { buildDirectoryTreeFast, loadFocusLocalizations, readFileContent, writeFileContent } from '../../api/tauri'
@@ -327,7 +328,7 @@ function replaceTopLevelAssignment(blockText: string, key: string, newValue: str
   const insertPos = headerEnd !== -1 ? headerEnd + 1 : openBrace + 1
 
   const lines = blockText.split('\n')
-  const keyRegex = new RegExp(`^\\s*${key}\\s*=`, 'i')
+  const keyRegex = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`, 'i')
   const idx = lines.findIndex(l => keyRegex.test(l) && !l.includes('{'))
   const newLine = `\t\t${key} = ${newValue}`
   if (idx !== -1) {
@@ -377,7 +378,7 @@ function removeTopLevelSection(blockText: string, sectionKey: string): string {
 
     if (depth === 1) {
       const rest = blockText.slice(i)
-      const m = rest.match(new RegExp(`^\\s*${sectionKey}\\s*=\\s*\\{`, 'i'))
+      const m = rest.match(new RegExp(`^\\s*${escapeRegExp(sectionKey)}\\s*=\\s*\\{`, 'i'))
       if (m) {
         const start = i + (m.index ?? 0)
         const bracePos = blockText.indexOf('{', start)
