@@ -93,31 +93,27 @@ const spriteName = computed(() => (
  * 格式化 HOI4 文本，处理 §Y 等颜色代码和 \n
  */
 const formattedText = computed(() => {
-  let text = props.node.properties.text || ''
+  const text = props.node.properties.text || ''
   if (!text) return ''
 
+  // HTML 转义，防止 XSS 注入
+  const escapeHtml = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+  // 先整体转义，再处理 HOI4 格式代码（§ 和 \n 不受转义影响）
+  let result = escapeHtml(text)
+
   // 处理换行符
-  text = text.replace(/\\n/g, '<br/>')
+  result = result.replace(/\\n/g, '<br/>')
 
   // HOI4 颜色代码映射
   const colorMap: Record<string, string> = {
-    'Y': '#ffff00', // Yellow
-    'R': '#ff0000', // Red
-    'G': '#00ff00', // Green
-    'B': '#0000ff', // Blue
-    'W': '#ffffff', // White
-    'H': '#fe8a08', // Highlight
-    'L': '#333333', // Lore/Dark
-    'P': '#ffc0cb', // Pink
-    'C': '#00ffff', // Cyan
-    'M': '#ff00ff', // Magenta
-    'T': '#ffffff', // Text (default)
-    'g': '#a9a9a9', // Grey
+    'Y': '#ffff00', 'R': '#ff0000', 'G': '#00ff00', 'B': '#0000ff',
+    'W': '#ffffff', 'H': '#fe8a08', 'L': '#333333', 'P': '#ffc0cb',
+    'C': '#00ffff', 'M': '#ff00ff', 'T': '#ffffff', 'g': '#a9a9a9',
   }
 
-  // 简单的正则解析 §X...§! 或 §X...
-  // 这种方法不完全支持嵌套，但对于预览足够了
-  let result = text
+  // 解析 §X...§! 颜色代码
   const colorRegex = /§([YRGWBHLPCMTg])([^§]+)(?:§!)?/g
   result = result.replace(colorRegex, (_, color, content) => {
     const hex = colorMap[color] || '#ffffff'
