@@ -45,6 +45,10 @@ function parseDetailBlocks(lines: string[]): DetailBlock[] {
     return l
   }
 
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  }
+
   function highlightCodeBlock(code: string, lang: string | null): string {
     const normalized = normalizeLanguage(lang)
     try {
@@ -59,7 +63,7 @@ function parseDetailBlocks(lines: string[]): DetailBlock[] {
 
       return hljs.highlightAuto(code).value
     } catch (_e) {
-      return code
+      return escapeHtml(code)
     }
   }
 
