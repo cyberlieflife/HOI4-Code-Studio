@@ -559,15 +559,23 @@ export function useAiChat() {
   function resolveAgainst(base: string, inputPath: string) {
     const raw = (inputPath || '').trim()
     if (!raw) return ''
-    if (isAbsolutePath(raw)) return raw
+    if (!base) return isAbsolutePath(raw) ? raw : raw
 
     const root = (base || '').trim()
-    if (!root) return raw
-
     const preferBackslash = root.includes('\\')
     const sep = preferBackslash ? '\\' : '/'
-
     const baseNorm = root.replace(/[\\/]+$/g, '')
+    const baseLower = baseNorm.toLowerCase()
+
+    // 绝对路径：必须在项目根目录内
+    if (isAbsolutePath(raw)) {
+      const rawLower = raw.toLowerCase().replace(/[\\/]+$/g, '')
+      if (!rawLower.startsWith(baseLower) && rawLower !== baseLower) {
+        return ''
+      }
+      return raw
+    }
+
     let rel = raw.replace(/^\.[\\/]/, '')
     rel = rel.replace(/^[\\/]+/g, '')
     const combined = `${baseNorm}${sep}${rel}`
@@ -587,6 +595,13 @@ export function useAiChat() {
       out.push(part)
     }
     const normalized = out.join(sep)
+
+    // 防止路径穿越：结果必须在 base 目录内
+    const normalizedLower = normalized.toLowerCase().replace(/[\\/]+$/g, '')
+    if (!normalizedLower.startsWith(baseLower) && normalizedLower !== baseLower) {
+      return ''
+    }
+
     if (preferBackslash && baseNorm.startsWith('\\\\') && !normalized.startsWith('\\\\')) {
       return `\\\\${normalized.replace(/^\\+/, '')}`
     }
@@ -770,6 +785,7 @@ export function useAiChat() {
 
       async function readOne(p: string) {
         const resolvedPath = resolveAgainst(projectRootPath.value, p)
+        if (!resolvedPath) return { success: false, message: `路径越界，拒绝读取: ${p}` }
         const res = await readFileContent(resolvedPath)
         if (res?.success && typeof (res as any).content === 'string') {
           const raw = (res as any).content as string
@@ -807,6 +823,7 @@ export function useAiChat() {
         }
       }
       const resolvedPath = resolveAgainst(projectRootPath.value, call.path)
+      if (!resolvedPath) return { success: false, message: '路径越界，拒绝写入' }
       const res = await writeFileContent(resolvedPath, (call as any).content)
       return { ...res, resolved_path: resolvedPath }
     }
