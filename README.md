@@ -1,4 +1,4 @@
-﻿# Hearts of Iron IV - Code Studio
+﻿# Hearts of Iron IV - Code Studio(停止维护)
 
 <div align="center">
   <img src="app-icon.png" alt="HOI4 Code Studio" width="96" />
